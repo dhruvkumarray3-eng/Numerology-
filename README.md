@@ -94,4 +94,4 @@ python main.py
 
 Developed with ❤️ by **[𝐌꧊᱂ 𝁛 ꪜᛧƖƖ𝛂ᛧ𝝶](https://t.me/I_VIP_RADHE_II)**
 
-</div>
+</div>\n\n## Replit deployment\n\nThis bot can run on Replit with Python 3.10+ and the values listed in .env.sample. Set the required Telegram secrets in the deployment environment, then start it with:\n\n```bash\npython main.py\n```\n\nThe built-in health server listens on the PORT environment variable (8080 by default), so hosted health checks can use /health.\n
