@@ -59,14 +59,18 @@ API_ID = env_int("API_ID", 0)
 API_HASH = os.getenv("API_HASH", "")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
+if API_ID <= 0 or not API_HASH.strip():
+    raise RuntimeError(
+        "Missing required Telegram configuration: set API_ID and API_HASH "
+        "before starting the bot."
+    )
+
 bot = TelegramClient('bot_session', API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
 bot.parse_mode = 'html'
 
-SUPER_ADMIN_ID = 6356015122
-ADMIN_ID = env_int("ADMIN_ID", env_int("OWNER_ID", SUPER_ADMIN_ID))
-SUPER_ADMINS = {SUPER_ADMIN_ID}
-if ADMIN_ID:
-    SUPER_ADMINS.add(ADMIN_ID)
+ADMIN_ID = env_int("ADMIN_ID", env_int("OWNER_ID", 0))
+SUPER_ADMIN_ID = env_int("SUPER_ADMIN_ID", ADMIN_ID)
+SUPER_ADMINS = {uid for uid in (SUPER_ADMIN_ID, ADMIN_ID) if uid}
 
 def is_super_admin(uid: int) -> bool:
     try:

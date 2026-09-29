@@ -32,22 +32,23 @@
 Create a `.env` file in the root directory and add the following keys:
 
 ```env
-API_ID=32208414
-API_HASH=628f11c05a44c8dda4b006e66f4bf7df
-BOT_TOKEN=your_bot_token_here
-ADMIN_ID=5298773697
+API_ID=your_telegram_api_id
+API_HASH=your_telegram_api_hash
+BOT_TOKEN=your_bot_token
+ADMIN_ID=your_telegram_user_id
+SUPER_ADMIN_ID=your_telegram_user_id
 
 # Logging Channels
-LOG_CHANNEL_ID=-1004452478102
-LOG_CHANNEL_ID_2=-100387593353
+LOG_CHANNEL_ID=your_primary_log_channel_id
+LOG_CHANNEL_ID_2=your_secondary_log_channel_id
 
 # Must Join Verification Setup
-CHECK_CHANNELS=-1003964347575,-1004481651864,-1003875933534
-JOIN_URLS=https://t.me/I_VIP_RADHE_II,https://t.me/+rdXT1GR_nCg1OTg1,https://t.me/sivamXpruff
+CHECK_CHANNELS=channel_id_1,channel_id_2
+JOIN_URLS=https://t.me/channel_1,https://t.me/channel_2
 
 # Payment Credentials
-CWALLET_ID=93020854
-UPI_ID=vinit-godara@fam
+CWALLET_ID=your_cwallet_id
+UPI_ID=your_upi_id
 ```
 
 ---
@@ -56,8 +57,8 @@ UPI_ID=vinit-godara@fam
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/SUDEEPBOTS/Numbott.git
-cd Numbott
+git clone https://github.com/dhruvkumarray3-eng/Numerology-.git
+cd Numerology-
 ```
 
 ### 2. Setup Virtual Environment
