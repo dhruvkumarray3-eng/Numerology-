@@ -87,6 +87,8 @@ JOIN_URLS = env_list("JOIN_URLS", "")
 
 # LINKS & MEDIA
 TERMS_URL = os.getenv("TERMS_URL", "").strip() or "https://t.me/sivamXpruff"
+SUPPORT_URL = os.getenv("SUPPORT_URL", "").strip() or "https://t.me/Sexypremiums"
+UPDATES_URL = os.getenv("UPDATES_URL", "").strip() or "https://t.me/mafiaXupdates"
 CWALLET_QR = os.getenv("CWALLET_QR", "")
 CWALLET_ID = os.getenv("CWALLET_ID", "")
 
