@@ -56,8 +56,8 @@ def env_list(name, default_csv=""):
     return items
 
 API_ID = env_int("API_ID", 0)
-API_HASH = os.getenv("API_HASH", "")
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+API_HASH = os.getenv("API_HASH", "").strip()
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 
 if API_ID <= 0 or not API_HASH.strip():
     raise RuntimeError(
