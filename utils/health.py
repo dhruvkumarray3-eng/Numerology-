@@ -42,7 +42,10 @@ async def start_health_server():
     Starts lightweight aiohttp web server on PORT (default 8080 or env PORT).
     Designed specifically for Render, Railway, Heroku and UptimeRobot pings.
     """
-    port_str = os.environ.get("PORT", os.environ.get("HTTP_PORT", "8080"))
+    port_str = os.environ.get(
+        "BOT_HEALTH_PORT",
+        os.environ.get("PORT", os.environ.get("HTTP_PORT", "8080")),
+    )
     try:
         port = int(port_str)
     except ValueError:
