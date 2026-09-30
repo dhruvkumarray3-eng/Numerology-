@@ -1,13 +1,12 @@
 <div align="center">
 
-# ⚡ NUMBOTT TELETHON ⚡
+# ⚡ NUMBOTT ⚡
 
 <p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1000&color=00F0FF&center=true&vCenter=true&width=500&lines=Advanced+Telegram+Account+Shop+Bot;Modular+%2B+Asynchronous+%2B+Telethon;Custom+UI+%2B+Dynamic+Must-Join" alt="Typing SVG" />
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1000&color=00F0FF&center=true&vCenter=true&width=500&lines=Advanced+Telegram+Account+Shop+Bot;Modular+%2B+Asynchronous+%2B+Python;Custom+UI+%2B+Dynamic+Must-Join" alt="Typing SVG" />
 </p>
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Telethon](https://img.shields.io/badge/Telethon-Async-success?style=for-the-badge&logo=telegram&logoColor=white)](https://github.com/LonamiWebs/Telethon)
 [![SQLite](https://img.shields.io/badge/Database-SQLite-orange?style=for-the-badge&logo=sqlite&logoColor=white)](https://sqlite.org)
 [![License](https://img.shields.io/badge/License-MIT-red?style=for-the-badge)](LICENSE)
 
@@ -82,7 +81,6 @@ python main.py
 ## 💻 Tech Stack
 
 - **Core Engine:** [Python 3.10+](https://www.python.org/)
-- **Telegram Framework:** [Telethon (MTProto API Client)](https://github.com/LonamiWebs/Telethon)
 - **Database:** SQLite3
 - **Process Manager:** `tmux` / Background Daemon execution
 
