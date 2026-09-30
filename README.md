@@ -93,3 +93,9 @@ python main.py
 Developed with ❤️ by **[𝐌꧊᱂ 𝁛 ꪜᛧƖƖ𝛂ᛧ𝝶](https://t.me/I_VIP_RADHE_II)**
 
 </div>\n\n## Replit deployment\n\nThis bot can run on Replit with Python 3.10+ and the values listed in .env.sample. Set the required Telegram secrets in the deployment environment, then start it with:\n\n```bash\npython main.py\n```\n\nThe built-in health server listens on the PORT environment variable (8080 by default), so hosted health checks can use /health.\n
+
+## LZT Market integration
+
+The bot can fetch listings and complete purchases through the LZT Market API when LZT mode is enabled and a key is configured. Set `LZT_API_KEY` as a deployment secret, or enter it in **Admin Panel → LZT Settings**; never commit a real API key. The admin setting is checked first, with the environment variable used as a fallback.
+
+Use `/lztmargin` to view the current fixed INR markup per automatically priced LZT item, or `/lztmargin 25` (also `/setlztmargin 25`) to set it. This command is admin-only; negative, infinite, and invalid values are rejected. Explicit/manual prices can still override automatic pricing.
