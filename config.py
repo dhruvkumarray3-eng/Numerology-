@@ -68,7 +68,7 @@ if API_ID <= 0 or not API_HASH.strip():
 bot = TelegramClient('bot_session', API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
 bot.parse_mode = 'html'
 
-ADMIN_ID = env_int("ADMIN_ID", env_int("OWNER_ID", 0))
+ADMIN_ID = env_int("ADMIN_ID", env_int("SUPER_ADMIN_ID", env_int("OWNER_ID", 0)))
 SUPER_ADMIN_ID = env_int("SUPER_ADMIN_ID", ADMIN_ID)
 SUPER_ADMINS = {uid for uid in (SUPER_ADMIN_ID, ADMIN_ID) if uid}
 
