@@ -29,22 +29,22 @@
 
 ## 🛠️ Environment Configuration (`.env`)
 
-Create a `.env` file in the root directory and add the following keys:
+For local development, keep the `.env` file untracked by Git. On Replit, set real values only in Replit Secrets. Never commit actual credentials or private channel details.
 
 ```env
-API_ID=your_telegram_api_id
-API_HASH=your_telegram_api_hash
+API_ID=your_api_id
+API_HASH=your_api_hash
 BOT_TOKEN=your_bot_token
 ADMIN_ID=your_telegram_user_id
 SUPER_ADMIN_ID=your_telegram_user_id
 
 # Logging Channels
-LOG_CHANNEL_ID=your_primary_log_channel_id
-LOG_CHANNEL_ID_2=your_secondary_log_channel_id
+LOG_CHANNEL_ID=your_log_channel_id
+LOG_CHANNEL_ID_2=your_second_log_channel_id
 
 # Must Join Verification Setup
 CHECK_CHANNELS=channel_id_1,channel_id_2
-JOIN_URLS=https://t.me/channel_1,https://t.me/channel_2
+JOIN_URLS=https://t.me/your_channel,https://t.me/your_invite
 
 # Payment Credentials
 CWALLET_ID=your_cwallet_id
