@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from config import ADMIN_ID, SUPER_ADMINS, is_super_admin
+from config import ADMIN_ID, SUPER_ADMINS, SUPPORT_URL, is_super_admin
 
 # Initialize DB
 db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "otp_bot_final.db")
@@ -165,7 +165,7 @@ def get_usdt_rate():
 
 def get_support_url():
     res = cur.execute("SELECT value FROM settings WHERE key='support_url'").fetchone()
-    url = res[0] if res and res[0] else "https://t.me/sivamXpruff"
+    url = res[0] if res and res[0] else SUPPORT_URL
     if not url.startswith("http"): url = "https://" + url.replace("@", "t.me/")
     return url
 
