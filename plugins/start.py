@@ -3,6 +3,7 @@ from telethon import events, types, Button
 from telethon.errors import MessageNotModifiedError
 from database import cur, db, ensure_user, is_user_banned, is_bot_online, is_admin, get_support_url, get_start_image_url
 from utils.keyboards import get_persistent_menu, get_terms_buttons, get_join_buttons, style_btn, style_url
+from utils.terms import get_terms_message
 from utils.helpers import check_channel_joined, to_small_caps, send_preview_on_top
 from config import PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL, logger
 from utils.states import session_buy_state, deposit_input
@@ -149,8 +150,10 @@ def register_start(bot):
             row = cur.execute("SELECT terms_accepted FROM users WHERE user_id=?", (uid,)).fetchone()
             terms_acc = row[0] if row else 0
             if not terms_acc:
-                msg = f"<blockquote>{PE_FLOWER} <b>𝐓ᴇʀᴍs & 𝐂ᴏɴᴅɪᴛɪᴏɴs</b></blockquote>\n<blockquote>𝐏ʟᴇᴀsᴇ ʀᴇᴀᴅ ᴀɴᴅ ᴀᴄᴄᴇᴘᴛ ᴏᴜʀ 𝐓ᴇʀᴍs & 𝐂ᴏɴᴅɪᴛɪᴏɴs ʙᴇғᴏʀᴇ ᴜsɪɴɢ ᴛʜᴇ ʙᴏᴛ.</blockquote>"
-                return await e.respond(msg, buttons=get_terms_buttons())
+                terms_message = get_terms_message()
+                if terms_message is None:
+                    return await e.respond("⚠️ Terms & Conditions are temporarily unavailable. Please try /start again later.")
+                return await e.respond(terms_message, buttons=get_terms_buttons())
 
             try:
                 await send_start_sticker_or_menu(bot, uid)

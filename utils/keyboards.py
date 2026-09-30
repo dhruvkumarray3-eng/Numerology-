@@ -14,13 +14,10 @@ def style_url(text, url, style_type=None, icon=None):
 
 
 def get_terms_buttons():
-    t_url = TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else "https://t.me/sivamXpruff"
     return [
-        [Button.url("📜 Read Terms & Conditions", t_url)],
-        [style_btn("𝐀ᴄᴄᴇᴘᴛ", b"tc_accept", style_type='success', icon=5409380965644514142), 
+        [style_btn("𝐀ᴄᴄᴇᴘᴛ", b"tc_accept", style_type='success', icon=5409380965644514142),
          style_btn("𝐑ᴇᴊᴇᴄᴛ", b"tc_reject", style_type='danger', icon=5354889508674360491)]
     ]
-
 def get_join_buttons():
     urls = get_fsub_urls()
     buttons = [[Button.url(f"📢 Join Channel {i+1}", link)] for i, link in enumerate(urls) if link]

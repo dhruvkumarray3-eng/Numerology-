@@ -5,6 +5,7 @@ from database import cur, db, get_support_url, to_usd, get_flag_by_country_name,
 from config import P_NO, P_MONEY, P_INR, P_GIFT, P_USERS, PE_LOCATION, PE_GIFT, PE_CROWN
 from utils.states import session_buy_state, deposit_input, active_orders, waiting_proof
 from plugins.start import send_main_menu
+from utils.terms import get_terms_message
 from utils.helpers import check_channel_joined
 from utils.keyboards import style_btn, style_url
 from utils.lzt import COUNTRY_TO_LZT
@@ -203,9 +204,13 @@ def register_callbacks(bot):
             terms_acc = row[0] if row else 0
             if not terms_acc:
                 from utils.keyboards import get_terms_buttons
-                msg = f"<blockquote>{PE_FLOWER} <b>𝐓ᴇʀᴍs & 𝐂ᴏɴᴅɪᴛɪᴏɴs</b></blockquote>\n<blockquote>𝐏ʟᴇᴀsᴇ ʀᴇᴀᴅ ᴀɴᴅ ᴀᴄᴄᴇᴘᴛ ᴏᴜʀ 𝐓ᴇʀᴍs & 𝐂ᴏɴᴅɪᴛɪᴏɴs ʙᴇғᴏʀᴇ ᴜsɪɴɢ ᴛʜᴇ ʙᴏᴛ.</blockquote>"
-                try: await e.edit(msg, buttons=get_terms_buttons())
-                except MessageNotModifiedError: pass
+                terms_message = get_terms_message()
+                if terms_message is None:
+                    try: await e.edit("⚠️ Terms & Conditions are temporarily unavailable. Please try /start again later.")
+                    except MessageNotModifiedError: pass
+                else:
+                    try: await e.edit(terms_message, buttons=get_terms_buttons())
+                    except MessageNotModifiedError: pass
             else:
                 try: await e.delete()
                 except: pass
