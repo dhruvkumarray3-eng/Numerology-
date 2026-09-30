@@ -4,7 +4,7 @@ from telethon.errors import MessageNotModifiedError
 from database import cur, db, ensure_user, is_user_banned, is_bot_online, is_admin, get_support_url, get_start_image_url
 from utils.keyboards import get_persistent_menu, get_terms_buttons, get_join_buttons, style_btn, style_url
 from utils.helpers import check_channel_joined, to_small_caps, send_preview_on_top
-from config import PE_FLOWER, PE_LOCATION, P_OFF, P_INR, JOIN_URLS, TERMS_URL, logger
+from config import PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL, logger
 from utils.states import session_buy_state, deposit_input
 
 async def send_start_sticker_or_menu(bot, uid):
@@ -60,7 +60,7 @@ async def send_main_menu(bot, event, uid):
     support_url = get_support_url()
     support_handle = f"@{support_url.split('/')[-1]}" if support_url.startswith("https://t.me/") else support_url
     
-    update_link = JOIN_URLS[0] if JOIN_URLS else support_url
+    update_link = UPDATES_URL
     feedback_link = support_url
     
     styled_name = to_small_caps(bot_name)
