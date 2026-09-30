@@ -7,7 +7,7 @@ import time
 from telethon import events, Button, TelegramClient
 from telethon.tl.functions.account import GetPasswordRequest
 from telethon.errors import SessionPasswordNeededError
-from database import cur, db, is_bot_online, is_admin, has_perm, ADMIN_ID, get_flag_by_country_name, get_country_info, update_balance, get_bot_mode, get_change_number_fee
+from database import cur, db, is_bot_online, is_admin, has_perm, ADMIN_ID, get_flag_by_country_name, get_country_info, update_balance, get_bot_mode, get_change_number_fee, get_lzt_margin, set_lzt_margin
 from config import PE_CROWN, PE_LOCATION, PE_LIGHTNING, P_USERS, P_PKG, P_WAIT, P_ON, P_YES, P_NO, P_WARN, P_DOC, P_FLAG, P_MONEY, P_PHONE, P_GLOBE, P_2FA, P_CAL, P_OTP, P_CARD, P_TG, P_ACC, P_USDT, P_UPI, P_CART, P_GIFT, P_STATS, P_OFF, API_ID, API_HASH, bot, is_super_admin
 from utils.keyboards import style_btn
 
@@ -74,3 +74,26 @@ def register_admin(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^([/!]?admin|🔐 𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ|🔐 Admin Panel)$"))
     async def msg_admin(e):
         await admin_panel_handler(e)
+
+    @bot.on(events.NewMessage(pattern=r"(?i)^/(?:lztmargin|setlztmargin)(?:@\w+)?(?:\s+(\S+))?\s*$"))
+    async def lzt_margin_command(e):
+        if not is_admin(e.sender_id):
+            return
+
+        amount_text = e.pattern_match.group(1)
+        if amount_text is None:
+            return await e.reply(
+                f"Current LZT markup: ₹{get_lzt_margin():g} per item.\n"
+                "Usage: /lztmargin 25"
+            )
+
+        try:
+            set_lzt_margin(float(amount_text))
+        except (TypeError, ValueError, OverflowError):
+            return await e.reply(
+                "Enter a finite, non-negative INR amount. Example: /lztmargin 25"
+            )
+
+        return await e.reply(
+            f"✅ LZT markup set to ₹{get_lzt_margin():g} per item."
+        )
