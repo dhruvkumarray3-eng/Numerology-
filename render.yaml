@@ -21,5 +21,9 @@ services:
         sync: false
       - key: JOIN_URLS
         sync: false
+      - key: LZT_API_KEY
+        sync: false
+      - key: LZT_MARGIN
+        value: "25.0"
       - key: PYTHON_VERSION
         value: 3.10.12
