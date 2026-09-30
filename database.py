@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import math
 from config import ADMIN_ID, SUPER_ADMINS, SUPPORT_URL, is_super_admin
 
 # Initialize DB
@@ -257,13 +258,26 @@ def set_rub_rate(rate):
 
 def get_lzt_margin():
     res = cur.execute("SELECT value FROM settings WHERE key='lzt_margin'").fetchone()
-    if res and res[0]:
-        try: return float(res[0])
-        except: pass
-    try: return float(os.getenv("LZT_MARGIN", "25.0"))
-    except: return 25.0
+    if res and res[0] is not None:
+        try:
+            margin = float(res[0])
+            if math.isfinite(margin) and margin >= 0:
+                return margin
+        except (TypeError, ValueError, OverflowError):
+            pass
+    try:
+        margin = float(os.getenv("LZT_MARGIN", "25.0"))
+    except (TypeError, ValueError, OverflowError):
+        return 25.0
+    return margin if math.isfinite(margin) and margin >= 0 else 25.0
 
 def set_lzt_margin(margin):
+    try:
+        margin = float(margin)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("LZT margin must be a finite, non-negative amount") from exc
+    if not math.isfinite(margin) or margin < 0:
+        raise ValueError("LZT margin must be a finite, non-negative amount")
     cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('lzt_margin', ?)", (str(margin),))
     db.commit()
 
