@@ -1041,7 +1041,9 @@ def register_buy(bot):
 
 import os
 import json
-import requests
+import urllib.request
+import json
+
 from telethon import events, Button
 from config import bot, LZT_API_KEY, USDT_TO_INR
 from utils.keyboards import style_btn
