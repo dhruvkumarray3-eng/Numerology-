@@ -4,6 +4,7 @@ import logging
 from telethon import TelegramClient, events
 from config import BOT_TOKEN, API_ID, API_HASH, ADMIN_ID, bot
 
+# Logging Configuration
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -38,22 +39,27 @@ async def main():
     except Exception as e:
         logger.error(f"⚠️ Health server startup failed: {e}")
 
-    # 2. Bot Connect & Handlers Initialization
-    await bot.start(bot_token=BOT_TOKEN)
+    # 2. Enable HTML mode for rendering Custom/Premium Emojis
+    bot.parse_mode = 'html'
+
+    # 3. Register all plugin handlers
     register_all_handlers(bot)
 
-    # Debug Handlers
+    # 4. Debug Handlers (Non-blocking, logging only)
     @bot.on(events.CallbackQuery)
     async def debug_cb(e):
-        logger.warning(f"CALLBACK DATA: {e.data}")
+        logger.info(f"🔘 CALLBACK RECEIVED: {e.data}")
 
     @bot.on(events.NewMessage)
     async def debug_msg(e):
-        logger.info(f"📩 INCOMING MSG from {e.sender_id}: {e.text}")
+        if e.text:
+            logger.info(f"📩 INCOMING MSG from {e.sender_id}: {e.text}")
 
+    # 5. Bot Connect & Start
+    await bot.start(bot_token=BOT_TOKEN)
     print("✅ Numbott Modular (Telethon) STARTED SUCCESSFULLY", flush=True)
 
-    # 3. Reconnection Loop
+    # 6. Reconnection Loop
     while True:
         try:
             if not bot.is_connected():
