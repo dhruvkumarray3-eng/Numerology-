@@ -95,7 +95,6 @@ def extract_telethon_string_session(item_dict):
         auth_key_hex = None
         dc_id = None
         
-        # Method 1: from loginData['login'] (512-hex auth key) and password/telegram_dc_id
         login_val = str(login_data.get('login') or '').strip()
         if len(login_val) == 512:
             auth_key_hex = login_val
@@ -103,7 +102,6 @@ def extract_telethon_string_session(item_dict):
             try: dc_id = int(str(dc_val).strip())
             except: dc_id = 2
             
-        # Method 2: from raw string if login wasn't 512 hex
         if not auth_key_hex and raw:
             raw_clean = raw.replace('%3A', ':')
             if ':' in raw_clean:
@@ -147,7 +145,6 @@ class LZTClient:
         }
 
     async def check_connection(self):
-        """Check if API key is valid and get user info / balance."""
         token = self.get_token()
         if not token:
             return False, "❌ LZT API Key not configured."
@@ -177,7 +174,6 @@ class LZTClient:
             return False, f"❌ Network error connecting to LZT: {str(e)}"
 
     async def get_available_countries(self):
-        """Fetch available telegram countries from LZT."""
         url = f"{LZT_BASE_URL}/telegram"
         params = {
             "order_by": "price_to_up",
@@ -201,7 +197,6 @@ class LZTClient:
         return {}
 
     async def get_balance_info(self):
-        """Fetch balance details including account balance_id, RUB balance, and USD balance."""
         url = f"{LZT_BASE_URL}/user"
         try:
             async with aiohttp.ClientSession() as session:
@@ -228,33 +223,26 @@ class LZTClient:
         return None, 0.0, 0.0
 
     async def get_balance_rub(self):
-        """Fetch current LZT account/market balance in RUB."""
         _, bal_rub, _ = await self.get_balance_info()
         return bal_rub
 
     async def search_items(self, country_name, year=None, limit=20, mode='bulk'):
-        """Search available Telegram accounts for a country and optional year, filtered by available balance and mode."""
         c_code = get_lzt_code(country_name)
-        if not c_code or len(c_code) != 2:
-            logger.warning(f"No valid 2-letter ISO country code mapped for '{country_name}'")
-            return []
+        if not c_code:
+            c_code = str(country_name).strip().lower()
 
         url = f"{LZT_BASE_URL}/telegram"
         balance_id, balance_rub, balance_usd = await self.get_balance_info()
         
         params = {
-            "country[]": c_code.upper(),
             "order_by": "price_to_up",
             "parse_sticky_items": "0"
         }
+        if c_code:
+            params["country[]"] = c_code.upper()
+        
         if mode == 'spam':
             params["spam"] = "yes"
-        else:
-            # Strictly request spam-free accounts from LZT for nonspam and other general catalog modes
-            params["spam"] = "no"
-
-        if balance_rub > 0:
-            params["pmax"] = int(balance_rub)
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -265,24 +253,15 @@ class LZTClient:
                         results = []
                         import datetime
                         for item in items:
-                            # 1. STRICT COUNTRY ENFORCEMENT
-                            item_c = (item.get("telegram_country") or item.get("country") or "").strip().upper()
-                            if item_c != c_code.upper():
-                                continue
-
-                            # 2. STRICT SPAM FILTERING
-                            # In LZT Market:
-                            # -1 = clean / no spamblock (100% spam-free)
-                            # -3, -4 or positive unix timestamp (>0) = spamblocked
-                            sb = item.get("telegram_spam_block")
-                            if mode == 'spam':
-                                if sb == -1 or sb is None:
-                                    continue
+                            price_rub = item.get("rub_price")
+                            if price_rub is None:
+                                price_rub = float(item.get("price", 0))
                             else:
-                                # For nonspam mode (and any general catalog mode), STRICTLY require clean account: sb MUST be -1!
-                                if sb != -1:
-                                    continue
-
+                                price_rub = float(price_rub)
+                                
+                            pwd_val = item.get("telegram_password_value") or item.get("telegram_password") or item.get("password") or "None"
+                            has_pwd = bool(pwd_val and str(pwd_val) not in ("0", "None", "False"))
+                            
                             has_mail = bool(item.get("mail") or item.get("email_type") in ("native", "domain", "temporary"))
                             if mode == 'no_email' and has_mail:
                                 continue
@@ -301,20 +280,17 @@ class LZTClient:
                             if mode == 'dc5' and str(dc_val) != '5':
                                 continue
 
-                            price_rub = item.get("rub_price")
-                            if price_rub is None:
-                                price_rub = float(item.get("price", 0))
-                            else:
-                                price_rub = float(price_rub)
-
-                            # Strictly ensure price is within our LZT wallet balance
-                            if balance_rub > 0 and price_rub > balance_rub:
+                            if mode == 'no_2fa' and has_pwd:
+                                continue
+                            elif mode == 'with_2fa' and not has_pwd:
                                 continue
 
                             created_ts = item.get("telegram_session_created_at") or item.get("telegram_register_date") or item.get("register_date") or 0
                             if created_ts and created_ts > 1000000:
-                                try: item_year = datetime.datetime.fromtimestamp(created_ts).year
-                                except: item_year = 2026
+                                try: 
+                                    item_year = datetime.datetime.fromtimestamp(created_ts).year
+                                except: 
+                                    item_year = 2026
                             elif created_ts and 1900 < created_ts < 2100:
                                 item_year = int(created_ts)
                             else:
@@ -322,15 +298,7 @@ class LZTClient:
                                 
                             if year is not None and int(year) != int(item_year):
                                 continue
-                                
-                            pwd_val = item.get("telegram_password_value") or item.get("telegram_password") or item.get("password") or "None"
-                            has_pwd = bool(pwd_val and str(pwd_val) not in ("0", "None", "False"))
-                            
-                            if mode == 'no_2fa' and has_pwd:
-                                continue
-                            elif mode == 'with_2fa' and not has_pwd:
-                                continue
-                            
+
                             results.append({
                                 "item_id": item.get("item_id"),
                                 "price_rub": price_rub,
@@ -343,13 +311,14 @@ class LZTClient:
                                 "has_2fa": has_pwd,
                                 "twofa_pass": str(pwd_val) if has_pwd else "None"
                             })
+                            if len(results) >= limit:
+                                break
                         return results
         except Exception as e:
             logger.error(f"LZT search items error for {country_name}: {e}")
         return []
 
     async def fast_buy(self, item_id, price_str, balance_id=None):
-        """Perform fast-buy for an item on LZT with balance_id."""
         url = f"{LZT_BASE_URL}/{item_id}/fast-buy"
         if balance_id is None:
             bid, _, _ = await self.get_balance_info()
@@ -385,7 +354,6 @@ class LZTClient:
             return False, f"Network error during purchase: {str(e)}"
 
     async def get_otp_code(self, item_id):
-        """Fetch incoming SMS / Telegram login OTP code for the purchased item."""
         url = f"{LZT_BASE_URL}/{item_id}/code"
         try:
             async with aiohttp.ClientSession() as session:
