@@ -215,6 +215,7 @@ def get_emoji(key: str) -> str:
     return ""
 
 BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", os.getenv("CWALLET_ID", "")).strip()
+BEP20_QR = os.getenv("BEP20_QR", os.getenv("CWALLET_QR", "")).strip()
 
     
 
