@@ -1,4 +1,4 @@
-Import random
+import random
 import asyncio
 import re
 from telethon import Button
