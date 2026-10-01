@@ -1,4 +1,6 @@
 import os
+import re
+import html
 import asyncio
 import logging
 from telethon import TelegramClient, events
@@ -10,9 +12,14 @@ logger = logging.getLogger(__name__)
 
 os.makedirs("sessions", exist_ok=True)
 
-# Plugins and Utilities
+# Plugins, Utilities & Database Functions
 from plugins import register_all_handlers
 from utils.health import start_health_server
+
+# Assumptions for state management & helper functions (Ensure these are defined in your utils/config)
+# from utils.helpers import get_countries_list, get_flag_by_country_name, style_btn, COUNTRY_CODES
+# search_state = {}
+# user_states = {}
 
 def validate_runtime_config():
     missing = []
@@ -32,6 +39,118 @@ def validate_runtime_config():
             "Copy .env.sample to .env locally or configure them in your deployment service."
         )
 
+# ---------------------------------------------------------
+# HELPER: SHOW BUY MENU UI
+# ---------------------------------------------------------
+async def show_buy_menu(event):
+    btns = [
+        [style_btn("🔍 Search Country", "btn_search_country", "primary", icon=6154249597532248059)],
+        [
+            style_btn("🟢 Non-Spam / Clean", "cat_clean", "success", icon=5409320020058584473),
+            style_btn("🟡 Spam / Used", "cat_spam", "warning", icon=6129888444245089008)
+        ],
+        [style_btn("🎯 More Account Filters", "cat_filters", "success", icon=6154249597532248059)],
+        [style_btn("🌐 All Countries (Fresh)", "cat_all_countries", "primary", icon=6154249597532248059)],
+        [style_btn("🏛 Old / Aged Accounts", "cat_aged", "primary", icon=6154249597532248059)],
+        [style_btn("🔙 Back to Dashboard", "main_dashboard", "danger", icon=6129812419028982717)]
+    ]
+    
+    text = "<blockquote expandable>🛒 <b>𝐒𝐄𝐋𝐄𝐂𝐓 𝐀𝐂𝐂𝐎𝐔𝐍𝐓 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘:</b>\n\n<i>Choose a category below to browse accounts or search by country.</i></blockquote>"
+    await event.respond(text, buttons=btns)
+
+
+# ---------------------------------------------------------
+# HANDLER 1: REPLY KEYBOARD DISPATCHER ("BUY ACCOUNT" FIX)
+# ---------------------------------------------------------
+@bot.on(events.NewMessage)
+async def reply_keyboard_dispatcher(event):
+    if not event.text or event.text.startswith("/"):
+        return
+        
+    text = event.text.strip()
+    uid = event.sender_id
+
+    # Strip emojis and punctuation for strict command checking
+    clean_btn_text = re.sub(r'[^\w\s]', '', text).strip().upper()
+
+    # 🛒 BUY ACCOUNT Button Trigger
+    if "BUY ACCOUNT" in clean_btn_text or text == "🛒 BUY ACCOUNT":
+        search_state[uid] = False
+        user_states[uid] = None
+        await show_buy_menu(event)
+        raise events.StopPropagation
+
+    # 🔝 RESET STATES ON OTHER NAVIGATION BUTTONS
+    elif any(cmd in clean_btn_text for cmd in ["STOCK", "PROFILE", "BALANCE", "START", "CLOSE"]):
+        search_state[uid] = False
+        user_states[uid] = None
+
+
+# ---------------------------------------------------------
+# HANDLER 2: SEARCH COUNTRY INPUT PROCESSOR
+# ---------------------------------------------------------
+@bot.on(events.NewMessage)
+async def process_combined_text_input(event):
+    if not event.text or event.text.startswith("/"):
+        return
+        
+    uid = event.sender_id
+    
+    # Process only if search mode is active
+    if search_state.get(uid) or user_states.get(uid) == "AWAITING_COUNTRY":
+        search_state[uid] = False
+        user_states[uid] = None
+        
+        raw_text = event.text.strip()
+        query_lower = raw_text.lower()
+        clean_num = re.sub(r"[^\d]", "", raw_text)
+
+        try:
+            countries_all = await get_countries_list()
+        except Exception as e:
+            logger.error(f"Error fetching country list: {e}")
+            countries_all = []
+
+        matches = []
+
+        for c_entry in countries_all:
+            if isinstance(c_entry, (tuple, list)):
+                c_name, count = c_entry[0], c_entry[1]
+            else:
+                c_name, count = str(c_entry), 0
+
+            c_lower = c_name.lower()
+            
+            dial_code = str(
+                COUNTRY_CODES.get(c_name) or 
+                COUNTRY_CODES.get(c_lower) or 
+                COUNTRY_CODES.get(c_name.title()) or ''
+            ).replace("+", "").strip()
+
+            if (query_lower in c_lower) or (clean_num and clean_num == dial_code):
+                matches.append((c_name, count))
+
+        if not matches:
+            return await event.respond(
+                f"❌ No country found matching '<code>{html.escape(raw_text)}</code>'.\n"
+                f"Please try again with a valid country name or code (e.g. India, +91, +1).", 
+                buttons=[[style_btn("🔙 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)]]
+            )
+
+        btns = []
+        for c_name, count in matches[:10]:
+            flag = get_flag_by_country_name(c_name)
+            cnt_str = f"({count})" if count else "(Available)"
+            btns.append([style_btn(f"{flag} {c_name} {cnt_str}", f"bc|bulk|{c_name}", "primary", icon=6154249597532248059)])
+            
+        btns.append([style_btn("🔙 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)])
+        
+        await event.respond(
+            f"<blockquote expandable>🔎 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐑𝐞𝐬𝐮𝐥𝐭𝐬 𝐟𝐨𝐫 '{html.escape(raw_text)}':</b></blockquote>", 
+            buttons=btns
+        )
+
+
 async def main():
     # 1. Health server start
     try:
@@ -50,7 +169,6 @@ async def main():
     @bot.on(events.CallbackQuery)
     async def global_callback_debug(e):
         logger.info(f"🔘 CALLBACK RECEIVED: {e.data}")
-        # Automatically answer unhandled callbacks to stop button loading spinner
         try:
             await e.answer()
         except Exception:
