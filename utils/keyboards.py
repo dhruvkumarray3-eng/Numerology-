@@ -3,45 +3,50 @@ from telethon.tl.types import ReplyKeyboardMarkup, KeyboardButtonRow, KeyboardBu
 from config import TERMS_URL, JOIN_URLS
 from database import is_admin, get_support_url, get_fsub_urls
 
-# We use bg_primary (blue), bg_success (green), bg_danger (red)
-# For icon, we pass the custom emoji ID (int)
-
 def style_btn(text, data, style_type=None, icon=None):
+    """Helper for styled inline buttons with optional custom icons."""
+    if icon:
+        text = f"{icon} {text}"
     return Button.inline(text, data, style=style_type, icon=icon)
 
 def style_url(text, url, style_type=None, icon=None):
+    """Helper for styled URL buttons with optional custom icons."""
+    if icon:
+        text = f"{icon} {text}"
     return Button.url(text, url, style=style_type, icon=icon)
-
 
 def get_terms_buttons():
     return [
-        [style_btn("𝐀ᴄᴄᴇᴘᴛ", b"tc_accept", style_type='success', icon=5409380965644514142),
-         style_btn("𝐑ᴇᴊᴇᴄᴛ", b"tc_reject", style_type='danger', icon=5354889508674360491)]
+        [
+            style_btn("𝐀ᴄᴄᴇᴘᴛ", b"tc_accept", style_type='success', icon=5409380965644514142),
+            style_btn("𝐑ᴇᴊᴇᴄᴛ", b"tc_reject", style_type='danger', icon=5354889508674360491)
+        ]
     ]
+
 def get_join_buttons():
-    urls = get_fsub_urls()
+    urls = get_fsub_urls() or []
     buttons = [[Button.url(f"📢 Join Channel {i+1}", link)] for i, link in enumerate(urls) if link]
     buttons.append([style_btn("𝐕ᴇʀɪғʏ 𝐉ᴏɪɴᴇᴅ", b"verify_join", style_type='success', icon=6129627894349045589)])
     return buttons
 
 def get_persistent_menu(uid):
-    from database import is_admin
-    from telethon import Button
+    """Returns persistent reply keyboard buttons for the user menu."""
     buttons = [
-        [Button.text("🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ", resize=True, style="success", icon=5440627033111557670), Button.text("💳 𝐃ᴇᴘᴏsɪᴛ", style="primary", icon=5409271925014801629)],
-        [Button.text("👤 𝐏ʀᴏғɪʟᴇ", style="primary", icon=6203982793379154737), Button.text("📦 𝐌ʏ 𝐎ʀᴅᴇʀs", style="primary", icon=5409098988156629257)],
-        [Button.text("💰 𝐁ᴀʟᴀɴᴄᴇ", style="success", icon=5409320020058584473), Button.text("📊 𝐒ᴛᴏᴄᴋ", style="primary", icon=6129627894349045589)],
-        [Button.text("🎁 𝐑ᴇғᴇʀ", style="success", icon=5354889508674360491), Button.text("📩 𝐒ᴜᴘᴘᴏʀᴛ", style="primary", icon=6129732880529628243)],
-        [Button.text("🏠 𝐒ᴛᴀʀᴛ", style="success", icon=6129399728506412489), Button.text("🔻 𝐂ʟᴏsᴇ", style="danger", icon=6129812419028982717)]
+        [Button.text("🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ"), Button.text("💳 𝐃ᴇᴘᴏsɪᴛ")],
+        [Button.text("👤 𝐏ʀᴏғɪʟᴇ"), Button.text("📦 𝐌ʏ 𝐎ʀᴅᴇʀs")],
+        [Button.text("💰 𝐁ᴀʟᴀɴᴄᴇ"), Button.text("📊 𝐒ᴛᴏᴄᴋ")],
+        [Button.text("🎁 𝐑ᴇғᴇ𝐫"), Button.text("📩 𝐒ᴜᴘᴘᴏʀᴛ")],
+        [Button.text("🏠 𝐒ᴛᴀʀᴛ"), Button.text("🔻 𝐂ʟᴏsᴇ")]
     ]
     if is_admin(uid):
-        buttons.append([Button.text("🔐 𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ", style="danger", icon=5409166771330494453)])
+        buttons.append([Button.text("🔐 𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ")])
     return buttons
 
 def get_support_buttons():
-    urls = get_fsub_urls()
-    sup_url = get_support_url()
+    urls = get_fsub_urls() or []
+    sup_url = get_support_url() or "https://t.me/"
     t_url = TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else sup_url
+    
     buttons = [
         [Button.url("📩 Support", sup_url)],
         [Button.url("📜 Terms & Conditions", t_url)]
