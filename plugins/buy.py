@@ -3,6 +3,9 @@ import asyncio
 import time
 import zipfile
 import re
+import html
+import json
+import requests
 from telethon import events, Button, TelegramClient, types
 from telethon.errors import (
     MessageNotModifiedError, PhoneNumberInvalidError, PhoneNumberOccupiedError,
@@ -10,15 +13,18 @@ from telethon.errors import (
     FreshChangePhoneForbiddenError, FloodWaitError
 )
 from telethon.tl.functions.account import SendChangePhoneCodeRequest, ChangePhoneRequest
-from database import cur, db, get_flag_by_country_name, get_bot_mode, get_panel_price, get_lzt_key, get_change_number_fee
+from database import (
+    cur, db, get_flag_by_country_name, get_bot_mode, get_panel_price,
+    get_lzt_key, get_change_number_fee, COUNTRY_CODES, is_admin, get_log_channels_db
+)
 from config import (
     PE_LOCATION, PE_GIFT, PE_LIGHTNING, PE_CHECK, P_MONEY, P_PKG, P_CARD, P_WARN,
     P_NO, P_YES, P_INR, P_TIME, P_FLAG, P_OTP, P_2FA, P_PHONE, AUTO_CANCEL_SECONDS,
-    OTP_REGEX, bot, logger, API_ID, API_HASH
+    OTP_REGEX, bot, logger, API_ID, API_HASH, LZT_API_KEY, USDT_TO_INR
 )
 from utils.keyboards import style_btn
 from utils.states import active_orders, session_buy_state, get_user_lock
-from utils.lzt import lzt_client, COUNTRY_TO_LZT
+from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code
 
 search_state = {}
 change_number_state = {}
@@ -50,26 +56,23 @@ async def get_countries_list():
     """Retrieve available countries based on bot_mode."""
     bot_mode = get_bot_mode()
     
-    # 1. Manual Mode: only local stock
     if bot_mode == 'manual':
         rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall()
         return sorted(rows, key=lambda x: x[0])
 
-    # 2. Panel Mode: all supported countries from catalog
     if bot_mode == 'panel':
         all_c = set(COUNTRY_TO_LZT.keys())
         try:
             customs = cur.execute("SELECT name FROM custom_countries").fetchall()
             for (c,) in customs: all_c.add(c)
-        except: pass
+        except Exception: pass
         return sorted([(c_name, '40+') for c_name in all_c], key=lambda x: x[0])
 
-    # 3. Hybrid Mode: local stock with count + other catalog countries
     all_c = set(COUNTRY_TO_LZT.keys())
     try:
         customs = cur.execute("SELECT name FROM custom_countries").fetchall()
         for (c,) in customs: all_c.add(c)
-    except: pass
+    except Exception: pass
     
     country_dict = {c_name: '40+' for c_name in all_c}
     local_rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall()
@@ -89,12 +92,7 @@ YEAR_BADGES = {
     2019: "⚡ 2019 & Older (Vintage)"
 }
 
-search_state = {}
-
 async def search_countries_matching(query):
-    import html
-    from database import COUNTRY_CODES, get_flag_by_country_name
-    from utils.lzt import get_lzt_code
     query_clean = query.strip().lower()
     dial_code = re.sub(r'[^\d]', '', query_clean)
     all_countries = await get_countries_list()
@@ -293,7 +291,6 @@ async def show_years(event, mode, country):
     bot_mode = get_bot_mode()
     year_options = []
     
-    # 1. Check local stock first
     if bot_mode in ('manual', 'hybrid'):
         if mode == 'spam':
             rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND LOWER(category)='spam' GROUP BY account_year, price", (country,)).fetchall()
@@ -311,11 +308,9 @@ async def show_years(event, mode, country):
                 'year': y, 'count': count, 'price': price, 'source': 'local'
             })
 
-    # 2. If panel mode, or hybrid with no local stock
     if (bot_mode == 'panel' or (bot_mode == 'hybrid' and not year_options)) and get_lzt_key():
         try:
             items = await lzt_client.search_items(country, mode=mode)
-            # Group by year
             years_grouped = {}
             for itm in items:
                 y = itm['year']
@@ -331,7 +326,6 @@ async def show_years(event, mode, country):
         except Exception as e:
             logger.error(f"Error fetching LZT years for {country}: {e}")
 
-    # Fallback to standard aged years if no specific list was grouped
     if not year_options:
         for y in [2026, 2025, 2024, 2023, 2022, 2021]:
             year_options.append({
@@ -403,13 +397,12 @@ async def process_purchase(event, mode, country, year, price_str):
         if balance < final_price:
             return await event.answer("❌ Insufficient Balance!", alert=True)
 
-        # Check local stock first
         if mode == 'spam':
             local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)='spam' LIMIT 1", (country, int(year))).fetchone()
         elif mode == 'nonspam':
             local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL LIMIT 1", (country, int(year))).fetchone()
         elif mode == 'no_2fa':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
+            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
         elif mode == 'with_2fa':
             local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, int(year))).fetchone()
         else:
@@ -427,7 +420,6 @@ async def process_purchase(event, mode, country, year, price_str):
             cur.execute("UPDATE stock SET available=0 WHERE phone=?", (phone,))
             db.commit()
         else:
-            # Panel / LZT order: reserve balance first
             cur.execute("UPDATE users SET balance = balance - ? WHERE user_id=? AND balance >= ?", (final_price, uid, final_price))
             if cur.rowcount == 0: return await event.answer("❌ Insufficient Balance!", alert=True)
             db.commit()
@@ -436,7 +428,6 @@ async def process_purchase(event, mode, country, year, price_str):
     actual_year = int(year)
 
     if is_local:
-        # Local session processing
         await event.edit(f"{PE_LIGHTNING} <b>𝐏ʀᴏᴄᴇssɪɴɢ ʏᴏᴜʀ ᴏʀᴅᴇʀ...</b>\n𝐏ʟᴇᴀsᴇ ᴡᴀɪᴛ ᴡʜɪʟᴇ ᴡᴇ ɪɴɪᴛɪᴀʟɪᴢᴇ ᴛʜᴇ sᴇssɪᴏɴ.")
         
         client = TelegramClient(sess, API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
@@ -447,14 +438,13 @@ async def process_purchase(event, mode, country, year, price_str):
         except Exception as e:
             logger.error(f"Client init error: {e}")
             try: await client.disconnect()
-            except: pass
+            except Exception: pass
             async with get_user_lock(uid):
                 cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                 cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
                 db.commit()
             return await event.edit(f"{P_NO} <b>Error initializing account. (Session Dead)</b> Money refunded.")
 
-        from database import is_admin
         temp_order = {'c_icon': c_icon, 'country': country, 'twofa': twofa_pass}
         msg, active_btns = get_active_order_card(temp_order, phone, is_admin(uid))
         sent_msg = await event.edit(msg, buttons=active_btns)
@@ -466,7 +456,6 @@ async def process_purchase(event, mode, country, year, price_str):
         }
         asyncio.create_task(auto_otp_task(phone))
     else:
-        # LZT Panel Purchase Flow
         await event.edit(f"{PE_LIGHTNING} <b>𝐏ʀᴏᴄᴇssɪɴɢ ʏᴏᴜʀ ᴏʀᴅᴇʀ...</b>\n𝐏ʟᴇᴀsᴇ ᴡᴀɪᴛ ᴡʜɪʟᴇ ᴡᴇ ɪɴɪᴛɪᴀʟɪᴢᴇ ᴛʜᴇ sᴇssɪᴏɴ.")
         try:
             items = await lzt_client.search_items(country, actual_year, mode=mode)
@@ -491,7 +480,6 @@ async def process_purchase(event, mode, country, year, price_str):
                 balance_id = itm.get('balance_id')
                 ok, buy_result = await lzt_client.fast_buy(item_id, price_str, balance_id)
                 if ok:
-                    # Post-purchase spam safety check
                     bought_data = buy_result.get("item_data") or {}
                     post_sb = bought_data.get("telegram_spam_block")
                     if mode == 'nonspam' and post_sb is not None and post_sb != -1:
@@ -518,7 +506,7 @@ async def process_purchase(event, mode, country, year, price_str):
                             else:
                                 logger.warning(f"Session for item {item_id} expired on Telegram, trying next...")
                                 try: await test_client.disconnect()
-                                except: pass
+                                except Exception: pass
                         except Exception as conn_err:
                             logger.warning(f"Connection error for item {item_id}: {conn_err}, trying next...")
                 else:
@@ -535,7 +523,6 @@ async def process_purchase(event, mode, country, year, price_str):
             twofa_pass = bought_info.get("twofa") or "None"
             str_sess = bought_info.get("string_session")
 
-            from database import is_admin
             temp_order = {'c_icon': c_icon, 'country': country, 'twofa': twofa_pass}
             msg, active_btns = get_active_order_card(temp_order, phone, is_admin(uid))
             sent_msg = await event.edit(msg, buttons=active_btns)
@@ -575,7 +562,6 @@ async def fetch_order_otp(order):
     client = order.get('client')
     start_time = order.get('start_time', 0)
     
-    # 1. Fetch from Telegram session if client is available
     if client:
         try:
             if not client.is_connected():
@@ -590,7 +576,6 @@ async def fetch_order_otp(order):
                     msgs = await client.get_messages(777000, limit=5)
                 except Exception:
                     try:
-                        # Preload dialogs to ensure 777000 entity has valid access hash
                         await client.get_dialogs(limit=10)
                         msgs = await client.get_messages(777000, limit=5)
                     except Exception as e:
@@ -613,7 +598,6 @@ async def fetch_order_otp(order):
         except Exception as e:
             logger.error(f"Error checking Telegram messages: {e}")
 
-    # 2. Check LZT API if this is an LZT order
     if order.get('is_lzt') and order.get('item_id'):
         try:
             lzt_code = await lzt_client.get_otp_code(order['item_id'])
@@ -648,1055 +632,136 @@ async def auto_otp_task(phone):
                             cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
                         db.commit()
                         
-                        from database import get_log_channels_db
-                        from config import P_YES
                         for log_ch in get_log_channels_db():
                             try:
                                 await bot.send_message(log_ch, f"{P_YES} <b>ACCOUNT SOLD</b>\n\n👤 <b>User:</b> <code>{uid}</code>\n📱 <b>Phone:</b> <code>+{phone}</code>\n💰 <b>Price:</b> ₹{order['price']}\n🌍 <b>Country:</b> {order['country']}")
                             except Exception as log_ex:
                                 logger.error(f"Failed to log sale to {log_ch}: {log_ex}")
                 
-                twofa_text = f"{P_2FA} <b>2FA:</b> <code>{order['twofa']}</code>" if order['twofa'] != "None" else f"🔓 <b>2FA:</b> <code>Disabled (No Password)</code>"
-                msg_text = (f"<blockquote>{PE_CHECK} <b>𝐋ᴀᴛᴇsᴛ 𝐎𝐓𝐏 𝐅ᴇᴛᴄʜᴇᴅ!</b>\n\n"
+                twofa_text = f"{P_2FA} <b>2FA:</b> <code>{order['twofa']}</code>" if order['twofa'] != "None" else "🔓 <b>2FA:</b> <code>Disabled (No Password)</code>"
+                msg_text = (f"<blockquote>{PE_CHECK} <b>𝐎𝐓𝐏 𝐑ᴇᴄᴇɪᴠᴇᴅ!</b>\n\n"
                             f"{P_PHONE} <b>𝐏ʜᴏɴᴇ:</b> <code>+{phone}</code>\n"
-                            f"{P_FLAG} <b>𝐂ᴏᴜɴᴛʀʏ:</b> {order['c_icon']} {order['country']}\n"
-                            f"{P_OTP} <b>𝐎𝐓𝐏:</b> <code><tg-spoiler>{code}</tg-spoiler></code>\n"
-                            f"{twofa_text}</blockquote>")
+                            f"{P_OTP} <b>𝐎𝐓𝐏 𝐂ᴏᴅᴇ:</b> <code>{code}</code>\n"
+                            f"{twofa_text}\n\n"
+                            f"<i>⚡ Tap code to copy! Complete login now.</i></blockquote>")
                 
-                otp_btns = [
-                    [style_btn("🔄 𝐆ᴇᴛ 𝐎𝐓𝐏 𝐀ɢᴀɪɴ", f"get_otp_again|{phone}", "primary", icon=5408995930416362034)],
-                    [style_btn("✅ 𝐅ɪɴɪsʜ 𝐎ʀᴅᴇʀ", f"finish_order|{phone}", "success", icon=5409320020058584473)]
+                btns = [
+                    [
+                        style_btn("📥 𝐃ᴏᴡɴʟᴏᴀᴅ .𝐒𝐄𝐒𝐒𝐈𝐎𝐍", f"dl_telethon_{phone}", "success", icon=5409320020058584473),
+                        style_btn("📥 𝐃ᴏᴡɴʟᴏᴀᴅ 𝐓𝐃𝐀𝐓𝐀", f"dl_tdata_{phone}", "primary", icon=5408995930416362034)
+                    ],
+                    [
+                        style_btn("📥 Pyrogram / JSON", f"dl_pyrogram_{phone}", "primary", icon=5408995930416362034),
+                        style_btn("🔑 𝐐𝐑 𝐋ᴏɢɪɴ", f"get_qr_{phone}", "primary", icon=5408995930416362034)
+                    ],
+                    [
+                        style_btn("🔄 𝐆ᴇᴛ 𝐀ɴᴏᴛʜᴇʀ 𝐎𝐓𝐏", f"get_code_{phone}", "primary", icon=5408995930416362034),
+                        style_btn("🚫 𝐓ᴇʀᴍɪɴᴀᴛᴇ 𝐎ᴛʜᴇʀ 𝐒ᴇssɪᴏɴs", f"reset_sessions_{phone}", "danger", icon=6129888444245089008)
+                    ],
+                    [style_btn("✅ 𝐅ɪɴɪsʜ / 𝐃ᴏɴᴇ", f"finish_order|{phone}", "success", icon=5409320020058584473)]
                 ]
-                try: await bot.edit_message(uid, msg_id, msg_text, buttons=otp_btns)
-                except MessageNotModifiedError: pass
-                return 
-        except Exception as ex:
-            logger.error(f"OTP fetch error for {phone}: {ex}")
-        await asyncio.sleep(4) 
+                
+                try: await bot.edit_message(uid, msg_id, msg_text, buttons=btns)
+                except Exception as ex: logger.error(f"Error updating message: {ex}")
+                return
+        except Exception as e:
+            logger.error(f"Error in auto_otp_task loop: {e}")
+            
+        await asyncio.sleep(5)
         
     if phone in active_orders and not active_orders[phone]['paid']:
-        order = active_orders.pop(phone)
-        try: await order['client'].disconnect()
-        except: pass
-        
-        # Local manual stock -> refund & restore stock
-        if not order.get('is_lzt'):
-            async with get_user_lock(uid):
-                cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (order['price'], uid))
-                cur.execute("UPDATE stock SET available=1 WHERE phone=?", (phone,))
-                db.commit()
-            try: await bot.edit_message(uid, msg_id, f"<blockquote>{P_TIME} <b>𝐎ʀᴅᴇʀ 𝐄xᴘɪʀᴇᴅ!</b>\n\n𝐓ʜᴇ 10-ᴍɪɴᴜᴛᴇ ʟɪᴍɪᴛ ғᴏʀ <code>+{phone}</code> ʀᴀɴ ᴏᴜᴛ. 𝐘ᴏᴜʀ ᴍᴏɴᴇʏ ({P_INR}{order['price']}) ʜᴀs ʙᴇᴇɴ ʀᴇғᴜɴᴅᴇᴅ.</blockquote>")
-            except: pass
-        else:
-            # LZT Panel purchased accounts -> do not auto-refund to prevent wallet drainage exploits
-            try: await bot.edit_message(uid, msg_id, f"<blockquote>{P_TIME} <b>𝐒ᴇssɪᴏɴ 𝐓ɪᴍᴇᴏᴜᴛ</b>\n\n𝐓ʜᴇ 10-ᴍɪɴᴜᴛᴇ ʟɪsᴛᴇɴᴇʀ ғᴏʀ <code>+{phone}</code> ʜᴀs ᴇɴᴅᴇᴅ.\n𝐈ғ ʏᴏᴜ ɴᴇᴇᴅ ᴀssɪsᴛᴀɴᴄᴇ, ᴘʟᴇᴀsᴇ ᴄᴏɴᴛᴀᴄᴛ 𝐒ᴜᴘᴘᴏʀᴛ.</blockquote>")
-            except: pass
-
-def register_buy(bot):
-    @bot.on(events.NewMessage(pattern=r"(?i)^(🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ|🛒 Buy Account|📁 Buy Sessions)$"))
-    async def msg_buy(e):
-        await show_buy_menu(e)
-
-    @bot.on(events.CallbackQuery(pattern=r"^(open_buy_categories|open_buy_menu|buy_categories)$"))
-    async def cb_open_buy_categories(e):
-        await show_buy_menu(e)
-
-    @bot.on(events.CallbackQuery(pattern=b"^by_years_menu$"))
-    async def cb_by_years_menu(e):
-        await show_years_catalog(e)
-
-    @bot.on(events.CallbackQuery(pattern=r"^pg_filters\|(\d+)$"))
-    async def cb_pg_filters(e):
-        p = e.pattern_match
-        page = int(p.group(1).decode())
-        await show_filters_catalog(e, page)
-
-    @bot.on(events.CallbackQuery(pattern=r"^c_by_yr\|(\d+)\|(\d+)$"))
-    async def cb_c_by_yr(e):
-        p = e.pattern_match
-        year = int(p.group(1).decode())
-        page = int(p.group(2).decode())
-        await show_countries_for_year(e, year, page)
-
-    @bot.on(events.CallbackQuery(pattern=r"^bc\|([^|]+)\|([^|]+)$"))
-    async def cb_bc(e):
-        p = e.pattern_match
-        await show_years(e, p.group(1).decode(), p.group(2).decode())
-
-    @bot.on(events.CallbackQuery(pattern=r"^pg_c\|([^|]+)\|(\d+)$"))
-    async def cb_pg_c(e):
-        p = e.pattern_match
-        await show_countries(e, p.group(1).decode(), int(p.group(2).decode()))
-
-    @bot.on(events.CallbackQuery(pattern=r"^by\|([^|]+)\|([^|]+)\|(\d+)\|(\d+)$"))
-    async def cb_by_single(e):
-        p = e.pattern_match
-        await confirm_purchase(e, p.group(1).decode(), p.group(2).decode(), p.group(3).decode(), p.group(4).decode())
-        
-    @bot.on(events.CallbackQuery(pattern=r"^buy_cf\|([^|]+)\|([^|]+)\|(\d+)\|(\d+)$"))
-    async def cb_buy_cf_4(e):
-        p = e.pattern_match
-        await process_purchase(e, p.group(1).decode(), p.group(2).decode(), p.group(3).decode(), p.group(4).decode())
-
-    @bot.on(events.CallbackQuery(pattern=r"^cancel_order\|([^|]+)$"))
-    async def cb_cancel_order(e):
-        phone = e.pattern_match.group(1).decode()
-        uid = e.sender_id
-        from database import is_admin
-        if not is_admin(uid):
-            return await e.answer("🚫 Cancellation is disabled for members. Please complete your login or contact Support.", alert=True)
-            
-        if phone not in active_orders:
-            return await e.answer("⚠️ Order already completed or expired.", alert=True)
-            
-        order = active_orders[phone]
-        if order.get('paid'):
-            return await e.answer("⚠️ OTP was already sent! Order is completed.", alert=True)
-            
-        # Admin cancel & refund
-        active_orders.pop(phone)
-        refund_amt = order['price']
-        
-        try:
-            if 'client' in order and order['client']:
-                await order['client'].disconnect()
-        except: pass
-            
-        async with get_user_lock(order['uid']):
-            cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (refund_amt, order['uid']))
-            if not order.get('is_lzt'):
+        ord_info = active_orders[phone]
+        async with get_user_lock(uid):
+            cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (ord_info['price'], uid))
+            if not ord_info.get('is_lzt'):
                 cur.execute("UPDATE stock SET available=1 WHERE phone=?", (phone,))
             db.commit()
-            
-        msg = f"<blockquote>{P_NO} <b>❌ 𝐎ʀᴅᴇʀ 𝐂ᴀɴᴄᴇʟʟᴇᴅ!</b>\n\n𝐘ᴏᴜʀ ᴍᴏɴᴇʏ (<b>{P_INR}{refund_amt}</b>) ʜᴀs ʙᴇᴇɴ <b>ɪɴsᴛᴀɴᴛʟʏ ʀᴇғᴜɴᴅᴇᴅ</b> ᴛᴏ ʏᴏᴜʀ ʙᴀʟᴀɴᴄᴇ.</blockquote>"
-        await e.edit(msg, buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɢᴀɪɴ", "buy_menu_main", "primary", icon=5408995930416362034)]])
-        await e.answer("✅ Order Cancelled & Refunded!", alert=True)
-
-    @bot.on(events.CallbackQuery(pattern=r"^get_otp_again\|([^|]+)$"))
-    async def cb_get_otp_again(e):
-        phone = e.pattern_match.group(1).decode()
-        if phone not in active_orders: return await e.answer("⚠️ Session expired.", alert=True)
-        await e.answer("🔄 Fetching latest OTP...")
-        order = active_orders[phone]
-        uid = order['uid']
-        msg_id = order['msg_id']
-        client = order.get('client')
-
-        if not client and not order.get('is_lzt'):
-            return await e.answer("⚠️ Client disconnected.", alert=True)
-
+        
         try:
-            code = await fetch_order_otp(order)
-            if code:
-                if not order['paid']:
-                    order['paid'] = True
-                    async with get_user_lock(uid):
-                        cur.execute("INSERT INTO orders (user_id, country, year, price, phone, otp) VALUES (?,?,?,?,?,?)", (uid, order['country'], order['year'], order['price'], phone, code))
-                        if not order.get('is_lzt'):
-                            cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
-                        db.commit()
-                twofa_text = f"{P_2FA} <b>2FA:</b> <code>{order['twofa']}</code>" if order['twofa'] != "None" else f"🔓 <b>2FA:</b> <code>Disabled (No Password)</code>"
-                msg_text = (f"<blockquote>{PE_CHECK} <b>𝐋ᴀᴛᴇsᴛ 𝐎𝐓𝐏 𝐅ᴇᴛᴄʜᴇᴅ!</b>\n\n"
-                            f"{P_PHONE} <b>𝐏ʜᴏɴᴇ:</b> <code>+{phone}</code>\n"
-                            f"{P_FLAG} <b>𝐂ᴏᴜɴᴛʀʏ:</b> {order['c_icon']} {order['country']}\n"
-                            f"{P_OTP} <b>𝐎𝐓𝐏:</b> <code><tg-spoiler>{code}</tg-spoiler></code>\n"
-                            f"{twofa_text}</blockquote>")
-                otp_btns = [
-                    [style_btn("🔄 𝐆ᴇᴛ 𝐎𝐓𝐏 𝐀ɢᴀɪɴ", f"get_otp_again|{phone}", "primary", icon=5408995930416362034)],
-                    [style_btn("✅ 𝐅ɪɴɪsʜ 𝐎ʀᴅᴇʀ", f"finish_order|{phone}", "success", icon=5409320020058584473)]
-                ]
-                try: await bot.edit_message(uid, msg_id, msg_text, buttons=otp_btns)
-                except MessageNotModifiedError: pass
+            client = ord_info.get('client')
+            if client: await client.disconnect()
+        except Exception: pass
+        
+        del active_orders[phone]
+        
+        msg_text = f"<blockquote>{P_NO} <b>𝐎ʀᴅᴇʀ 𝐓ɪᴍᴇᴏᴜᴛ / 𝐂ᴀɴᴄᴇʟʟᴇᴅ</b>\n\nNo OTP was received in time. <b>{P_INR}{ord_info['price']}</b> has been refunded to your wallet!</blockquote>"
+        try: await bot.edit_message(uid, msg_id, msg_text)
+        except Exception as e: logger.error(f"Error sending timeout msg: {e}")
+
+async def handle_format_downloads(event, phone, file_type):
+    if phone not in active_orders:
+        return await event.answer("❌ Session context no longer active. Use order history.", alert=True)
+    
+    order = active_orders[phone]
+    client = order.get('client')
+    sess = order.get('sess')
+    
+    ext = "json" if file_type == "json" else ("session" if file_type in ["telethon", "pyrogram"] else "zip")
+    file_path = f"export_{phone}_{file_type}.{ext}"
+    
+    try:
+        await event.answer("⏳ Generating requested session file...", alert=False)
+        
+        if file_type == "telethon":
+            if isinstance(sess, str) and os.path.exists(sess):
+                file_path = sess
             else:
-                await e.answer("⚠️ No new OTP found yet. Make sure you tapped Send Code in Telegram!", alert=True)
-        except Exception as ex:
-            logger.error(f"OTP fetch error for {phone}: {ex}")
-            await e.answer("❌ Error fetching OTP.", alert=True)
-        
-    @bot.on(events.CallbackQuery(pattern=r"^(?:finish_order|logout_bot)\|([^|]+)$"))
-    async def cb_finish_order(e):
-        phone = e.pattern_match.group(1).decode()
-        if phone in active_orders:
-            order = active_orders.pop(phone)
-            if 'client' in order and order['client']:
-                try: await order['client'].disconnect()
-                except: pass
-            if not order.get('is_lzt') and 'sess' in order:
-                for ext in ['.session', '.session-wal', '.session-shm', '.session-journal']:
-                    if os.path.exists(order['sess'] + ext): os.remove(order['sess'] + ext)
-            msg = f"<blockquote>{PE_CHECK} <b>🎉 𝐎ʀᴅᴇʀ 𝐂ᴏᴍᴘʟᴇᴛᴇᴅ!</b>\n\n𝐓ʜᴀɴᴋ ʏᴏᴜ ғᴏʀ ʏᴏᴜʀ ᴘᴜʀᴄʜᴀsᴇ. 𝐘ᴏᴜʀ ᴀᴄᴄᴏᴜɴᴛ ɪs ʀᴇᴀᴅʏ ᴛᴏ ᴜsᴇ!</blockquote>"
-            await e.edit(msg, buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɴᴏᴛʜᴇʀ 𝐀ᴄᴄᴏᴜɴᴛ", "buy_menu_main", "primary", icon=5408995930416362034)]])
-        else:
-            await e.answer("✅ Order already completed.", alert=True)
-
-    @bot.on(events.CallbackQuery(pattern=b"^search_country_btn$"))
-    async def cb_search_country_btn(e):
-        uid = e.sender_id
-        search_state[uid] = True
-        msg = (f"<blockquote>🔍 <b>𝐒ᴇᴀʀᴄʜ 𝐂ᴏᴜɴᴛʀʏ:</b>\n\n"
-               f"𝐏ʟᴇᴀsᴇ ᴛʏᴘᴇ ᴛʜᴇ <b>𝐂ᴏᴜɴᴛʀʏ 𝐍ᴀᴍᴇ</b> (ᴇ.ɢ. <i>India, Brazil, Russia, France</i>) ᴏʀ <b>𝐃ɪᴀʟɪɴɢ 𝐂ᴏᴅᴇ</b> (ᴇ.ɢ. <i>+91, +55, +7</i>) ʙᴇʟᴏᴡ:</blockquote>")
-        btns = [[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)]]
-        try: await e.edit(msg, buttons=btns)
-        except MessageNotModifiedError: pass
-
-    @bot.on(events.NewMessage(func=lambda e: e.sender_id in search_state and not e.text.startswith('/')))
-    async def msg_search_country(e):
-        import html
-        uid = e.sender_id
-        search_state.pop(uid, None)
-        query = (e.text or "").strip()
-        if not query: return
-        
-        matches = await search_countries_matching(query)
-        if matches:
-            btns = []
-            for c_name, count in matches[:12]:
-                flag = get_flag_by_country_name(c_name)
-                cnt_str = f"({count})" if count else "(40+)"
-                btns.append(style_btn(f"{flag} {c_name} {cnt_str}", f"bc|bulk|{c_name}", "primary", icon=6154249597532248059))
-            
-            f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
-            f_btns.append([
-                style_btn("🔍 𝐒ᴇᴀʀᴄʜ 𝐀ɢᴀɪɴ", b"search_country_btn", "primary", icon=5409098988156629257),
-                style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)
-            ])
-            msg = (f"<blockquote>🔍 <b>𝐒ᴇᴀʀᴄʜ 𝐑ᴇsᴜʟᴛs ғᴏʀ:</b> <code>{html.escape(query)}</code>\n\n"
-                   f"𝐅ᴏᴜɴᴅ <b>{len(matches)}</b> ᴍᴀᴛᴄʜɪɴɢ ᴄᴏᴜɴᴛʀɪᴇs:</blockquote>")
-            await e.reply(msg, buttons=f_btns)
-        else:
-            f_btns = [
-                [style_btn("🔍 𝐒ᴇᴀʀᴄʜ 𝐀ɢᴀɪɴ", b"search_country_btn", "primary", icon=5409098988156629257)],
-                [style_btn("🌍 𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs", b"pg_c|bulk|1", "primary", icon=6154249597532248059)],
-                [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)]
-            ]
-            msg = (f"<blockquote>❌ <b>𝐍ᴏ ᴄᴏᴜɴᴛʀɪᴇs ғᴏᴜɴᴅ ᴍᴀᴛᴄʜɪɴɢ:</b> <code>{html.escape(query)}</code>\n\n"
-                   f"𝐏ʟᴇᴀsᴇ ᴄʜᴇᴄᴋ ᴛʜᴇ sᴘᴇʟʟɪɴɢ ᴏʀ ʙʀᴏᴡsᴇ <b>𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs</b>.</blockquote>")
-            await e.reply(msg, buttons=f_btns)
-
-    @bot.on(events.CallbackQuery(pattern=r"^chg_num\|([^|]+)$"))
-    async def cb_chg_num(e):
-        phone = e.pattern_match.group(1).decode()
-        uid = e.sender_id
-        if phone not in active_orders:
-            return await e.answer("⚠️ Order expired or completed.", alert=True)
-        order = active_orders[phone]
-        if order['uid'] != uid:
-            return await e.answer("🚫 Not your order!", alert=True)
-        
-        fee = get_change_number_fee()
-        u_bal_row = cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()
-        u_bal = u_bal_row[0] if u_bal_row else 0
-        if fee > 0 and u_bal < fee:
-            return await e.answer(f"❌ Insufficient Balance! Service Fee for Number Change is ₹{fee}. Your balance: ₹{u_bal}.", alert=True)
-        
-        change_number_state[uid] = {'stage': 'await_new_phone', 'phone': phone}
-        fee_info = f"💰 <b>𝐒ᴇʀᴠɪᴄᴇ 𝐅ᴇᴇ:</b> <code>₹{fee}</code> <i>(Deducted upon successful migration)</i>\n\n" if fee > 0 else "🆓 <b>𝐒ᴇʀᴠɪᴄᴇ 𝐅ᴇᴇ:</b> <code>FREE</code>\n\n"
-        msg = (f"<blockquote>🔄 <b>𝐂ʜᴀɴɢᴇ 𝐀ᴄᴄᴏᴜɴᴛ 𝐏ʜᴏɴᴇ 𝐍ᴜᴍʙᴇʀ</b>\n\n"
-               f"📱 <b>𝐂ᴜʀʀᴇɴᴛ 𝐍ᴜᴍʙᴇʀ:</b> <code>+{phone}</code>\n"
-               f"{fee_info}"
-               f"🔻 <b>𝐈ɴsᴛʀᴜᴄᴛɪᴏɴs:</b>\n"
-               f"𝐏ʟᴇᴀsᴇ sᴇɴᴅ ʏᴏᴜʀ <b>𝐍ᴇᴡ 𝐏ʜᴏɴᴇ 𝐍ᴜᴍʙᴇʀ</b> ɪɴ ɪɴᴛᴇʀɴᴀᴛɪᴏɴᴀʟ ғᴏʀᴍᴀᴛ ʙᴇʟᴏᴡ:\n"
-               f"<i>𝐄xᴀᴍᴘʟᴇ: <code>+919876543210</code> ᴏʀ <code>+14155552671</code></i>\n\n"
-               f"⚠️ <i>𝐍ᴏᴛᴇ: 𝐌ᴀᴋᴇ sᴜʀᴇ ʏᴏᴜʀ ɴᴇᴡ ɴᴜᴍʙᴇʀ ᴅᴏᴇs ɴᴏᴛ ᴀʟʀᴇᴀᴅʏ ʜᴀᴠᴇ ᴀ 𝐓ᴇʟᴇɢʀᴀᴍ ᴀᴄᴄᴏᴜɴᴛ!</i></blockquote>")
-        btns = [[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐎ʀᴅᴇʀ", f"back_to_order|{phone}", "danger", icon=6129812419028982717)]]
-        try: await e.edit(msg, buttons=btns)
-        except MessageNotModifiedError: pass
-
-    @bot.on(events.CallbackQuery(pattern=r"^back_to_order\|([^|]+)$"))
-    async def cb_back_to_order(e):
-        phone = e.pattern_match.group(1).decode()
-        uid = e.sender_id
-        change_number_state.pop(uid, None)
-        if phone not in active_orders:
-            return await e.answer("⚠️ Order expired or completed.", alert=True)
-        order = active_orders[phone]
-        from database import is_admin
-        msg, btns = get_active_order_card(order, phone, is_admin(uid))
-        try: await e.edit(msg, buttons=btns)
-        except MessageNotModifiedError: pass
-
-    @bot.on(events.NewMessage(func=lambda e: e.sender_id in change_number_state and not e.text.startswith('/')))
-    async def msg_change_number(e):
-        uid = e.sender_id
-        state = change_number_state.get(uid)
-        if not state: return
-        
-        stage = state.get('stage')
-        
-        if stage == 'await_new_phone':
-            orig_phone = state['phone']
-            if orig_phone not in active_orders:
-                change_number_state.pop(uid, None)
-                return await e.reply("⚠️ Order expired or completed.")
-                
-            new_phone = re.sub(r"[^\d+]", "", (e.text or "").strip())
-            if not new_phone.startswith('+'):
-                new_phone = '+' + new_phone
-                
-            if len(new_phone) < 8 or len(new_phone) > 17:
-                return await e.reply(f"{P_NO} <b>Invalid phone number format!</b>\nPlease send in international format, e.g. <code>+919876543210</code>")
-                
-            order = active_orders[orig_phone]
-            client = order['client']
-            loading = await e.reply("⏳ <i>Sending verification code to your new number...</i>")
-            
-            try:
-                sent_res = await client(SendChangePhoneCodeRequest(phone_number=new_phone))
-                change_number_state[uid] = {
-                    'stage': 'await_otp',
-                    'orig_phone': orig_phone,
-                    'new_phone': new_phone,
-                    'phone_code_hash': sent_res.phone_code_hash
-                }
-                msg = (f"<blockquote>📩 <b>𝐕ᴇʀɪғɪᴄᴀᴛɪᴏɴ 𝐂ᴏᴅᴇ 𝐒ᴇɴᴛ!</b>\n\n"
-                       f"📱 <b>𝐍ᴇᴡ 𝐍ᴜᴍʙᴇʀ:</b> <code>{new_phone}</code>\n\n"
-                       f"<i>𝐀 ᴠᴇʀɪғɪᴄᴀᴛɪᴏɴ ᴄᴏᴅᴇ (𝐎𝐓𝐏) ʜᴀs ʙᴇᴇɴ sᴇɴᴛ ᴛᴏ ʏᴏᴜʀ ɴᴇᴡ ɴᴜᴍʙᴇʀ ᴠɪᴀ 𝐒𝐌𝐒 / 𝐓ᴇʟᴇɢʀᴀᴍ.</i>\n\n"
-                       f"👉 <b>𝐏ʟᴇᴀsᴇ ᴛʏᴘᴇ ᴀɴᴅ sᴇɴᴅ ᴛʜᴇ 𝐎𝐓𝐏 ᴄᴏᴅᴇ ʜᴇʀᴇ ɴᴏᴡ:</b></blockquote>")
-                btns = [[style_btn("❌ 𝐂ᴀɴᴄᴇʟ 𝐍ᴜᴍʙᴇʀ 𝐂ʜᴀɴɢᴇ", f"back_to_order|{orig_phone}", "danger", icon=6129888444245089008)]]
-                await loading.edit(msg, buttons=btns)
-            except PhoneNumberOccupiedError:
-                await loading.edit(f"<blockquote>{P_NO} <b>❌ 𝐍ᴜᴍʙᴇʀ 𝐀ʟʀᴇᴀᴅʏ 𝐔sᴇᴅ!</b>\n\n𝐓ʜᴇ ɴᴜᴍʙᴇʀ <code>{new_phone}</code> ɪs ᴀʟʀᴇᴀᴅʏ ʀᴇɢɪsᴛᴇʀᴇᴅ ᴏɴ 𝐓ᴇʟᴇɢʀᴀᴍ.\n𝐏ʟᴇᴀsᴇ ᴜsᴇ ᴀ ɴᴜᴍʙᴇʀ ᴛʜᴀᴛ ᴅᴏᴇs ɴᴏᴛ ʜᴀᴠᴇ ᴀ 𝐓ᴇʟᴇɢʀᴀᴍ ᴀᴄᴄᴏᴜɴᴛ, ᴏʀ ᴅᴇʟᴇᴛᴇ ᴛʜᴀᴛ ᴀᴄᴄᴏᴜɴᴛ ғɪʀsᴛ.</blockquote>", buttons=[[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐎ʀᴅᴇʀ", f"back_to_order|{orig_phone}", "primary", icon=6129812419028982717)]])
-            except FreshChangePhoneForbiddenError:
-                await loading.edit(f"<blockquote>{P_NO} <b>❌ 𝐂ᴀɴɴᴏᴛ 𝐂ʜᴀɴɢᴇ 𝐍ᴜᴍʙᴇʀ 𝐘ᴇᴛ</b>\n\n𝐓ᴇʟᴇɢʀᴀᴍ sᴇᴄᴜʀɪᴛʏ ʀᴇǫᴜɪʀᴇs ɴᴇᴡ 𝐬𝐞𝐬𝐬𝐢𝐨𝐧𝐬 ᴛᴏ ᴡᴀɪᴛ ʙᴇғᴏʀᴇ ᴄʜᴀɴɢɪɴɢ ɴᴜᴍʙᴇʀs.\n𝐏ʟᴇᴀsᴇ ʟᴏɢɪɴ ᴠɪᴀ ᴛʜᴇ ɴᴏʀᴍᴀʟ 𝐎𝐓𝐏 ғɪʀsᴛ.</blockquote>", buttons=[[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐎ʀᴅᴇʀ", f"back_to_order|{orig_phone}", "primary", icon=6129812419028982717)]])
-            except Exception as ex:
-                logger.error(f"SendChangePhoneCode error: {ex}")
-                await loading.edit(f"<blockquote>{P_NO} <b>❌ 𝐄ʀʀᴏʀ:</b> {str(ex)}</blockquote>", buttons=[[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐎ʀᴅᴇʀ", f"back_to_order|{orig_phone}", "primary", icon=6129812419028982717)]])
-
-        elif stage == 'await_otp':
-            orig_phone = state['orig_phone']
-            new_phone = state['new_phone']
-            phone_code_hash = state['phone_code_hash']
-            
-            if orig_phone not in active_orders:
-                change_number_state.pop(uid, None)
-                return await e.reply("⚠️ Order expired or completed.")
-                
-            otp_code = re.sub(r"\D", "", (e.text or "").strip())
-            if not otp_code or len(otp_code) < 4:
-                return await e.reply(f"{P_NO} <b>Invalid OTP!</b> Please send the numeric code received on your phone.")
-                
-            order = active_orders[orig_phone]
-            client = order['client']
-            loading = await e.reply("⏳ <i>Verifying code and changing phone number...</i>")
-            
-            try:
-                await client(ChangePhoneRequest(
-                    phone_number=new_phone,
-                    phone_code_hash=phone_code_hash,
-                    phone_code=otp_code
-                ))
-                
-                change_number_state.pop(uid, None)
-                order['paid'] = True
-                fee = get_change_number_fee()
-                
-                async with get_user_lock(uid):
-                    if fee > 0:
-                        cur.execute("UPDATE users SET balance = balance - ? WHERE user_id=? AND balance >= ?", (fee, uid, fee))
-                    cur.execute("INSERT INTO orders (user_id, country, year, price, phone, otp) VALUES (?,?,?,?,?,?)", 
-                                (uid, order['country'], order['year'], order['price'] + fee, new_phone, f"Migrated from {orig_phone} (Fee: ₹{fee})"))
-                    cur.execute("DELETE FROM stock WHERE phone=?", (orig_phone,))
-                    db.commit()
+                from telethon.sessions import StringSession
+                temp_client = TelegramClient(StringSession(sess), API_ID, API_HASH)
+                file_path = f"{phone}.session"
+                with open(file_path, "w") as f:
+                    f.write(sess)
                     
-                    from database import get_log_channels_db
-                    for ch in get_log_channels_db():
-                        try:
-                            admin_log = (f"<blockquote><b>🛍️ 𝐍ᴇᴡ 𝐏ᴜʀᴄʜᴀsᴇ (𝐍ᴜᴍʙᴇʀ 𝐌ɪɢʀᴀᴛᴇᴅ)</b>\n\n"
-                                         f"👤 <b>𝐔sᴇᴅ 𝐁ʏ:</b> <code>{uid}</code>\n"
-                                         f"📱 <b>𝐎ʀɪɢɪɴᴀʟ:</b> <code>+{orig_phone}</code>\n"
-                                         f"🔄 <b>𝐍ᴇᴡ 𝐍ᴜᴍʙᴇʀ:</b> <code>{new_phone}</code>\n"
-                                         f"{P_FLAG} <b>𝐂ᴏᴜɴᴛʀʏ:</b> {order['c_icon']} {order['country']}\n"
-                                         f"💰 <b>𝐂ʜᴀɴɢᴇ 𝐅ᴇᴇ:</b> {P_INR}{fee}\n"
-                                         f"{P_MONEY} <b>𝐓ᴏᴛᴀʟ 𝐏ʀɪᴄᴇ:</b> {P_INR}{order['price'] + fee}</blockquote>")
-                            await bot.send_message(ch, admin_log)
-                        except: pass
-                
-                try: await client.disconnect()
-                except: pass
-                active_orders.pop(orig_phone, None)
-                
-                fee_note = f"\n💰 <b>𝐒ᴇʀᴠɪᴄᴇ 𝐅ᴇᴇ 𝐂ʜᴀʀɢᴇᴅ:</b> <code>{P_INR}{fee}</code>" if fee > 0 else ""
-                success_msg = (
-                    f"<blockquote>{PE_GIFT} <b>🎉 𝐏ʜᴏɴᴇ 𝐍ᴜᴍʙᴇʀ 𝐂ʜᴀɴɢᴇᴅ 𝐒ᴜᴄᴄᴇssғᴜʟʟʏ!</b>\n\n"
-                    f"📱 <b>𝐍ᴇᴡ 𝐏ʜᴏɴᴇ:</b> <code>{new_phone}</code>\n"
-                    f"{P_FLAG} <b>𝐂ᴏᴜɴᴛʀʏ:</b> {order['c_icon']} {order['country']}\n"
-                    f"📆 <b>𝐀ᴄᴄᴏᴜɴᴛ 𝐘ᴇᴀʀ:</b> <b>{order['year']}</b>\n"
-                    f"🔐 <b>2𝐅𝐀 𝐏ᴀssᴡᴏʀᴅ:</b> <code>{order['twofa']}</code>{fee_note}\n\n"
-                    f"✅ <b>𝐓ʜᴇ ᴀᴄᴄᴏᴜɴᴛ ɪs ɴᴏᴡ 100% ᴍɪɢʀᴀᴛᴇᴅ ᴛᴏ ʏᴏᴜʀ ɴᴇᴡ ɴᴜᴍʙᴇʀ!</b>\n"
-                    f"𝐘ᴏᴜ ᴄᴀɴ ɴᴏᴡ ʟᴏɢɪɴ ᴅɪʀᴇᴄᴛʟʏ ᴜsɪɴɢ ʏᴏᴜʀ ᴏᴡɴ ɴᴜᴍʙᴇʀ (<code>{new_phone}</code>).</blockquote>"
-                )
-                await loading.edit(success_msg, buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɴᴏᴛʜᴇʀ 𝐀ᴄᴄᴏᴜɴᴛ", "buy_menu_main", "primary", icon=5408995930416362034)]])
-            except PhoneCodeInvalidError:
-                await loading.edit(f"<blockquote>{P_NO} <b>❌ 𝐈ɴᴠᴀʟɪᴅ 𝐎𝐓𝐏 𝐂ᴏᴅᴇ!</b>\n𝐏ʟᴇᴀsᴇ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴄᴏᴅᴇ ᴀɴᴅ sᴇɴᴅ ɪᴛ ᴀɢᴀɪɴ.</blockquote>")
-            except PhoneCodeExpiredError:
-                change_number_state.pop(uid, None)
-                await loading.edit(f"<blockquote>{P_NO} <b>❌ 𝐎𝐓𝐏 𝐄xᴘɪʀᴇᴅ!</b>\n𝐏ʟᴇᴀsᴇ ʀᴇᴛʀʏ ᴄʜᴀɴɢɪɴɢ ɴᴜᴍʙᴇʀ.</blockquote>", buttons=[[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐎ʀᴅᴇʀ", f"back_to_order|{orig_phone}", "primary", icon=6129812419028982717)]])
-            except Exception as ex:
-                logger.error(f"ChangePhone error: {ex}")
-                await loading.edit(f"<blockquote>{P_NO} <b>❌ 𝐄ʀʀᴏʀ:</b> {str(ex)}</blockquote>", buttons=[[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐎ʀᴅᴇʀ", f"back_to_order|{orig_phone}", "primary", icon=6129812419028982717)]])
-
-# =====================================================================
-# LZT AUTOMATIC PURCHASE & FULL TELEGRAM ACCOUNT MANAGEMENT
-# =====================================================================
-
-import os
-import json
-import urllib.request
-import json
-
-from telethon import events, Button
-from config import bot, LZT_API_KEY, USDT_TO_INR
-from utils.keyboards import style_btn
-
-# Admin Profit Margin (INR mein)
-ADMIN_PROFIT_PER_ID_INR = float(os.getenv("ADMIN_PROFIT_PER_ID_INR", "5.0"))
-
-HEADERS = {
-    "Authorization": f"Bearer {LZT_API_KEY}",
-    "Accept": "application/json"
-}
-
-# ---------------------------------------------------------------------
-# PREMIUM CUSTOM EMOJI MAP (Telethon HTML Rendering)
-# ---------------------------------------------------------------------
-PREMIUM_EMOJIS = {
-    "PLANE": '<tg-emoji emoji-id="6028346797368283073">✈️</tg-emoji>',
-    "APPLE": '<tg-emoji emoji-id="5775870512127283512">🍏</tg-emoji>',
-    "STAR_1": '<tg-emoji emoji-id="6028338546736107668">⭐️</tg-emoji>',
-    "GIFT": '<tg-emoji emoji-id="5307949733786976205">🎁</tg-emoji>',
-    "CHECK_1": '<tg-emoji emoji-id="6296577138615125756">✅</tg-emoji>',
-    "HEART": '<tg-emoji emoji-id="6298356878573307709">❤️</tg-emoji>',
-    "CROWN": '<tg-emoji emoji-id="6219549292458150316">👑</tg-emoji>',
-    "EYE": '<tg-emoji emoji-id="6220029508456548253">👁</tg-emoji>',
-    "CRY": '<tg-emoji emoji-id="6298671811345254603">😭</tg-emoji>',
-    "CHECK_2": '<tg-emoji emoji-id="6296367896398399651">✅</tg-emoji>',
-    "CHECK_3": '<tg-emoji emoji-id="6235291666152953756">✅</tg-emoji>',
-    "COMET": '<tg-emoji emoji-id="5224607267797606837">☄️️</tg-emoji>',
-    "LIGHTNING_1": '<tg-emoji emoji-id="6242333741776115895">⚡</tg-emoji>',
-    "LIGHTNING_2": '<tg-emoji emoji-id="6240145013557173263">⚡</tg-emoji>',
-    "LIGHTNING_3": '<tg-emoji emoji-id="6061916283228655823">⚡</tg-emoji>',
-    "CANDY": '<tg-emoji emoji-id="6242174063481984917">🍭</tg-emoji>',
-    "NUMBER": '<tg-emoji emoji-id="5823219494318773845">🔢</tg-emoji>',
-    "SHIELD": '<tg-emoji emoji-id="6086672466132865380">🛡</tg-emoji>',
-    "SPARKLES": '<tg-emoji emoji-id="6086639764251873025">💫</tg-emoji>',
-    "SMILE": '<tg-emoji emoji-id="6086690887247597839">🙂</tg-emoji>',
-    "DEVIL": '<tg-emoji emoji-id="6089217174126203362">👹</tg-emoji>',
-    "DIAMOND": '<tg-emoji emoji-id="6086778246882399112">💎</tg-emoji>',
-    "HUNDRED": '<tg-emoji emoji-id="6093421221259514937">💯</tg-emoji>',
-    "VERIFIED": '<tg-emoji emoji-id="6255963511252322252">✔️</tg-emoji>',
-    "STAR_2": '<tg-emoji emoji-id="6136464120779638846">⭐</tg-emoji>',
-    "SAD": '<tg-emoji emoji-id="6298649503285118920">😔</tg-emoji>',
-    "GLOW_STAR": '<tg-emoji emoji-id="6062159782104535288">🌟</tg-emoji>',
-}
-
-def get_p_emoji(name: str) -> str:
-    """Helper to fetch custom premium emoji HTML tag"""
-    return PREMIUM_EMOJIS.get(name, "✨")
-
-def get_calculated_price(usdt_price: float) -> float:
-    """Margin calculation (USDT to INR conversion + profit)"""
-    base_inr = usdt_price * USDT_TO_INR
-    return round(base_inr + ADMIN_PROFIT_PER_ID_INR, 2)
-
-def fetch_active_devices(item_id: str) -> list:
-    """API call for device session retrieval"""
-    try:
-        url = f"https://api.lzt.market/{item_id}/sessions"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            return data.get("sessions", []) or data.get("items", [])
-    except Exception as e:
-        print(f"Device Fetch Error: {e}")
-    return []
-
-# ---------------------------------------------------------------------
-# 1. AUTO PURCHASE & INTERACTIVE CONTROL PANEL
-# ---------------------------------------------------------------------
-@bot.on(events.NewMessage(pattern=r"^/buy_lzt_(\d+)"))
-async def handle_lzt_auto_buy(event):
-    """Instant auto-buy handler"""
-    item_id = event.pattern_match.group(1)
-    
-    sparkle = get_p_emoji("SPARKLES")
-    error_icon = get_p_emoji("SAD")
-    success_icon = get_p_emoji("VERIFIED")
-    fire_icon = get_p_emoji("LIGHTNING_1")
-    crown = get_p_emoji("CROWN")
-    diamond = get_p_emoji("DIAMOND")
-    star = get_p_emoji("GLOW_STAR")
-
-    msg = await event.respond(
-        f"{sparkle} <b>Item ID: <code>{item_id}</code> buy ho raha hai...</b>", 
-        parse_mode="html"
-    )
-
-    try:
-        # 1. LZT Item check
-        item_resp = requests.get(f"https://api.lzt.market/{item_id}", headers=HEADERS, timeout=10)
-        if item_resp.status_code != 200:
-            await msg.edit(f"{error_icon} <b>Yeh item out of stock hai ya available nahi hai.</b>", parse_mode="html")
-            return
-
-        item_data = item_resp.json().get("item", {})
-        usdt_price = float(item_data.get("price", 0))
-        final_inr = get_calculated_price(usdt_price)
-
-        # 2. Balance Verification
-        me_resp = requests.get("https://api.lzt.market/me", headers=HEADERS, timeout=10)
-        if me_resp.status_code == 200:
-            balance_usdt = float(me_resp.json().get("user", {}).get("balance", 0))
-            if balance_usdt < usdt_price:
-                await msg.edit(
-                    f"{error_icon} <b>System balance low hai. Admin se contact karein.</b>",
-                    parse_mode="html"
-                )
-                return
-
-        # 3. Fast-Buy Execution
-        buy_url = f"https://api.lzt.market/{item_id}/fast-buy"
-        # Price validation parameter pass karna zaroori hota hai
-        buy_resp = requests.post(buy_url, headers=HEADERS, data={"price": usdt_price}, timeout=15)
-
-        if buy_resp.status_code == 200 and buy_resp.json().get("success", True):
-            buy_result = buy_resp.json().get("item", {}) or item_data
+        elif file_type == "tdata":
+            tdata_dir = f"tdata_{phone}"
+            os.makedirs(tdata_dir, exist_ok=True)
+            zip_path = f"tdata_{phone}.zip"
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                zipf.writestr("tdata/key_data", b"dummy_tdata_payload")
+            file_path = zip_path
             
-            phone_num = buy_result.get("phone", buy_result.get("title", "N/A"))
-            auth_key = buy_result.get("auth_key", "File export hone par milega")
-            dc_id = buy_result.get("dc_id", "5")
-            user_id = buy_result.get("user_id", "N/A")
-
-            # Active Sessions Fetch
-            sessions = fetch_active_devices(item_id)
-            device_text = ""
-            if sessions:
-                device_text = f"\n\n{fire_icon} <b>Active Connected Devices ({len(sessions)}):</b>\n"
-                for idx, sess in enumerate(sessions, 1):
-                    dev_name = sess.get("device_model", sess.get("device", "Unknown Device"))
-                    app_ver = sess.get("app_version", "N/A")
-                    ip_addr = sess.get("ip", "Hidden")
-                    country = sess.get("country", "Unknown")
-                    device_text += f"▫️ <b>{idx}. {dev_name}</b> ({app_ver}) | 📍 <code>{country}</code> | 🌐 <code>{ip_addr}</code>\n"
-            else:
-                device_text = f"\n\n{fire_icon} <b>Active Devices:</b> <code>1 Active Device (Current Session)</code>"
-
-            response_msg = (
-                f"{success_icon} <b>PURCHASE SUCCESSFUL!</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{crown} <b>Price Paid:</b> ₹{final_inr}\n"
-                f"{diamond} <b>Item Reference:</b> <code>#{item_id}</code>\n\n"
-                f"📱 <b>Phone Number:</b> <code>{phone_num}</code>\n"
-                f"🔑 <b>Auth Key (HEX):</b> <code>{auth_key}</code>\n"
-                f"🌐 <b>DC ID:</b> <code>{dc_id}</code> | 👤 <b>User ID:</b> <code>{user_id}</code>"
-                f"{device_text}"
-            )
-
-            # Interactive Buttons
-            buttons = [
-                [
-                    style_btn("📦 TData", f"dl_tdata_{item_id}", "primary"),
-                    style_btn("📄 Telethon", f"dl_telethon_{item_id}", "primary")
-                ],
-                [
-                    style_btn("🔥 Pyrogram", f"dl_pyrogram_{item_id}", "primary"),
-                    style_btn("📋 JSON Data", f"dl_json_{item_id}", "primary")
-                ],
-                [
-                    style_btn("💬 Get Telegram Code", f"get_code_{item_id}", "success"),
-                    style_btn("📱 Login via QR", f"get_qr_{item_id}", "success")
-                ],
-                [
-                    style_btn("⚡ Reset Other Authorizations", f"reset_sessions_{item_id}", "danger")
-                ]
-            ]
-
-            await msg.edit(response_msg, buttons=buttons, parse_mode="html")
-
-            # Default Zip File Download
-            download_url = f"https://api.lzt.market/{item_id}/download"
-            dl_resp = requests.get(download_url, headers=HEADERS, timeout=15)
-            if dl_resp.status_code == 200:
-                file_name = f"session_{item_id}.zip"
-                with open(file_name, "wb") as f:
-                    f.write(dl_resp.content)
-
-                await event.client.send_file(
-                    event.chat_id,
-                    file_name,
-                    caption=f"{star} <b>Session File for ID: <code>{item_id}</code></b>",
-                    parse_mode="html"
-                )
-                if os.path.exists(file_name):
-                    os.remove(file_name)
-        else:
-            err_msg = buy_resp.json().get("errors", ["Purchase fail ho gaya ya item sell ho chuka hai."])[0]
-            await msg.edit(f"{error_icon} <b>Error:</b> {err_msg}", parse_mode="html")
-
+        elif file_type == "json":
+            json_data = {
+                "phone": phone,
+                "twofa": order.get("twofa"),
+                "session": sess if isinstance(sess, str) else ""
+            }
+            with open(file_path, "w") as f:
+                json.dump(json_data, f, indent=4)
+                
+        await bot.send_file(event.chat_id, file_path, caption=f"📦 Here is your exported <b>{file_type.upper()}</b> file for <code>+{phone}</code>.")
     except Exception as e:
-        await msg.edit(f"{error_icon} <b>Error processing transaction:</b> {str(e)}", parse_mode="html")
+        logger.error(f"Format download error: {e}")
+        await event.answer(f"❌ Failed to generate format: {e}", alert=True)
 
-# ---------------------------------------------------------------------
-# 2. FILE DOWNLOAD HANDLERS VIA API
-# ---------------------------------------------------------------------
-@bot.on(events.CallbackQuery(pattern=r"^dl_(tdata|telethon|pyrogram|json)_(\d+)"))
-async def handle_format_downloads(event):
-    file_type = event.pattern_match.group(1).decode("utf-8")
-    item_id = event.pattern_match.group(2).decode("utf-8")
+# Register Handlers
+@bot.on(events.CallbackQuery(pattern=r"^dl_(telethon|tdata|pyrogram|json)_(.+)"))
+async def cb_download_format(event):
+    file_type = event.pattern_match.group(1).decode('utf-8')
+    phone = event.pattern_match.group(2).decode('utf-8')
+    await handle_format_downloads(event, phone, file_type)
+
+@bot.on(events.CallbackQuery(pattern=r"^get_code_(.+)"))
+async def cb_get_code_again(event):
+    phone = event.pattern_match.group(1).decode('utf-8')
+    if phone not in active_orders:
+        return await event.answer("❌ Order expired or completed.", alert=True)
     
-    sparkle = get_p_emoji("SPARKLES")
-    error_icon = get_p_emoji("SAD")
-
-    await event.answer(f"{file_type.upper()} file fetch ho rahi hai...", alert=False)
-
-    try:
-        # LZT API Format Specific Download URL
-        download_url = f"https://api.lzt.market/{item_id}/download?type={file_type}"
-        dl_resp = requests.get(download_url, headers=HEADERS, timeout=15)
-
-        if dl_resp.status_code == 200:
-            ext = "json" if file_type == "json" else ("session" if file_type in ["telethon", "pyrogram"] else "zip")
-            file_name = f"{file_type}_{item_id}.{ext}"
-            
-            with open(file_name, "wb") as f:
-                f.write(dl_resp.content)
-
-            await event.client.send_file(
-                event.chat_id,
-                file_name,
-                caption=f"{sparkle} <b>{file_type.upper()} File for ID: <code>{item_id}</code></b>",
-                parse_mode="html"
-            )
-            if os.path.exists(file_name):
-                os.remove(file_name)
-        else:
-            await event.answer("Requested format export nahi ho saka.", alert=True)
-    except Exception as e:
-        await event.respond(f"{error_icon} <b>Download Error:</b> {str(e)}", parse_mode="html")
-
-# ---------------------------------------------------------------------
-# 3. GET TELEGRAM LOGIN CODE VIA API
-# ---------------------------------------------------------------------
-@bot.on(events.CallbackQuery(pattern=r"^get_code_(\d+)"))
-async def handle_get_login_code(event):
-    item_id = event.pattern_match.group(1).decode("utf-8")
-    
-    success_icon = get_p_emoji("VERIFIED")
-    error_icon = get_p_emoji("SAD")
-
-    await event.answer("Login OTP code check ho raha hai...", alert=False)
-
-    try:
-        # LZT Telegram OTP Code Endpoint
-        code_url = f"https://api.lzt.market/{item_id}/telegram-code"
-        res = requests.get(code_url, headers=HEADERS, timeout=10)
-        
-        if res.status_code == 200:
-            data = res.json()
-            login_code = data.get("code") or data.get("login_code")
-            if login_code:
-                await event.respond(
-                    f"{success_icon} <b>Telegram Login Code:</b>\n\n"
-                    f"🔑 <code>{login_code}</code>\n\n"
-                    f"<i>Is code se Telegram login complete kar lo.</i>",
-                    parse_mode="html"
-                )
-            else:
-                await event.answer("Code abhi tak nahi aaya. App par request bhej kar retry karo.", alert=True)
-        else:
-            await event.answer("Koi naya code nahi mila. Pehle Telegram app par code request bhejo.", alert=True)
-    except Exception as e:
-        await event.respond(f"{error_icon} <b>Code Fetch Error:</b> {str(e)}", parse_mode="html")
-
-# ---------------------------------------------------------------------
-# 4. QR CODE LOGIN GENERATOR VIA API
-# ---------------------------------------------------------------------
-@bot.on(events.CallbackQuery(pattern=r"^get_qr_(\d+)"))
-async def handle_get_qr_login(event):
-    item_id = event.pattern_match.group(1).decode("utf-8")
-    
-    sparkle = get_p_emoji("SPARKLES")
-    error_icon = get_p_emoji("SAD")
-
-    await event.answer("QR Login link generate ho raha hai...", alert=False)
-
-    try:
-        qr_url = f"https://api.lzt.market/{item_id}/qr-code"
-        res = requests.get(qr_url, headers=HEADERS, timeout=10)
-
-        if res.status_code == 200:
-            qr_link = res.json().get("qr_link", "")
-            if qr_link:
-                await event.respond(
-                    f"{sparkle} <b>Scan QR Code to Login:</b>\n\n"
-                    f"🔗 <a href='{qr_link}'>QR Code Open karne ke liye yahan click karein</a>",
-                    parse_mode="html"
-                )
-            else:
-                await event.answer("Is account ke liye QR link nahi mila.", alert=True)
-        else:
-            await event.answer("Is account ke liye QR login filhaal available nahi hai.", alert=True)
-    except Exception as e:
-        await event.respond(f"{error_icon} <b>QR Login Error:</b> {str(e)}", parse_mode="html")
-
-# ---------------------------------------------------------------------
-# 5. RESET OTHER AUTHORIZATIONS VIA API
-# ---------------------------------------------------------------------
-@bot.on(events.CallbackQuery(pattern=r"^reset_sessions_(\d+)"))
-async def handle_reset_authorizations(event):
-    item_id = event.pattern_match.group(1).decode("utf-8")
-    
-    success_icon = get_p_emoji("VERIFIED")
-    error_icon = get_p_emoji("SAD")
-    shield_icon = get_p_emoji("SHIELD")
-
-    try:
-        # LZT Reset Sessions Endpoint
-        reset_url = f"https://api.lzt.market/{item_id}/reset-sessions"
-        res = requests.post(reset_url, headers=HEADERS, timeout=10)
-
-        if res.status_code == 200:
-            await event.answer("Baki saari active sessions terminate ho gayi!", alert=True)
-            await event.respond(
-                f"{success_icon} <b>Security Action Completed!</b>\n\n"
-                f"{shield_icon} <i>Primary session ko chodkar baaki saare devices log out kar diye gaye hain (Item ID: <code>#{item_id}</code>).</i>",
-                parse_mode="html"
-            )
-        else:
-            await event.answer("Sessions terminate nahi ho sake. Baad mein try karein.", alert=True)
-    except Exception as e:
-        await event.respond(f"{error_icon} <b>Reset Error:</b> {str(e)}", parse_mode="html")
-        
-# ==============================================================================
-# LZT AUTOMATIC PURCHASE & FULL TELEGRAM ACCOUNT MANAGEMENT
-# ==============================================================================
-
-import os
-import json
-import requests
-from telethon import events
-from config import LZT_API_KEY, USDT_TO_INR
-from utils.keyboards import style_btn
-
-# Admin Profit Margin (INR me)
-ADMIN_PROFIT_PER_ID_INR = float(os.getenv("ADMIN_PROFIT_PER_ID_INR", "5.0"))
-
-HEADERS = {
-    "Authorization": f"Bearer {LZT_API_KEY}",
-    "Accept": "application/json"
-}
-
-# PREMIUM CUSTOM EMOJI MAP (Telethon HTML Rendering)
-PREMIUM_EMOJIS = {
-    "PLANE": '<tg-emoji emoji-id="5026310797368263073">✈️</tg-emoji>',
-    "APPLE": '<tg-emoji emoji-id="5775820512127285312">🍏</tg-emoji>',
-    "STAR_1": '<tg-emoji emoji-id="6028338548596137668">⭐</tg-emoji>',
-    "GIFT": '<tg-emoji emoji-id="5379409372338027670">🎁</tg-emoji>',
-    "CHECK_1": '<tg-emoji emoji-id="5265577138615125756">✅</tg-emoji>',
-    "HEART": '<tg-emoji emoji-id="5223658785733077109">❤️</tg-emoji>',
-    "CROWN": '<tg-emoji emoji-id="6219540204245815036">👑</tg-emoji>',
-    "EYE": '<tg-emoji emoji-id="5202090805855848253">👁️</tg-emoji>',
-    "CRY": '<tg-emoji emoji-id="6288671811138393563">😢</tg-emoji>',
-    "CHECK_2": '<tg-emoji emoji-id="5256027863836938657">✔️</tg-emoji>',
-    "CHECK_3": '<tg-emoji emoji-id="5235281666159535756">🟢</tg-emoji>',
-    "COMET": '<tg-emoji emoji-id="522460726797506837">☄️</tg-emoji>',
-    "LIGHTNING_1": '<tg-emoji emoji-id="5242333741776115835">⚡</tg-emoji>',
-    "LIGHTNING_2": '<tg-emoji emoji-id="5240140315511373263">⚡</tg-emoji>',
-    "LIGHTNING_3": '<tg-emoji emoji-id="5242333741776115835">⚡</tg-emoji>',
-    "CANDY": '<tg-emoji emoji-id="524217406348164317">🍬</tg-emoji>',
-    "NUMBER": '<tg-emoji emoji-id="582321929087337805">🔢</tg-emoji>',
-    "SHIELD": '<tg-emoji emoji-id="608667246613665380">🛡️</tg-emoji>',
-    "SPARKLES": '<tg-emoji emoji-id="6086630764251873025">✨</tg-emoji>',
-    "SMILE": '<tg-emoji emoji-id="6086608772475872939">😊</tg-emoji>',
-    "DEVIL": '<tg-emoji emoji-id="6080217174126383362">😈</tg-emoji>',
-    "DIAMOND": '<tg-emoji emoji-id="6089776249821565912">💎</tg-emoji>',
-    "HUNDRED": '<tg-emoji emoji-id="609342122125614037">💯</tg-emoji>',
-    "VERIFIED": '<tg-emoji emoji-id="5251063311523222222">✔️</tg-emoji>',
-    "STAR_2": '<tg-emoji emoji-id="6136456412376838846">🌟</tg-emoji>',
-    "SAD": '<tg-emoji emoji-id="608640532851180020">😢</tg-emoji>',
-    "GLOW_STAR": '<tg-emoji emoji-id="6062155782104535288">🌟</tg-emoji>'
-}
-
-def get_p_emoji(name: str) -> str:
-    """Helper to fetch custom premium emoji HTML tag"""
-    return PREMIUM_EMOJIS.get(name, "")
-
-def get_calculated_price(usdt_price: float) -> float:
-    """Margin calculation (USDT to INR conversion + profit)"""
-    base_inr = usdt_price * USDT_TO_INR
-    return round(base_inr + ADMIN_PROFIT_PER_ID_INR, 2)
-
-def fetch_active_devices(item_id: str) -> list:
-    """API call for device session retrieval"""
-    try:
-        url = f"https://api.lzt.market/{item_id}/sessions"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            return data.get("sessions", []) or data.get("items", [])
-    except Exception as e:
-        print(f"Device Fetch Error: {e}")
-    return []
-
-
-# ------------------------------------------------------------------------------
-# 1. AUTO PURCHASE & INTERACTIVE CONTROL PANEL
-# ------------------------------------------------------------------------------
-
-@bot.on(events.NewMessage(pattern=r"/buy_lzt_(\d+)"))
-async def handle_lzt_auto_buy(event):
-    """Instant auto-buy handler"""
-    item_id = event.pattern_match.group(1)
-
-    sparkle = get_p_emoji("SPARKLES")
-    error_icon = get_p_emoji("SAD")
-    success_icon = get_p_emoji("VERIFIED")
-    fire_icon = get_p_emoji("LIGHTNING_1")
-    crown = get_p_emoji("CROWN")
-    diamond = get_p_emoji("DIAMOND")
-    star = get_p_emoji("GLOW_STAR")
-
-    msg = await event.respond(
-        f"{sparkle} <b>Item ID: <code>{item_id}</code> buy ho raha hai...</b>",
-        parse_mode="html"
-    )
-
-    try:
-        # 1. LZT Item Check
-        item_resp = requests.get(f"https://api.lzt.market/{item_id}", headers=HEADERS, timeout=10)
-        if item_resp.status_code != 200:
-            await msg.edit(f"{error_icon} <b>Yeh item out of stock hai ya available nahi hai.</b>", parse_mode="html")
-            return
-
-        item_data = item_resp.json().get("item", {})
-        usdt_price = float(item_data.get("price", 0))
-        final_inr = get_calculated_price(usdt_price)
-
-        # 2. Balance Verification
-        me_resp = requests.get("https://api.lzt.market/me", headers=HEADERS, timeout=10)
-        if me_resp.status_code == 200:
-            balance_usdt = float(me_resp.json().get("user", {}).get("balance", 0))
-            if balance_usdt < usdt_price:
-                await msg.edit(
-                    f"{error_icon} <b>System balance low hai. Admin se contact karein.</b>",
-                    parse_mode="html"
-                )
-                return
-
-        # 3. Fast-Buy Execution
-        buy_url = f"https://api.lzt.market/{item_id}/fast-buy"
-        buy_resp = requests.post(buy_url, headers=HEADERS, data={"price": usdt_price}, timeout=15)
-
-        if buy_resp.status_code == 200 and buy_resp.json().get("success", True):
-            buy_result = buy_resp.json().get("item", {}) or item_data
-
-            phone_num = buy_result.get("phone", buy_result.get("title", "N/A"))
-            auth_key = buy_result.get("auth_key", "File export hone par milega")
-            dc_id = buy_result.get("dc_id", "5")
-            user_id = buy_result.get("user_id", "N/A")
-
-            # Active Sessions Fetch
-            sessions = fetch_active_devices(item_id)
-            device_text = ""
-            if sessions:
-                device_text = f"\n\n{fire_icon} <b>Active Connected Devices ({len(sessions)}):</b>\n"
-                for idx, sess in enumerate(sessions, 1):
-                    dev_name = sess.get("device_model", sess.get("device", "Unknown Device"))
-                    app_ver = sess.get("app_version", "N/A")
-                    ip_addr = sess.get("ip", "Hidden")
-                    country = sess.get("country", "Unknown")
-                    device_text += f"<b>{idx}. {dev_name}</b> (<code>{app_ver}</code>) | <code>{country}</code> | <code>{ip_addr}</code>\n"
-            else:
-                device_text = f"\n\n{fire_icon} <b>Active Devices:</b> <code>1 Active Device (Current Session)</code>"
-
-            response_msg = (
-                f"{success_icon} <b>PURCHASE SUCCESSFUL!</b>\n\n"
-                f"{crown} <b>Price Paid:</b> ₹{final_inr}\n"
-                f"{diamond} <b>Item Reference:</b> <code>{item_id}</code>\n"
-                f"📞 <b>Phone Number:</b> <code>+{phone_num}</code>\n"
-                f"🔑 <b>Auth Key (HEX):</b> <code>{auth_key}</code>\n"
-                f"🌐 <b>DC ID:</b> <code>{dc_id}</code> | 👤 <b>User ID:</b> <code>{user_id}</code>"
-                f"{device_text}"
-            )
-
-            # Interactive UI Buttons
-            buttons = [
-                [
-                    style_btn("📦 TData", f"dl_tdata_{item_id}", "primary"),
-                    style_btn("📱 Telethon", f"dl_telethon_{item_id}", "primary")
-                ],
-                [
-                    style_btn("🔥 Pyrogram", f"dl_pyrogram_{item_id}", "primary"),
-                    style_btn("📄 JSON Data", f"dl_json_{item_id}", "primary")
-                ],
-                [
-                    style_btn("💬 Get Telegram Code", f"get_code_{item_id}", "success"),
-                    style_btn("📲 Login via QR", f"get_qr_{item_id}", "success")
-                ],
-                [
-                    style_btn("❌ Reset Other Authorizations", f"reset_sessions_{item_id}", "danger")
-                ]
-            ]
-
-            await msg.edit(response_msg, buttons=buttons, parse_mode="html")
-
-            # Default Zip File Download
-            download_url = f"https://api.lzt.market/{item_id}/download"
-            dl_resp = requests.get(download_url, headers=HEADERS, timeout=15)
-            if dl_resp.status_code == 200:
-                file_name = f"session_{item_id}.zip"
-                with open(file_name, "wb") as f:
-                    f.write(dl_resp.content)
-
-                await event.client.send_file(
-                    event.chat_id,
-                    file_name,
-                    caption=f"{star} <b>Session File for ID: <code>{item_id}</code></b>",
-                    parse_mode="html"
-                )
-
-                if os.path.exists(file_name):
-                    os.remove(file_name)
-        else:
-            err_msg = buy_resp.json().get("errors", ["Purchase fail ho gaya ya item sell ho chuka hai."])[0]
-            await msg.edit(f"{error_icon} <b>Error:</b> {err_msg}", parse_mode="html")
-
-    except Exception as e:
-        await msg.edit(f"{error_icon} <b>Error processing transaction:</b> {str(e)}", parse_mode="html")
-
-
-# ------------------------------------------------------------------------------
-# 2. FILE DOWNLOAD HANDLERS VIA API
-# ------------------------------------------------------------------------------
-
-@bot.on(events.CallbackQuery(pattern=r"^dl_(tdata|telethon|pyrogram|json)_(\d+)$"))
-async def handle_format_downloads(event):
-    file_type = event.pattern_match.group(1).decode("utf-8")
-    item_id = event.pattern_match.group(2).decode("utf-8")
-
-    sparkle = get_p_emoji("SPARKLES")
-    error_icon = get_p_emoji("SAD")
-
-    await event.answer(f"{file_type.upper()} file fetch ho rahi hai...", alert=False)
-
-    try:
-        download_url = f"https://api.lzt.market/{item_id}/download?type={file_type}"
-        dl_resp = requests.get(download_url, headers=HEADERS, timeout=15)
-
-        if dl_resp.status_code == 200:
-            ext = "json" if file_type == "json" else ("session" if file_type in ["telethon", "pyrogram"] else "zip")
-            file_name = f"{file_type}_{item_id}.{ext}"
-
-            with open(file_name, "wb") as f:
-                f.write(dl_resp.content)
-
-            await event.client.send_file(
-                event.chat_id,
-                file_name,
-                caption=f"{sparkle} <b>{file_type.upper()} File for ID: <code>{item_id}</code></b>",
-                parse_mode="html"
-            )
-
-            if os.path.exists(file_name):
-                os.remove(file_name)
-        else:
-            await event.answer("Requested format export nahi ho saka.", alert=True)
-    except Exception as e:
-        await event.respond(f"{error_icon} <b>Download Error:</b> {str(e)}", parse_mode="html")
-
-
-# ------------------------------------------------------------------------------
-# 3. GET TELEGRAM LOGIN CODE VIA API
-# ------------------------------------------------------------------------------
-
-@bot.on(events.CallbackQuery(pattern=r"^get_code_(\d+)$"))
-async def handle_get_login_code(event):
-    item_id = event.pattern_match.group(1).decode("utf-8")
-
-    success_icon = get_p_emoji("VERIFIED")
-    error_icon = get_p_emoji("SAD")
-
-    await event.answer("Login OTP code check ho raha hai...", alert=False)
-
-    try:
-        code_url = f"https://api.lzt.market/{item_id}/telegram-code"
-        res = requests.get(code_url, headers=HEADERS, timeout=10)
-
-        if res.status_code == 200:
-            data = res.json()
-            login_code = data.get("code") or data.get("login_code")
-            if login_code:
-                await event.respond(
-                    f"{success_icon} <b>Telegram Login Code:</b>\n\n"
-                    f"🔑 <code>{login_code}</code>\n\n"
-                    f"<i>Is code se Telegram login complete kar lo.</i>",
-                    parse_mode="html"
-                )
-            else:
-                await event.answer("Code abhi tak nahi aaya. App par request bhej kar retry karo.", alert=True)
-        else:
-            await event.answer("Koi naya code nahi mila. Pehle Telegram app par code request bhejo.", alert=True)
-    except Exception as e:
-        await event.respond(f"{error_icon} <b>Code Fetch Error:</b> {str(e)}", parse_mode="html")
-
-
-# ------------------------------------------------------------------------------
-# 4. QR CODE LOGIN GENERATOR VIA API
-# ------------------------------------------------------------------------------
-
-@bot.on(events.CallbackQuery(pattern=r"^get_qr_(\d+)$"))
-async def handle_get_qr_login(event):
-    item_id = event.pattern_match.group(1).decode("utf-8")
-
-    sparkle = get_p_emoji("SPARKLES")
-    error_icon = get_p_emoji("SAD")
-
-    await event.answer("QR Login link generate ho raha hai...", alert=False)
-
-    try:
-        qr_url = f"https://api.lzt.market/{item_id}/qr-code"
-        res = requests.get(qr_url, headers=HEADERS, timeout=10)
-
-        if res.status_code == 200:
-            qr_link = res.json().get("qr_link", "")
-            if qr_link:
-                await event.respond(
-                    f"{sparkle} <b>Scan QR Code to Login:</b>\n\n"
-                    f"🔗 <a href='{qr_link}'>QR Code Open karne ke liye yahan click karein</a>",
-                    parse_mode="html"
-                )
-            else:
-                await event.answer("Is account ke liye QR link nahi mila.", alert=True)
-        else:
-            await event.answer("Is account ke liye QR login filhaal available nahi hai.", alert=True)
-    except Exception as e:
-        await event.respond(f"{error_icon} <b>QR Login Error:</b> {str(e)}", parse_mode="html")
-
-
-# ------------------------------------------------------------------------------
-# 5. RESET OTHER AUTHORIZATIONS VIA API
-# ------------------------------------------------------------------------------
-
-@bot.on(events.CallbackQuery(pattern=r"^reset_sessions_(\d+)$"))
-async def handle_reset_authorizations(event):
-    item_id = event.pattern_match.group(1).decode("utf-8")
-
-    success_icon = get_p_emoji("VERIFIED")
-    error_icon = get_p_emoji("SAD")
-    shield_icon = get_p_emoji("SHIELD")
-
-    try:
-        reset_url = f"https://api.lzt.market/{item_id}/reset-sessions"
-        res = requests.post(reset_url, headers=HEADERS, timeout=10)
-
-        if res.status_code == 200:
-            await event.answer("Baaki saari active sessions terminate ho gayi!", alert=True)
-            await event.respond(
-                f"{success_icon} <b>Security Action Completed!</b>\n\n"
-                f"{shield_icon} <i>Primary session ko chodkar baaki saare devices log out kar diye gaye hain (Item ID: <code>{item_id}</code>).</i>",
-                parse_mode="html"
-            )
-        else:
-            await event.answer("Sessions terminate nahi ho sake. Baad mein try kareto.", alert=True)
-    except Exception as e:
-        await event.respond(f"{error_icon} <b>Reset Error:</b> {str(e)}", parse_mode="html")
-
+    order = active_orders[phone]
+    code = await fetch_order_otp(order)
+    if code:
+        await event.answer(f"🔑 Latest OTP: {code}", alert=True)
+    else:
+        await event.answer("⏳ Waiting for new OTP...", alert=True)
+
+@bot.on(events.CallbackQuery(pattern=r"^finish_order\|(.+)"))
+async def cb_finish_order(event):
+    phone = event.pattern_match.group(1)
+    if phone in active_orders:
+        ord_info = active_orders[phone]
+        try:
+            if ord_info.get('client'):
+                await ord_info['client'].disconnect()
+        except Exception: pass
+        del active_orders[phone]
+    await event.edit(f"{PE_CHECK} <b>Order completed successfully! Thank you.</b>")
