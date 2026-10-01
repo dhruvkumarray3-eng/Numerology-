@@ -214,8 +214,53 @@ def get_emoji(key: str) -> str:
         return f'<tg-emoji emoji-id="{emoji_id}"></tg-emoji>'
     return ""
 
-BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", os.getenv("CWALLET_ID", "")).strip()
+# =====================================================================
+# BEP-20, DYNAMIC MARGIN, PREMIUM EMOJIS & COLOR UI (FINAL CLEAN CODE)
+# =====================================================================
+
+# 1. BEP-20 Wallet Address & QR Code Variables (Consolidated)
+BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", os.getenv("CWALLET_ID", "")).strip()[span_1](start_span)[span_1](end_span)
 BEP20_QR = os.getenv("BEP20_QR", os.getenv("CWALLET_QR", "")).strip()
+
+# 2. Dynamic Admin Profit Margin Configuration
+ADMIN_PROFIT_INR = float(os.getenv("ADMIN_PROFIT_INR", "50.0"))
+
+try:
+    db_margin = cur.execute("SELECT value FROM settings WHERE key='admin_profit_inr'").fetchone()
+    if db_margin and db_margin[0]:
+        ADMIN_PROFIT_INR = float(db_margin[0])
+except Exception:
+    pass
+
+# 3. Custom Premium Emojis Mapping (HTML Supported)
+CUSTOM_PREMIUM_EMOJIS = {
+    "TELEGRAM": "6028346797368283073",   # Telegram Icon
+    "APPLE": "5775870512127283512",      # Apple
+    "STAR": "6028338546736107668",       # Star
+    "GIFT": "5307949733786976205",       # Gift Box
+    "CHECK_RED": "6296577138615125756",  # Red Checkmark
+    "HEART": "6298356878573307709",      # Heart
+    "VIP": "6219549292458150316",        # VIP Crown
+    "EYE": "6220029508456548253",        # Eye Icon
+    "ERROR_CROSS": "6298671811345254603",# Cross / Cancel
+    "SUCCESS_GREEN": "6296367896398399651", # Green Checkmark
+    "FIRE": "6235291666152953756",       # Fire
+    "LIGHTNING": "5224607267797606837"   # Lightning Bolt
+}
+
+def get_custom_emoji(key: str, fallback: str = "✨") -> str:
+    """Renders HTML-compatible Telegram Custom Premium Emoji safely"""
+    emoji_id = CUSTOM_PREMIUM_EMOJIS.get(key, "")
+    if globals().get("USE_PREMIUM_EMOJIS", True) and emoji_id:
+        return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+    return fallback
+
+# 4. Colorful Button UI Styler (Inline Keyboard Text Builder)
+def build_color_button(label: str, emoji_key: str = "", fallback_emoji: str = "✨") -> str:
+    """Combines Custom Premium Emojis with Button Labels for Dynamic UI"""
+    emoji_html = get_custom_emoji(emoji_key, fallback_emoji)
+    return f"{emoji_html} {label}".strip()
+    
 
     
 
