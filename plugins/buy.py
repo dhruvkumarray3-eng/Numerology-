@@ -32,14 +32,15 @@ change_number_state = {}
 def get_active_order_card(order, phone, is_admin_user=False):
     fee = get_change_number_fee()
     fee_badge = f" (+₹{fee})" if fee > 0 else " (FREE)"
-    msg = (f"<blockquote expandable>⚡ <b>𝐎𝐑𝐃𝐄𝐑 𝐀𝐂𝐓𝐈𝐕𝐄!</b> 💎\n\n"
+    msg = (f"<blockquote expandable>"
+           f"<tg-emoji emoji-id=\"5409320020058584473\">⚡</tg-emoji> <b>𝐎𝐑𝐃𝐄𝐑 𝐀𝐂𝐓𝐈𝐕𝐄!</b> <tg-emoji emoji-id=\"5408995930416362034\">💎</tg-emoji>\n\n"
            f"📱 <b>𝐏𝐡𝐨𝐧𝐞:</b> <code>+{phone}</code>\n"
            f"{order['c_icon']} <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {order['country']}\n"
            f"🔐 <b>𝟐𝐅𝐀 𝐏𝐚𝐬𝐬𝐰𝐨𝐫𝐝:</b> <code>{order['twofa']}</code>\n\n"
            f"🔻 <b>𝐈𝐧𝐬𝐭𝐫𝐮𝐜𝐭𝐢𝐨𝐧𝐬:</b>\n"
            f"1. 𝐎𝐩𝐞𝐧 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 & 𝐀𝐝𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 (<code>+{phone}</code>).\n"
            f"2. ⏳ <b>𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭!</b> 𝐓𝐡𝐞 ʙᴏᴛ ɪs ᴀᴄᴛɪᴠᴇʟʏ ʟɪsᴛᴇɴɪɴɢ ғᴏʀ ʏᴏᴜʀ 𝐎𝐓𝐏.\n\n"
-           f"<i>✨ 𝐘𝐨𝐮 𝐜𝐚𝐧 𝐚𝐥𝐬𝐨 𝐭𝐚𝐩 '🔄 𝐂𝐡𝐚𝐧𝐠𝐞 𝐭𝐨 𝐌𝐲 𝐍𝐮𝐦𝐛𝐞𝐫' 𝐭𝐨 𝐦𝐢𝐠𝐫𝐚𝐭𝐞 𝐭𝐡𝐢𝐬 𝐚𝐜𝐜𝐨𝐮𝐧𝐭 𝐝𝐢𝐫𝐞𝐜𝐭𝐥𝐲!</i></blockquote>")
+           f"<i><tg-emoji emoji-id=\"5409320020058584473\">✨</tg-emoji> 𝐘𝐨𝐮 𝐜𝐚𝐧 𝐚𝐥𝐬𝐨 𝐭𝐚𝐩 '🔄 𝐂𝐡𝐚𝐧𝐠𝐞 𝐭𝐨 𝐌𝐲 𝐍𝐮𝐦𝐛𝐞𝐫' 𝐭𝐨 𝐦𝐢𝐠𝐫𝐚𝐭𝐞 𝐭𝐡𝐢𝐬 𝐚𝐜𝐜𝐨𝐮𝐧𝐭 𝐝𝐢𝐫𝐞𝐜𝐭𝐥𝐲!</i></blockquote>")
     
     btns = [
         [style_btn(f"🔄 𝐂𝐡𝐚𝐧𝐠𝐞 𝐭𝐨 𝐌𝐲 𝐍𝐮𝐦𝐛𝐞𝐫{fee_badge}", f"chg_num|{phone}", "success", icon=5409320020058584473)],
@@ -123,8 +124,8 @@ async def show_filters_catalog(event, page=1):
     total = len(FILTERS_LIST)
     total_pages = (total + limit - 1) // limit
 
-    msg = (f"<blockquote>🎯 <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐚𝐧 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐅𝐢𝐥𝐭𝐞𝐫:</b> (𝐏𝐚𝐠𝐞 {page}/{total_pages})\n\n"
-           f"<i>✨ 𝐂𝐡𝐨𝐨𝐬𝐞 𝐚 𝐬𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐚𝐜𝐜𝐨𝐮𝐧𝐭 𝐭𝐲𝐩𝐞 𝐛𝐞𝐥𝐨𝐰 𝐭𝐨 𝐛𝐫𝐨𝐰𝐬𝐞 𝐜𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬:</i></blockquote>")
+    msg = (f"<blockquote expandable><tg-emoji emoji-id=\"5409320020058584473\">🎯</tg-emoji> <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐚𝐧 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐅𝐢𝐥𝐭𝐞𝐫:</b> (𝐏𝐚𝐠𝐞 {page}/{total_pages})\n\n"
+           f"<i><tg-emoji emoji-id=\"5408995930416362034\">✨</tg-emoji> 𝐂𝐡𝐨𝐨𝐬𝐞 𝐚 𝐬𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐚𝐜𝐜𝐨𝐮𝐧𝐭 𝐭𝐲𝐩𝐞 𝐛𝐞𝐥𝐨𝐰 𝐭𝐨 𝐛𝐫𝐨𝐰𝐬𝐞 𝐜𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬:</i></blockquote>")
     
     btns = []
     for f_id, label, icon in items:
@@ -147,7 +148,7 @@ async def show_filters_catalog(event, page=1):
         await event.respond(msg, buttons=btns)
 
 async def show_buy_menu(event):
-    msg = (f"<blockquote>🎁 <b>𝐒𝐄𝐋𝐄𝐂𝐓 𝐀𝐂𝐂𝐎𝐔𝐍𝐓 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘</b> 💎\n\n"
+    msg = (f"<blockquote expandable><tg-emoji emoji-id=\"5408995930416362034\">🎁</tg-emoji> <b>𝐒𝐄𝐋𝐄𝐂𝐓 𝐀𝐂𝐂𝐎𝐔𝐍𝐓 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘</b> <tg-emoji emoji-id=\"5409320020058584473\">💎</tg-emoji>\n\n"
            f"🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> 𝐐𝐮𝐢𝐜𝐤 𝐥𝐨𝐨𝐤𝐮𝐩 𝐛𝐲 𝐧𝐚𝐦𝐞 𝐨𝐫 𝐝𝐢𝐚𝐥 𝐜𝐨𝐝𝐞 (+91, +55...)\n"
            f"🟢 <b>𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 / 𝐂𝐥𝐞𝐚𝐧:</b> 100% 𝐒𝐩𝐚𝐦𝐛𝐥𝐨𝐜𝐤-𝐅𝐫𝐞𝐞 (𝐃𝐌 & 𝐏𝐞𝐫𝐬𝐨𝐧𝐚𝐥 𝐔𝐬𝐞).\n"
            f"🟡 <b>𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩):</b> 𝐁𝐮𝐝𝐠𝐞𝐭 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬 (𝐂𝐡𝐚𝐧𝐧𝐞𝐥 𝐉𝐨𝐢𝐧𝐞𝐫𝐬 & 𝐌𝐞𝐦𝐛𝐞𝐫𝐬).\n"
@@ -172,8 +173,8 @@ async def show_buy_menu(event):
         await event.respond(msg, buttons=btns)
 
 async def show_years_catalog(event):
-    msg = (f"<blockquote>🏛️ <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐘𝐞𝐚𝐫 (𝐀𝐠𝐞):</b>\n\n"
-           f"<i>👑 𝐀𝐠𝐞𝐝 𝐚𝐜𝐜𝐨𝐮𝐧𝐭𝐬 𝐡𝐚𝐯𝐞 𝐡𝐢𝐠𝐡𝐞𝐫 𝐭𝐫𝐮𝐬𝐭, 𝐥𝐨𝐰𝐞𝐫 𝐛𝐚𝐧 𝐫𝐚𝐭𝐞𝐬, 𝐚𝐧𝐝 𝐥𝐨𝐧𝐠𝐞𝐫 𝐡𝐢𝐬𝐭𝐨𝐫𝐲!</i></blockquote>")
+    msg = (f"<blockquote expandable><tg-emoji emoji-id=\"5409320020058584473\">🏛️</tg-emoji> <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐘𝐞𝐚𝐫 (𝐀𝐠𝐞):</b>\n\n"
+           f"<i><tg-emoji emoji-id=\"5408995930416362034\">👑</tg-emoji> 𝐀𝐠𝐞𝐝 𝐚𝐜𝐜𝐨𝐮𝐧𝐭𝐬 𝐡𝐚𝐯𝐞 𝐡𝐢𝐠𝐡𝐞𝐫 𝐭𝐫𝐮𝐬𝐭, 𝐥𝐨𝐰𝐞𝐫 𝐛𝐚𝐧 𝐫𝐚𝐭𝐞𝐬, 𝐚𝐧𝐝 𝐥𝐨𝐧𝐠𝐞𝐫 𝐡𝐢𝐬𝐭𝐨𝐫𝐲!</i></blockquote>")
     btns = []
     for y in [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019]:
         label = YEAR_BADGES.get(y, f"📅 {y}")
@@ -212,7 +213,7 @@ async def show_countries_for_year(event, year, page):
     f_btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐘𝐞𝐚𝐫𝐬", "by_years_menu", "danger", icon=6129812419028982717)])
     
     total_pages = (total + limit - 1) // limit
-    msg = f"<blockquote>🏛️ <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 𝐟𝐨𝐫 {year} 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> (𝐏𝐚𝐠𝐞 {page}/{total_pages})</blockquote>"
+    msg = f"<blockquote expandable><tg-emoji emoji-id=\"5409320020058584473\">🏛️</tg-emoji> <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 𝐟𝐨𝐫 {year} 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> (𝐏𝐚𝐠𝐞 {page}/{total_pages})</blockquote>"
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=f_btns)
         except MessageNotModifiedError: pass
@@ -254,7 +255,7 @@ async def show_countries(event, mode, page):
     else:
         cat_header = f"📍 <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐚 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b>"
 
-    msg = f"<blockquote>{cat_header} (𝐏𝐚𝐠𝐞 {page}/{total_pages})</blockquote>"
+    msg = f"<blockquote expandable>{cat_header} (𝐏𝐚𝐠𝐞 {page}/{total_pages})</blockquote>"
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=f_btns)
         except MessageNotModifiedError: pass
@@ -289,7 +290,7 @@ async def show_years(event, mode, country):
 
     if (bot_mode == 'panel' or (bot_mode == 'hybrid' and not year_options)) and get_lzt_key():
         try:
-            items = await lzt_client.search_items(country, mode=mode)
+            items = await lzt_client.search_items(country, mode=mode, category_name='telegram')
             years_grouped = {}
             for itm in items:
                 y = itm['year']
@@ -329,7 +330,7 @@ async def show_years(event, mode, country):
     else:
         cat_label = ""
     
-    await event.edit(f"<blockquote>{flag} <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐘𝐞𝐚𝐫 & 𝐏𝐫𝐢𝐜𝐞 𝐟𝐨𝐫 {country}{cat_label}:</b></blockquote>", buttons=btns)
+    await event.edit(f"<blockquote expandable>{flag} <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐘𝐞𝐚𝐫 & 𝐏𝐫𝐢𝐜𝐞 𝐟𝐨𝐫 {country}{cat_label}:</b></blockquote>", buttons=btns)
 
 async def confirm_purchase(event, mode, country, year, price):
     if "|" in country:
@@ -345,12 +346,12 @@ async def confirm_purchase(event, mode, country, year, price):
     elif mode == 'spam': cat_badge = "🟡 𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩)"
     else: cat_badge = "🌍 𝐒𝐭𝐚𝐧𝐝𝐚𝐫𝐝"
 
-    msg = (f"<blockquote>🎁 <b>𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐔𝐑𝐂𝐇𝐀𝐒𝐄</b> 💎\n\n"
+    msg = (f"<blockquote expandable><tg-emoji emoji-id=\"5408995930416362034\">🎁</tg-emoji> <b>𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐔𝐑𝐂𝐇𝐀𝐒𝐄</b> <tg-emoji emoji-id=\"5409320020058584473\">💎</tg-emoji>\n\n"
            f"🏳 <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {flag} {country}\n"
            f"🏷️ <b>𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲:</b> {cat_badge}\n"
            f"📆 <b>𝐘𝐞𝐚𝐫:</b> {badge}\n"
            f"💵 <b>𝐏𝐫𝐢𝐜𝐞:</b> ₹{price}\n\n"
-           f"<b>✨ 𝐀𝐫𝐞 𝐲𝐨𝐮 𝐬𝐮𝐫𝐞 𝐲𝐨𝐮 𝐰𝐚𝐧𝐭 𝐭𝐨 𝐛𝐮𝐲?</b></blockquote>")
+           f"<b><tg-emoji emoji-id=\"5409320020058584473\">✨</tg-emoji> 𝐀𝐫𝐞 𝐲𝐨𝐮 𝐬𝐮𝐫𝐞 𝐲𝐨𝐮 𝐰𝐚𝐧𝐭 𝐭𝐨 𝐛𝐮𝐲?</b></blockquote>")
     btns = [
         [style_btn("✅ 𝐂𝐨𝐧𝐟𝐢𝐫𝐦 𝐁𝐮𝐲", f"buy_cf|{mode}|{country}|{year}|{price}", "success", icon=5409320020058584473)],
         [style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129888444245089008)]
@@ -376,16 +377,18 @@ async def process_purchase(event, mode, country, year, price_str):
         if balance < final_price:
             return await event.answer("❌ Insufficient Balance!", alert=True)
 
-        if mode == 'spam':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)='spam' LIMIT 1", (country, int(year))).fetchone()
-        elif mode == 'nonspam':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL LIMIT 1", (country, int(year))).fetchone()
-        elif mode == 'no_2fa':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
-        elif mode == 'with_2fa':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, int(year))).fetchone()
-        else:
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 LIMIT 1", (country, int(year))).fetchone()
+        local_row = None
+        if bot_mode in ('manual', 'hybrid'):
+            if mode == 'spam':
+                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)='spam' LIMIT 1", (country, int(year))).fetchone()
+            elif mode == 'nonspam':
+                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL LIMIT 1", (country, int(year))).fetchone()
+            elif mode == 'no_2fa':
+                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
+            elif mode == 'with_2fa':
+                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, int(year))).fetchone()
+            else:
+                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 LIMIT 1", (country, int(year))).fetchone()
         
         is_local = (bot_mode in ('manual', 'hybrid')) and (local_row is not None)
         
@@ -437,15 +440,15 @@ async def process_purchase(event, mode, country, year, price_str):
     else:
         await event.edit(f"⚡ <b>𝐏𝐫𝐨𝐜𝐞𝐬𝐬𝐢𝐧𝐠 𝐲𝐨𝐮𝐫 𝐨𝐫𝐝𝐞𝐫...</b>\n𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭 𝐰𝐡𝐢𝐥𝐞 𝐰𝐞 𝐢𝐧𝐢𝐭𝐢𝐚𝐥𝐢𝐳𝐞 𝐭𝐡𝐞 𝐬𝐞𝐬𝐬𝐢𝐨𝐧.")
         try:
-            items = await lzt_client.search_items(country, actual_year, mode=mode)
+            items = await lzt_client.search_items(country, actual_year, mode=mode, category_name='telegram')
             if not items:
-                items = await lzt_client.search_items(country, mode=mode)
+                items = await lzt_client.search_items(country, mode=mode, category_name='telegram')
             
             if not items:
                 async with get_user_lock(uid):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
-                return await event.edit(f"<blockquote>❌ <b>𝐎𝐮𝐭 𝐨𝐟 𝐒𝐭𝐨𝐜𝐤!</b>\n\n𝐍𝐨 𝐚𝐜𝐜𝐨𝐮𝐧𝐭𝐬 𝐚𝐫𝐞 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 <b>{c_icon} {country}</b>.\n𝐘𝐨𝐮𝐫 𝐦𝐨𝐧𝐞𝐲 (<b>₹{final_price}</b>) 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 <b>𝐢𝐧𝐬𝐭𝐚𝐧𝐭𝐥𝐲 𝐫𝐞𝐟𝐮𝐧𝐝𝐞𝐝</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁𝐮𝐲 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "buy_menu_main", "primary", icon=5408995930416362034)]])
+                return await event.edit(f"<blockquote expandable>❌ <b>𝐎𝐮𝐭 𝐨𝐟 𝐒𝐭𝐨𝐜𝐤!</b>\n\n𝐍𝐨 𝐚𝐜𝐜𝐨𝐮𝐧𝐭𝐬 𝐚𝐫𝐞 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 <b>{c_icon} {country}</b>.\n𝐘𝐨𝐮𝐫 𝐦𝐨𝐧𝐞𝐲 (<b>₹{final_price}</b>) 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 <b>𝐢𝐧𝐬𝐭𝐚𝐧𝐭𝐥𝐲 𝐫𝐞𝐟𝐮𝐧𝐝𝐞𝐝</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁𝐮𝐲 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "buy_menu_main", "primary", icon=5408995930416362034)]])
 
             buy_success = False
             bought_info = None
@@ -470,7 +473,7 @@ async def process_purchase(event, mode, country, year, price_str):
                     if str_sess:
                         try:
                             from telethon.sessions import StringSession
-                            test_client = TelegramClient(StringSession(str_sess), 2040, 'b18441a1ff607e10a989891a5462e627', connection_retries=None, retry_delay=3, auto_reconnect=True)
+                            test_client = TelegramClient(StringSession(str_sess), API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
                             await test_client.connect()
                             if await test_client.is_user_authorized():
                                 me = await test_client.get_me()
@@ -596,11 +599,11 @@ async def auto_otp_task(phone):
                                 logger.error(f"Failed to log sale: {log_ex}")
                 
                 twofa_text = f"🔐 <b>2FA:</b> <code>{order['twofa']}</code>" if order['twofa'] != "None" else "🔓 <b>2FA:</b> <code>Disabled (No Password)</code>"
-                msg_text = (f"<blockquote>✅ <b>𝐎𝐓𝐏 𝐑𝐄𝐂𝐄𝐈𝐕𝐄𝐃!</b> 🔥\n\n"
+                msg_text = (f"<blockquote expandable><tg-emoji emoji-id=\"5409320020058584473\">✅</tg-emoji> <b>𝐎𝐓𝐏 𝐑𝐄𝐂𝐄𝐈𝐕𝐄𝐃!</b> 🔥\n\n"
                             f"📱 <b>𝐏𝐡𝐨𝐧𝐞:</b> <code>+{phone}</code>\n"
                             f"🔑 <b>𝐎𝐓𝐏 𝐂𝐨𝐝𝐞:</b> <code>{code}</code>\n"
                             f"{twofa_text}\n\n"
-                            f"<i>⚡ Tap code to copy! Complete login now.</i></blockquote>")
+                            f"<i><tg-emoji emoji-id=\"5408995930416362034\">⚡</tg-emoji> Tap code to copy! Complete login now.</i></blockquote>")
                 
                 btns = [
                     [
@@ -641,7 +644,7 @@ async def auto_otp_task(phone):
         
         del active_orders[phone]
         
-        msg_text = f"<blockquote>❌ <b>𝐎𝐫𝐝𝐞𝐫 𝐓𝐢𝐦𝐞𝐨𝐮𝐭 / 𝐂𝐚𝐧𝐜𝐞𝐥𝐥𝐞𝐝</b>\n\nNo OTP was received in time. <b>₹{ord_info['price']}</b> has been refunded to your wallet!</blockquote>"
+        msg_text = f"<blockquote expandable>❌ <b>𝐎𝐫𝐝𝐞𝐫 𝐓𝐢𝐦𝐞𝐨𝐮𝐭 / 𝐂𝐚𝐧𝐜𝐞𝐥𝐥𝐞𝐝</b>\n\nNo OTP was received in time. <b>₹{ord_info['price']}</b> has been refunded to your wallet!</blockquote>"
         try: await bot.edit_message(uid, msg_id, msg_text)
         except Exception as e: logger.error(f"Error sending timeout msg: {e}")
 
@@ -672,7 +675,40 @@ async def handle_format_downloads(event, phone, file_type):
         logger.error(f"Format download error: {e}")
         await event.answer(f"❌ Failed to generate format: {e}", alert=True)
 
-# ---------------- ALL CALLBACK HANDLERS FIX ----------------
+# ---------------- SEARCH & ALL CALLBACK HANDLERS ----------------
+
+@bot.on(events.CallbackQuery(pattern=r"^search_country_btn$"))
+async def cb_search_country_btn(event):
+    uid = event.sender_id
+    search_state[uid] = True
+    msg = "<blockquote expandable>🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b>\n\nPlease type the country name or dial code (e.g., <code>India</code> or <code>+91</code>) in chat below.</blockquote>"
+    btns = [[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]]
+    await event.edit(msg, buttons=btns)
+
+@bot.on(events.NewMessage)
+async def handle_country_search_input(event):
+    uid = event.sender_id
+    if search_state.get(uid):
+        search_state[uid] = False
+        query = event.text.strip().lower()
+        countries_all = await get_countries_list()
+        
+        matches = [
+            (c, cnt) for c, cnt in countries_all 
+            if query in c.lower() or query.replace('+', '') in str(COUNTRY_CODES.get(c, '')).lower()
+        ]
+        
+        if not matches:
+            return await event.respond(f"❌ No country found matching '<code>{html.escape(event.text)}</code>'.", buttons=[[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]])
+            
+        btns = []
+        for c_name, count in matches[:10]:
+            flag = get_flag_by_country_name(c_name)
+            cnt_str = f"({count})" if count else "(40+)"
+            btns.append([style_btn(f"{flag} {c_name} {cnt_str}", f"bc|bulk|{c_name}", "primary", icon=6154249597532248059)])
+            
+        btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)])
+        await event.respond(f"<blockquote expandable>🔎 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐑𝐞𝐬𝐮𝐥𝐭𝐬 𝐟𝐨𝐫 '{html.escape(event.text)}':</b></blockquote>", buttons=btns)
 
 @bot.on(events.CallbackQuery(pattern=r"^open_buy_categories$"))
 async def cb_open_buy_categories(event):
