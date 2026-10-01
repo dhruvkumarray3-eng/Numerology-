@@ -31,20 +31,15 @@ from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code
 
 search_state = {}
 change_number_state = {}
-
-# State tracking for conversation and direct lookup queries
 user_states = {}
 
-# Country fallback map
+# Comprehensive Country & Dial Code Fallback Map
 COUNTRY_MAP = {
-    "india": "India",
-    "in": "India",
-    "+91": "India",
-    "91": "India",
-    "usa": "USA",
-    "us": "USA",
-    "+1": "USA",
-    "1": "USA",
+    "india": "India", "in": "India", "+91": "India", "91": "India",
+    "usa": "USA", "us": "USA", "+1": "USA", "1": "USA",
+    "south africa": "South Africa", "+27": "South Africa", "27": "South Africa",
+    "uk": "UK", "gb": "UK", "+44": "UK", "44": "UK",
+    "canada": "Canada", "+1ca": "Canada",
 }
 
 async def safe_edit_message(event, text, buttons=None):
@@ -68,8 +63,8 @@ def get_active_order_card(order, phone, is_admin_user=False):
            f"🔐 <b>𝟐𝐅𝐀 𝐏𝐚𝐬𝐬𝐰𝐨𝐫𝐝:</b> <code>{order['twofa']}</code>\n\n"
            f"🔻 <b>𝐈𝐧𝐬𝐭𝐫𝐮𝐜𝐭𝐢𝐨𝐧𝐬:</b>\n"
            f"1. 𝐎𝐩𝐞𝐧 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 & 𝐀𝐝𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 (<code>+{phone}</code>).\n"
-           f"2. ⏳ <b>𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭!</b> 𝐓𝐡𝐞 ʙᴏᴛ ɪs ᴀᴄᴛɪᴠᴇʟʏ ʟɪsᴛᴇɴɪɴɢ ғᴏʀ ʏᴏᴜʀ 𝐎𝐓𝐏.\n\n"
-           f"<i><tg-emoji emoji-id=\"5409320020058584473\">✨</tg-emoji> 𝐘𝐨𝐮 𝐜𝐚𝐧 𝐚𝐥𝐬𝐨 𝐭𝐚𝐩 '🔄 𝐂𝐡𝐚𝐧𝐠𝐞 𝐭𝐨 𝐌𝐲 𝐍𝐮𝐦𝐛𝐞𝐫' 𝐭𝐨 𝐦𝐢𝐠𝐫𝐚𝐭𝐞 𝐭𝐡𝐢𝐬 𝐚𝐜𝐜𝐨𝐮𝐧𝐭 𝐝𝐢𝐫𝐞𝐜𝐭𝐥𝐲!</i></blockquote>")
+           f"2. ⏳ <b>𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭!</b> 𝐓𝐡𝐞 ʙᴏᴛ ɪs ᴀᴄᴛɪᴠᴇʟʏ ʟɪsᴛᴇɴɪɴɢ ғᴏʀ ʏ𝐨𝐮ʀ 𝐎𝐓𝐏.\n\n"
+           f"<i><tg-emoji emoji-id=\"5409320020058584473\">✨</tg-emoji> 𝐘𝐨𝐮 𝐜𝐚𝐧 𝐚𝐥𝐬𝐨 𝐭𝐚𝐩 '🔄 𝐂𝐡𝐚𝐧𝐠𝐞 𝐭𝐨 𝐌𝐲 𝐍𝐮𝐦𝐛𝐞𝐫' 𝐭𝐨 𝐦𝐢𝐠𝐫𝐚𝐭𝐞 𝐭𝐡𝐢s 𝐚𝐜𝐜𝐨𝐮𝐧𝐭 𝐝𝐢𝐫𝐞𝐜𝐭𝐥𝐲!</i></blockquote>")
     
     btns = [
         [style_btn(f"🔄 𝐂𝐡𝐚𝐧𝐠𝐞 𝐭𝐨 𝐌𝐲 𝐍𝐮𝐦𝐛𝐞𝐫{fee_badge}", f"chg_num|{phone}", "success", icon=5409320020058584473)],
@@ -203,7 +198,7 @@ async def show_buy_menu(event):
 
 async def show_years_catalog(event):
     msg = (f"<blockquote expandable><tg-emoji emoji-id=\"5409320020058584473\">🏛️</tg-emoji> <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐘𝐞𝐚𝐫 (𝐀𝐠𝐞):</b>\n\n"
-           f"<i><tg-emoji emoji-id=\"5408995930416362034\">👑</tg-emoji> 𝐀𝐠𝐞𝐝 𝐚𝐜𝐜𝐨𝐮𝐧𝐭𝐬 𝐡𝐚𝐯𝐞 𝐡𝐢𝐠𝐡𝐞𝐫 𝐭𝐫𝐮𝐬𝐭, 𝐥𝐨𝐰𝐞𝐫 𝐛𝐚𝐧 𝐫𝐚𝐭𝐞𝐬, 𝐚𝐧𝐝 𝐥𝐨𝐧𝐠𝐞𝐫 𝐡𝐢𝐬𝐭𝐨𝐫𝐲!</i></blockquote>")
+           f"<i><tg-emoji emoji-id=\"5408995930416362034\">👑</tg-emoji> 𝐀𝐠𝐞𝐝 𝐚𝐜𝐜𝐨𝐮𝐧𝐭s 𝐡𝐚𝐯𝐞 𝐡𝐢𝐠𝐡𝐞𝐫 𝐭𝐫𝐮𝐬𝐭, 𝐥𝐨𝐰𝐞𝐫 𝐛𝐚𝐧 𝐫𝐚𝐭𝐞𝐬, 𝐚𝐧𝐝 𝐥𝐨𝐧𝐠𝐞𝐫 𝐡𝐢𝐬𝐭𝐨𝐫𝐲!</i></blockquote>")
     btns = []
     for y in [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019]:
         label = YEAR_BADGES.get(y, f"📅 {y}")
@@ -452,7 +447,7 @@ async def process_purchase(event, mode, country, year, price_str):
             except Exception: pass
             async with get_user_lock(uid):
                 cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
-                cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
+                cur.execute("UPDATE stock WHERE phone=?", (phone,))
                 db.commit()
             return await event.edit(f"❌ <b>Error initializing account. (Session Dead)</b> Money refunded.")
 
@@ -477,7 +472,7 @@ async def process_purchase(event, mode, country, year, price_str):
                 async with get_user_lock(uid):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
-                return await event.edit(f"<blockquote expandable>❌ <b>𝐎𝐮𝐭 𝐨𝐟 𝐒𝐭𝐨𝐜𝐤!</b>\n\n𝐍𝐨 𝐚𝐜𝐜𝐨𝐮𝐧𝐭𝐬 𝐚𝐫𝐞 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 <b>{c_icon} {country}</b>.\n𝐘𝐨𝐮𝐫 𝐦𝐨𝐧𝐞𝐲 (<b>₹{final_price}</b>) 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 <b>𝐢𝐧𝐬𝐭𝐚𝐧𝐭𝐥𝐲 𝐫𝐞𝐟𝐮𝐧𝐝𝐞𝐝</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁𝐮𝐲 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "buy_menu_main", "primary", icon=5408995930416362034)]])
+                return await event.edit(f"<blockquote expandable>❌ <b>𝐎𝐮𝐭 𝐨𝐟 𝐒𝐭𝐨𝐜𝐤!</b>\n\n𝐍𝐨 𝐚𝐜𝐜𝐨𝐮𝐧𝐭s 𝐚𝐫𝐞 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 <b>{c_icon} {country}</b>.\n𝐘𝐨𝐮𝐫 𝐦𝐨𝐧𝐞𝐲 (<b>₹{final_price}</b>) 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 <b>𝐢𝐧𝐬𝐭𝐚𝐧𝐭𝐥𝐲 𝐫𝐞𝐟𝐮𝐧𝐝𝐞𝐝</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁𝐮𝐲 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "buy_menu_main", "primary", icon=5408995930416362034)]])
 
             buy_success = False
             bought_info = None
@@ -713,7 +708,7 @@ async def buy_account_handler(event):
     
     msg_text = (
         "🔍 <b>Search Country:</b>\n\n"
-        "Please type the country name or dial code (e.g., <b>India</b> or <b>+1</b>) in chat below."
+        "Please type the country name or dial code (e.g., <b>India</b> or <b>+91</b>) in chat below."
     )
     buttons = [[style_btn("❌ ⬅️ Back to Menu", "back_to_menu", "danger")]]
     await event.respond(msg_text, buttons=buttons)
@@ -757,18 +752,15 @@ async def process_combined_text_input(event):
         
     uid = event.sender_id
     
-    # State verification for AWAITING_COUNTRY or search_state
     if search_state.get(uid) or user_states.get(uid) == "AWAITING_COUNTRY":
         search_state[uid] = False
         user_states[uid] = None
         
-        query = event.text.strip().lower()
-        clean_query = query.replace("+", "")
+        raw_query = event.text.strip().lower()
+        clean_query = raw_query.replace("+", "")
         
-        # Check static mapping first
-        mapped_name = COUNTRY_MAP.get(query) or COUNTRY_MAP.get(clean_query)
-        if mapped_name:
-            query = mapped_name.lower()
+        # Resolve via mapping or direct match
+        query = COUNTRY_MAP.get(raw_query) or COUNTRY_MAP.get(clean_query) or raw_query
 
         countries_all = await get_countries_list()
         
@@ -861,7 +853,7 @@ async def cb_buy_cf(event):
 
 @bot.on(events.CallbackQuery(pattern=r"^chg_num\|(.+)"))
 async def cb_chg_num(event):
-    await event.answer("ℹ️ Please enter your new phone number in chat to migrate.", alert=True)
+    await event.answer("ℹ️️ Please enter your new phone number in chat to migrate.", alert=True)
 
 @bot.on(events.CallbackQuery(pattern=r"^get_otp_again\|(.+)"))
 async def cb_get_otp_again(event):
