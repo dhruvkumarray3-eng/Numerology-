@@ -1,12 +1,17 @@
 import os
+import re
 import sqlite3
 import logging
 from telethon import TelegramClient
 from dotenv import load_dotenv
 
+# Logging Configuration
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------
+# 1. ENV FILE LOADER
+# ---------------------------------------------------------
 def load_env_file(path=".env"):
     if not os.path.exists(path):
         return
@@ -28,8 +33,12 @@ load_env_file()
 
 def env_int(name, default=0):
     raw = os.getenv(name)
-    if raw is None or str(raw).strip() == "": return default
-    return int(str(raw).strip())
+    if raw is None or str(raw).strip() == "": 
+        return default
+    try:
+        return int(str(raw).strip())
+    except ValueError:
+        return default
 
 def format_join_url(url: str) -> str:
     """Normalizes any Telegram link or username into a valid https://t.me/... URL."""
@@ -48,13 +57,16 @@ def format_join_url(url: str) -> str:
 
 def env_list(name, default_csv=""):
     raw = os.getenv(name, default_csv)
-    if not raw: return []
-    import re
+    if not raw: 
+        return []
     items = [item.strip() for item in re.split(r'[\s,]+', raw) if item.strip()]
     if name == "JOIN_URLS":
         return [format_join_url(item) for item in items if item]
     return items
 
+# ---------------------------------------------------------
+# 2. CORE TELEGRAM CONFIGURATION
+# ---------------------------------------------------------
 API_ID = env_int("API_ID", 0)
 API_HASH = os.getenv("API_HASH", "").strip()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
@@ -89,18 +101,43 @@ JOIN_URLS = env_list("JOIN_URLS", "")
 TERMS_URL = os.getenv("TERMS_URL", "").strip() or "https://github.com/dhruvkumarray3-eng/Numerology-/blob/main/TERMS_AND_CONDITIONS.md"
 SUPPORT_URL = os.getenv("SUPPORT_URL", "").strip() or "https://t.me/Sexypremiums"
 UPDATES_URL = os.getenv("UPDATES_URL", "").strip() or "https://t.me/mafiaXupdates"
-CWALLET_QR = os.getenv("CWALLET_QR", "")
-CWALLET_ID = os.getenv("CWALLET_ID", "")
 
-# UPI API DETAILS
-UPI_MID = os.getenv("UPI_MID", "")
-UPI_ID = os.getenv("UPI_ID", "")
+# PAYMENT & API DETAILS
+CWALLET_QR = os.getenv("CWALLET_QR", "").strip()
+CWALLET_ID = os.getenv("CWALLET_ID", "").strip()
+BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", CWALLET_ID).strip()
+BEP20_QR = os.getenv("BEP20_QR", CWALLET_QR).strip()
+
+UPI_MID = os.getenv("UPI_MID", "").strip()
+UPI_ID = os.getenv("UPI_ID", "").strip()
+
+# LZT MARKET & PRICING
+LZT_API_KEY = os.getenv("LZT_API_KEY", "").strip()
+USDT_TO_INR = float(os.getenv("USDT_TO_INR", "88.0"))
+ADMIN_PROFIT_INR = float(os.getenv("ADMIN_PROFIT_INR", "50.0"))
 
 OTP_REGEX = r"\b\d{4,8}\b"
 AUTO_CANCEL_SECONDS = 600
 
-# ================= PREMIUM EMOJIS =================
+# Fetch Dynamic Admin Profit Margin from SQLite Database (if present)
+try:
+    db_path = "bot.db" if os.path.exists("bot.db") else "database.db"
+    if os.path.exists(db_path):
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+        db_margin = cur.execute("SELECT value FROM settings WHERE key='admin_profit_inr'").fetchone()
+        if db_margin and db_margin[0]:
+            ADMIN_PROFIT_INR = float(db_margin[0])
+        conn.close()
+except Exception as e:
+    logger.warning(f"Could not load dynamic margin from DB: {e}")
+
+# ---------------------------------------------------------
+# 3. PREMIUM EMOJIS & COLORFUL UI CONFIGURATION
+# ---------------------------------------------------------
 USE_PREMIUM_EMOJIS = os.getenv("USE_PREMIUM_EMOJIS", "1").strip().lower() not in {"0", "false", "no", "off"}
+
 PREMIUM_EMOJIS = {
     "heart_fire": 5375125990118793401,
     "lightning": 5409271925014801629,
@@ -117,12 +154,52 @@ PREMIUM_EMOJIS = {
     "devil": 6064310143380625195,
 }
 
-def tg_emoji(name, fallback):
+CUSTOM_PREMIUM_EMOJIS = {
+    "TELEGRAM": "6028346797368283073",   # ✈️ Telegram Icon
+    "APPLE": "5775870512127283512",      # 🍏 Apple
+    "STAR": "6028338546736107668",       # ⭐️ Star
+    "GIFT": "5307949733786976205",       # 🎁 Gift
+    "CHECK_RED": "6296577138615125756",  # Red Check
+    "HEART": "6298356878573307709",      # ❤️ Heart
+    "VIP": "6219549292458150316",        # 👑 VIP Crown
+    "EYE": "6220029508456548253",        # 👁 Eye
+    "ERROR_CROSS": "6298671811345254603",# 😭 Error / Cancel
+    "SUCCESS_GREEN": "6296367896398399651", # Green Check
+    "FIRE": "6235291666152953756",       # 🔥 Fire
+    "LIGHTNING": "5224607267797606837",  # ⚡ Lightning
+    "LOGIN": "6242333741776115895",      # LOG IN Badge
+    "LOGOUT": "6240145013557173263",     # LOG OUT Badge
+    "CANDY": "6242174063481984917",      # 🍭 Candy
+    "NUMBER": "5823219494318773845",     # 🔢 Number
+    "SHIELD": "6086672466132865380",     # 🛡 Shield
+    "SPARKLE": "6086639764251873025",    # 💫 Sparkle
+    "SMILE": "6086690887247597839",      # 🙂 Smile
+    "DEVIL": "6089217174126203362",      # 👹 Troll / Devil
+    "DIAMOND": "6086778246882399112",    # 💎 Diamond
+    "PERCENT": "6093421221259514937",    # 100%
+    "PINK_PLANE": "6255963511252322252", # Pink Plane
+    "PURPLE_STAR": "6136464120779638846"# Purple Star
+}
+
+def tg_emoji(name: str, fallback: str) -> str:
+    """Renders basic Telegram Premium Emoji"""
     emoji_id = PREMIUM_EMOJIS.get(name)
     if USE_PREMIUM_EMOJIS and emoji_id:
         return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
     return fallback
 
+def get_emoji(key: str, fallback: str = "✨") -> str:
+    """Renders HTML-compatible Custom Premium Emoji"""
+    emoji_id = CUSTOM_PREMIUM_EMOJIS.get(key) or PREMIUM_EMOJIS.get(key)
+    if USE_PREMIUM_EMOJIS and emoji_id:
+        return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+    return fallback
+
+def get_custom_emoji(key: str, fallback: str = "✨") -> str:
+    """Safe getter for custom premium emojis"""
+    return get_emoji(key, fallback)
+
+# Shortcuts for Common Icons
 PE_HEART = tg_emoji("heart_fire", "❤️‍🔥")
 PE_LIGHTNING = tg_emoji("lightning", "⚡")
 PE_LOCATION = tg_emoji("location", "📍")
@@ -172,95 +249,16 @@ P_SOS = '🆘'
 P_ASST = '🤖'
 P_ACC = '👤'
 
-# ==========================================
-# LZT MARKET & CUSTOM EMOJI CONFIGURATIONS
-# ==========================================
+# ---------------------------------------------------------
+# 4. COLORFUL BUTTON & STYLING HELPERS
+# ---------------------------------------------------------
+from telethon import Button
 
-LZT_API_KEY = os.getenv("LZT_API_KEY", "")
-USDT_TO_INR = float(os.getenv("USDT_TO_INR", "88.0"))       # Base USDT rate
-ADMIN_PROFIT_INR = float(os.getenv("ADMIN_PROFIT_INR", "50.0")) # Margin in INR
-
-PREMIUM_EMOJIS = {
-    "TELEGRAM": "6028346797368283073",   # ✈️ Telegram Icon
-    "APPLE": "5775870512127283512",      # 🍏 Apple
-    "STAR": "6028338546736107668",       # ⭐️ Star
-    "GIFT": "5307949733786976205",       # 🎁 Gift
-    "CHECK_RED": "6296577138615125756",  # Red Check
-    "HEART": "6298356878573307709",      # ❤️ Heart
-    "VIP": "6219549292458150316",        # 👑 VIP Crown
-    "EYE": "6220029508456548253",        # 👁 Eye
-    "ERROR_CROSS": "6298671811345254603",# 😭 Error / Cancel
-    "SUCCESS_GREEN": "6296367896398399651", # Green Check
-    "FIRE": "6235291666152953756",       # 🔥 Fire
-    "LIGHTNING": "5224607267797606837",  # ⚡ Lightning
-    "LOGIN": "6242333741776115895",      # LOG IN Badge
-    "LOGOUT": "6240145013557173263",     # LOG OUT Badge
-    "CANDY": "6242174063481984917",      # 🍭 Candy
-    "NUMBER": "5823219494318773845",     # 🔢 Number
-    "SHIELD": "6086672466132865380",     # 🛡 Shield
-    "SPARKLE": "6086639764251873025",    # 💫 Sparkle
-    "SMILE": "6086690887247597839",      # 🙂 Smile
-    "DEVIL": "6089217174126203362",      # 👹 Troll / Devil
-    "DIAMOND": "6086778246882399112",    # 💎 Diamond
-    "PERCENT": "6093421221259514937",    # 100%
-    "PINK_PLANE": "6255963511252322252", # Pink Plane
-    "PURPLE_STAR": "6136464120779638846"# Purple Star
-}
-
-def get_emoji(key: str) -> str:
-    """Renders HTML-compatible Telegram Custom Premium Emoji"""
-    emoji_id = PREMIUM_EMOJIS.get(key)
-    if emoji_id:
-        return f'<tg-emoji emoji-id="{emoji_id}"></tg-emoji>'
-    return ""
-
-# =====================================================================
-# BEP-20, DYNAMIC MARGIN, PREMIUM EMOJIS & COLOR UI (FINAL CLEAN CODE)
-# =====================================================================
-
-# 1. BEP-20 Wallet Address & QR Code Variables (Consolidated)
-BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", os.getenv("CWALLET_ID", "")).strip()
-BEP20_QR = os.getenv("BEP20_QR", os.getenv("CWALLET_QR", "")).strip()
-
-# 2. Dynamic Admin Profit Margin Configuration
-ADMIN_PROFIT_INR = float(os.getenv("ADMIN_PROFIT_INR", "50.0"))
-
-try:
-    db_margin = cur.execute("SELECT value FROM settings WHERE key='admin_profit_inr'").fetchone()
-    if db_margin and db_margin[0]:
-        ADMIN_PROFIT_INR = float(db_margin[0])
-except Exception:
-    pass
-
-# 3. Custom Premium Emojis Mapping (HTML Supported)
-CUSTOM_PREMIUM_EMOJIS = {
-    "TELEGRAM": "6028346797368283073",   # Telegram Icon
-    "APPLE": "5775870512127283512",      # Apple
-    "STAR": "6028338546736107668",       # Star
-    "GIFT": "5307949733786976205",       # Gift Box
-    "CHECK_RED": "6296577138615125756",  # Red Checkmark
-    "HEART": "6298356878573307709",      # Heart
-    "VIP": "6219549292458150316",        # VIP Crown
-    "EYE": "6220029508456548253",        # Eye Icon
-    "ERROR_CROSS": "6298671811345254603",# Cross / Cancel
-    "SUCCESS_GREEN": "6296367896398399651", # Green Checkmark
-    "FIRE": "6235291666152953756",       # Fire
-    "LIGHTNING": "5224607267797606837"   # Lightning Bolt
-}
-
-def get_custom_emoji(key: str, fallback: str = "✨") -> str:
-    """Renders HTML-compatible Telegram Custom Premium Emoji safely"""
-    emoji_id = CUSTOM_PREMIUM_EMOJIS.get(key, "")
-    if globals().get("USE_PREMIUM_EMOJIS", True) and emoji_id:
-        return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
-    return fallback
-
-# 4. Colorful Button UI Styler (Inline Keyboard Text Builder)
 def build_color_button(label: str, emoji_key: str = "", fallback_emoji: str = "✨") -> str:
     """Combines Custom Premium Emojis with Button Labels for Dynamic UI"""
     emoji_html = get_custom_emoji(emoji_key, fallback_emoji)
     return f"{emoji_html} {label}".strip()
-    
 
-    
-
+def style_btn(text: str, data: str, style_type: str = "primary", icon: int = None):
+    """Generates Telethon Inline Button with custom data/style support."""
+    return Button.inline(text, data=data)
