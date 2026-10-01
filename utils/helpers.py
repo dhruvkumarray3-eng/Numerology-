@@ -1,6 +1,9 @@
 import random
 import asyncio
 import re
+import os
+import logging
+import aiohttp
 from telethon import Button
 from telethon.errors import UserNotParticipantError, ChatAdminRequiredError
 from telethon.tl.functions.channels import GetParticipantRequest
@@ -311,4 +314,55 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
             except: pass
         return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=True)
 
+# ---------------------------------------------------------
+# LZT MARKET API HELPERS (Properly Configured)
+# ---------------------------------------------------------
+LZT_API_KEY = os.getenv("LZT_API_KEY", "").strip()
 
+async def get_countries_list():
+    """Fetches Telegram accounts countries list from LZT Market API securely."""
+    if not LZT_API_KEY:
+        logger.warning("LZT_API_KEY is missing in environment variables!")
+        return []
+
+    headers = {
+        "Authorization": f"Bearer {LZT_API_KEY}",
+        "Accept": "application/json"
+    }
+    url = "https://api.lzt.market/telegram"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=10) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    category_data = data.get("category", {})
+                    countries_dict = category_data.get("countries", {})
+                    
+                    result = []
+                    for code, info in countries_dict.items():
+                        if isinstance(info, dict):
+                            c_name = info.get("title", code).strip()
+                            count = info.get("count", 0)
+                            result.append((c_name, count))
+                        elif isinstance(info, (int, str)):
+                            result.append((code, info))
+                            
+                    result.sort(key=lambda x: x[0])
+                    return result
+                else:
+                    logger.error(f"Failed to fetch LZT countries, Status code: {resp.status}")
+                    return []
+    except Exception as e:
+        logger.error(f"Error connecting to LZT Market API for countries: {e}")
+        return []
+
+def format_price(amount_inr: float) -> str:
+    """Formats price neatly into Indian Rupees format."""
+    return f"₹{amount_inr:,.2f}"
+
+def clean_input_text(text: str) -> str:
+    """Cleans user text inputs."""
+    if not text:
+        return ""
+    return text.strip().lower()
