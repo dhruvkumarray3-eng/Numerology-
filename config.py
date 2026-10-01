@@ -209,10 +209,12 @@ PREMIUM_EMOJIS = {
 
 def get_emoji(key: str) -> str:
     """Renders HTML-compatible Telegram Custom Premium Emoji"""
-    emoji_id = PREMIUM_EMOJIS.get(key, "")
+    emoji_id = PREMIUM_EMOJIS.get(key)
     if emoji_id:
-        return f'<tg-emoji emoji-id="{emoji_id}">🔹</tg-emoji>'
-    return "🔹"
-    BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", os.getenv("CWALLET_ID", "")).strip()
+        return f'<tg-emoji emoji-id="{emoji_id}"></tg-emoji>'
+    return ""
+
+BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", os.getenv("CWALLET_ID", "")).strip()
+
     
 
