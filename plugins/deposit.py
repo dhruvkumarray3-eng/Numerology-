@@ -474,3 +474,44 @@ def register_deposit(bot):
 
         custom_dep_amt[dep_id] = curr
         await e.edit(f"<blockquote>{P_KEY} <b>Enter 𝐂ᴜsᴛᴏᴍ 𝐀ᴍᴏᴜɴᴛ for User <code>{t_uid}</code>:</b>\n\n{P_MONEY} <b>{P_INR}{curr}</b></blockquote>", buttons=get_admin_custom_keypad(dep_id))
+
+# =====================================================================
+# BEP-20 (USDT - BSC) PAYMENT HANDLER & UI (ADDED AT BOTTOM)
+# =====================================================================
+
+@bot.on(events.CallbackQuery(pattern=r"^dep_choose_BEP20$"))
+async def cb_choose_bep20(e):
+    """BEP-20 Payment Selection Handler"""
+    uid = e.sender_id
+    deposit_input[uid] = {"method": "BEP20"}
+    
+    # Premium Emojis & UI Formatting
+    msg_text = (
+        f"<blockquote>{PE_LIGHTNING} <b>RECHARGE / ADD FUNDS (BEP-20)</b></blockquote>\n\n"
+        f"💳 <b>USDT (BEP-20) Payment Details:</b>\n\n"
+        f"📍 <b>Network:</b> BNB Smart Chain (BEP20)\n"
+        f"👛 <b>Address:</b> <code>{BEP20_ADDRESS}</code>\n\n"
+        f"⚠️ <i>Kripya sirf BEP-20 network par hi USDT bhejein.</i>\n\n"
+        f"{PE_GIFT} <b>Enter Deposit Amount in {P_INR}:</b>"
+    )
+    
+    btns = [
+        [style_btn(f"{P_NO} Cancel", "cancel_action", "danger", icon=5409098988156629257)]
+    ]
+    
+    await e.edit(msg_text, buttons=btns, parse_mode="html")
+
+
+def get_bep20_payment_text(amount_inr: float, usdt_amt: float) -> str:
+    """Utility function to render BEP-20 payment UI with custom premium icons"""
+    rate_text = f"<blockquote>{P_MONEY} <b>AMOUNT TO PAY:</b> {P_INR}{amount_inr} (~{P_USDT}{usdt_amt} USDT)</blockquote>"
+    
+    payment_text = (
+        f"<blockquote>{PE_LIGHTNING} <b>BEP-20 (USDT) PAYMENT DETAILS</b></blockquote>\n\n"
+        f"{rate_text}\n\n"
+        f"📍 <b>Network:</b> BNB Smart Chain (BEP20)\n"
+        f"👛 <b>Address:</b> <code>{BEP20_ADDRESS}</code>\n\n"
+        f"<blockquote>{PE_GIFT} <b>AFTER PAYING:</b> Send a clear screenshot or TXN Hash here.</blockquote>"
+    )
+    return payment_text
+    
