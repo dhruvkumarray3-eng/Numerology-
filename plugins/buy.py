@@ -346,7 +346,7 @@ async def confirm_purchase(event, mode, country, year, price):
     else: cat_badge = "🌍 𝐒𝐭𝐚𝐧𝐝𝐚𝐫𝐝"
 
     msg = (f"<blockquote>🎁 <b>𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐔𝐑𝐂𝐇𝐀𝐒𝐄</b> 💎\n\n"
-           f"🏳️️ <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {flag} {country}\n"
+           f"🏳 <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {flag} {country}\n"
            f"🏷️ <b>𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲:</b> {cat_badge}\n"
            f"📆 <b>𝐘𝐞𝐚𝐫:</b> {badge}\n"
            f"💵 <b>𝐏𝐫𝐢𝐜𝐞:</b> ₹{price}\n\n"
@@ -672,7 +672,15 @@ async def handle_format_downloads(event, phone, file_type):
         logger.error(f"Format download error: {e}")
         await event.answer(f"❌ Failed to generate format: {e}", alert=True)
 
-# ALL CALLBACK HANDLERS (EXACT PATTERN MATCHING)
+# ---------------- ALL CALLBACK HANDLERS FIX ----------------
+
+@bot.on(events.CallbackQuery(pattern=r"^open_buy_categories$"))
+async def cb_open_buy_categories(event):
+    await show_buy_menu(event)
+
+@bot.on(events.CallbackQuery(pattern=r"^tc_accept$"))
+async def cb_tc_accept(event):
+    await show_buy_menu(event)
 
 @bot.on(events.CallbackQuery(pattern=r"^buy_menu_main$"))
 async def cb_buy_menu_main(event):
@@ -684,51 +692,66 @@ async def cb_by_years_menu(event):
 
 @bot.on(events.CallbackQuery(pattern=r"^pg_filters\|(\d+)"))
 async def cb_pg_filters(event):
-    page = int(event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1))
+    raw = event.pattern_match.group(1)
+    page = int(raw.decode('utf-8') if isinstance(raw, bytes) else raw)
     await show_filters_catalog(event, page)
 
 @bot.on(events.CallbackQuery(pattern=r"^c_by_yr\|(\d+)\|(\d+)"))
 async def cb_c_by_yr(event):
-    year = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
-    page = int(event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2))
+    r1 = event.pattern_match.group(1)
+    r2 = event.pattern_match.group(2)
+    year = r1.decode('utf-8') if isinstance(r1, bytes) else r1
+    page = int(r2.decode('utf-8') if isinstance(r2, bytes) else r2)
     await show_countries_for_year(event, year, page)
 
 @bot.on(events.CallbackQuery(pattern=r"^pg_c\|([^|]+)\|(\d+)"))
 async def cb_pg_c(event):
-    mode = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
-    page = int(event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2))
+    r1 = event.pattern_match.group(1)
+    r2 = event.pattern_match.group(2)
+    mode = r1.decode('utf-8') if isinstance(r1, bytes) else r1
+    page = int(r2.decode('utf-8') if isinstance(r2, bytes) else r2)
     await show_countries(event, mode, page)
 
 @bot.on(events.CallbackQuery(pattern=r"^bc\|([^|]+)\|(.+)"))
 async def cb_bc(event):
-    mode = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
-    country = event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2)
+    r1 = event.pattern_match.group(1)
+    r2 = event.pattern_match.group(2)
+    mode = r1.decode('utf-8') if isinstance(r1, bytes) else r1
+    country = r2.decode('utf-8') if isinstance(r2, bytes) else r2
     await show_years(event, mode, country)
 
 @bot.on(events.CallbackQuery(pattern=r"^by\|([^|]+)\|([^|]+)\|([^|]+)\|(.+)"))
 async def cb_by(event):
-    mode = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
-    country = event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2)
-    year = event.pattern_match.group(3).decode('utf-8') if isinstance(event.pattern_match.group(3), bytes) else event.pattern_match.group(3)
-    price = event.pattern_match.group(4).decode('utf-8') if isinstance(event.pattern_match.group(4), bytes) else event.pattern_match.group(4)
+    r1 = event.pattern_match.group(1)
+    r2 = event.pattern_match.group(2)
+    r3 = event.pattern_match.group(3)
+    r4 = event.pattern_match.group(4)
+    mode = r1.decode('utf-8') if isinstance(r1, bytes) else r1
+    country = r2.decode('utf-8') if isinstance(r2, bytes) else r2
+    year = r3.decode('utf-8') if isinstance(r3, bytes) else r3
+    price = r4.decode('utf-8') if isinstance(r4, bytes) else r4
     await confirm_purchase(event, mode, country, year, price)
 
 @bot.on(events.CallbackQuery(pattern=r"^buy_cf\|([^|]+)\|([^|]+)\|([^|]+)\|(.+)"))
 async def cb_buy_cf(event):
-    mode = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
-    country = event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2)
-    year = event.pattern_match.group(3).decode('utf-8') if isinstance(event.pattern_match.group(3), bytes) else event.pattern_match.group(3)
-    price = event.pattern_match.group(4).decode('utf-8') if isinstance(event.pattern_match.group(4), bytes) else event.pattern_match.group(4)
+    r1 = event.pattern_match.group(1)
+    r2 = event.pattern_match.group(2)
+    r3 = event.pattern_match.group(3)
+    r4 = event.pattern_match.group(4)
+    mode = r1.decode('utf-8') if isinstance(r1, bytes) else r1
+    country = r2.decode('utf-8') if isinstance(r2, bytes) else r2
+    year = r3.decode('utf-8') if isinstance(r3, bytes) else r3
+    price = r4.decode('utf-8') if isinstance(r4, bytes) else r4
     await process_purchase(event, mode, country, year, price)
 
 @bot.on(events.CallbackQuery(pattern=r"^chg_num\|(.+)"))
 async def cb_chg_num(event):
-    phone = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
     await event.answer("ℹ️ Please enter your new phone number in chat to migrate.", alert=True)
 
 @bot.on(events.CallbackQuery(pattern=r"^get_otp_again\|(.+)"))
 async def cb_get_otp_again(event):
-    phone = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode('utf-8') if isinstance(r1, bytes) else r1
     if phone not in active_orders:
         return await event.answer("❌ Order no longer active.", alert=True)
     code = await fetch_order_otp(active_orders[phone])
@@ -741,13 +764,16 @@ async def cb_cancel_action(event):
 
 @bot.on(events.CallbackQuery(pattern=r"^dl_(telethon|tdata|pyrogram|json)_(.+)"))
 async def cb_download_format(event):
-    file_type = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
-    phone = event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2)
+    r1 = event.pattern_match.group(1)
+    r2 = event.pattern_match.group(2)
+    file_type = r1.decode('utf-8') if isinstance(r1, bytes) else r1
+    phone = r2.decode('utf-8') if isinstance(r2, bytes) else r2
     await handle_format_downloads(event, phone, file_type)
 
 @bot.on(events.CallbackQuery(pattern=r"^get_code_(.+)"))
 async def cb_get_code_again(event):
-    phone = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode('utf-8') if isinstance(r1, bytes) else r1
     if phone not in active_orders:
         return await event.answer("❌ Order expired or completed.", alert=True)
     order = active_orders[phone]
@@ -757,9 +783,8 @@ async def cb_get_code_again(event):
 
 @bot.on(events.CallbackQuery(pattern=r"^finish_order\|(.+)"))
 async def cb_finish_order(event):
-    phone = event.pattern_match.group(1)
-    if isinstance(phone, bytes):
-        phone = phone.decode('utf-8')
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode('utf-8') if isinstance(r1, bytes) else r1
     if phone in active_orders:
         ord_info = active_orders[phone]
         try:
