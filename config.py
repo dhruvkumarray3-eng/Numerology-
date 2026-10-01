@@ -219,7 +219,7 @@ def get_emoji(key: str) -> str:
 # =====================================================================
 
 # 1. BEP-20 Wallet Address & QR Code Variables (Consolidated)
-BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", os.getenv("CWALLET_ID", "")).strip()[span_1](start_span)[span_1](end_span)
+BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", os.getenv("CWALLET_ID", "")).strip()
 BEP20_QR = os.getenv("BEP20_QR", os.getenv("CWALLET_QR", "")).strip()
 
 # 2. Dynamic Admin Profit Margin Configuration
