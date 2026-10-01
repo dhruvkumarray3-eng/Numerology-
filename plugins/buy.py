@@ -5,6 +5,7 @@ import zipfile
 import re
 import html
 import json
+import logging
 import requests
 from telethon import events, Button, TelegramClient, types
 from telethon.errors import (
@@ -12,7 +13,9 @@ from telethon.errors import (
     PhoneCodeInvalidError, PhoneCodeExpiredError,
     FreshChangePhoneForbiddenError, FloodWaitError
 )
+from telethon.errors.rpcerrorlist import MessageIdInvalidError
 from telethon.tl.functions.account import SendChangePhoneCodeRequest, ChangePhoneRequest
+
 from database import (
     cur, db, get_flag_by_country_name, get_bot_mode, get_panel_price,
     get_lzt_key, get_change_number_fee, COUNTRY_CODES, is_admin, get_log_channels_db
@@ -28,6 +31,32 @@ from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code
 
 search_state = {}
 change_number_state = {}
+
+# State tracking for conversation and direct lookup queries
+user_states = {}
+
+# Country fallback map
+COUNTRY_MAP = {
+    "india": "India",
+    "in": "India",
+    "+91": "India",
+    "91": "India",
+    "usa": "USA",
+    "us": "USA",
+    "+1": "USA",
+    "1": "USA",
+}
+
+async def safe_edit_message(event, text, buttons=None):
+    """Safely edit message to handle MessageIdInvalidError gracefully."""
+    try:
+        await event.edit(text, buttons=buttons)
+    except MessageIdInvalidError:
+        logger.warning("Message ID invalid, sending a new message instead.")
+        await event.respond(text, buttons=buttons)
+    except Exception as e:
+        logger.error(f"Error editing message: {e}")
+        await event.respond(text, buttons=buttons)
 
 def get_active_order_card(order, phone, is_admin_user=False):
     fee = get_change_number_fee()
@@ -122,7 +151,7 @@ async def show_filters_catalog(event, page=1):
     offset = (page - 1) * limit
     items = FILTERS_LIST[offset:offset+limit]
     total = len(FILTERS_LIST)
-    total_pages = (total + limit - 1) // limit
+    total_pages = max(1, (total + limit - 1) // limit)
 
     msg = (f"<blockquote expandable><tg-emoji emoji-id=\"5409320020058584473\">🎯</tg-emoji> <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐚𝐧 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐅𝐢𝐥𝐭𝐞𝐫:</b> (𝐏𝐚𝐠𝐞 {page}/{total_pages})\n\n"
            f"<i><tg-emoji emoji-id=\"5408995930416362034\">✨</tg-emoji> 𝐂𝐡𝐨𝐨𝐬𝐞 𝐚 𝐬𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐚𝐜𝐜𝐨𝐮𝐧𝐭 𝐭𝐲𝐩𝐞 𝐛𝐞𝐥𝐨𝐰 𝐭𝐨 𝐛𝐫𝐨𝐰𝐬𝐞 𝐜𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬:</i></blockquote>")
@@ -212,7 +241,7 @@ async def show_countries_for_year(event, year, page):
     
     f_btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐘𝐞𝐚𝐫𝐬", "by_years_menu", "danger", icon=6129812419028982717)])
     
-    total_pages = (total + limit - 1) // limit
+    total_pages = max(1, (total + limit - 1) // limit)
     msg = f"<blockquote expandable><tg-emoji emoji-id=\"5409320020058584473\">🏛️</tg-emoji> <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 𝐟𝐨𝐫 {year} 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> (𝐏𝐚𝐠𝐞 {page}/{total_pages})</blockquote>"
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=f_btns)
@@ -249,7 +278,7 @@ async def show_countries(event, mode, page):
     back_row.append(style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717))
     f_btns.append(back_row)
     
-    total_pages = (total + limit - 1) // limit
+    total_pages = max(1, (total + limit - 1) // limit)
     if mode in FILTER_BADGES and mode != 'bulk':
         cat_header = f"🎯 <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 ({FILTER_BADGES[mode]}):</b>"
     else:
@@ -675,31 +704,81 @@ async def handle_format_downloads(event, phone, file_type):
         logger.error(f"Format download error: {e}")
         await event.answer(f"❌ Failed to generate format: {e}", alert=True)
 
-# ---------------- SEARCH & ALL CALLBACK HANDLERS ----------------
+# ---------------- COMMAND & HANDLER REGISTRATIONS ----------------
+
+@bot.on(events.NewMessage(pattern=r"(?i).*(buy account).*"))
+async def buy_account_handler(event):
+    user_id = event.sender_id
+    user_states[user_id] = "AWAITING_COUNTRY"
+    
+    msg_text = (
+        "🔍 <b>Search Country:</b>\n\n"
+        "Please type the country name or dial code (e.g., <b>India</b> or <b>+1</b>) in chat below."
+    )
+    buttons = [[style_btn("❌ ⬅️ Back to Menu", "back_to_menu", "danger")]]
+    await event.respond(msg_text, buttons=buttons)
+
+@bot.on(events.CallbackQuery(pattern=b"tc_accept"))
+async def cb_tc_accept_bytes(event):
+    try:
+        logger.info(f"CALLBACK RECEIVED: b'tc_accept' from {event.sender_id}")
+        await safe_edit_message(event, "✅ Terms accepted! Select an option below.", buttons=[
+            [style_btn("🛒 Buy Account", "buy_account_cb", "primary")]
+        ])
+    except Exception as e:
+        logger.error(f"Unhandled exception in cb_tc_accept: {e}")
+
+@bot.on(events.CallbackQuery(pattern=b"back_to_menu"))
+async def cb_back_to_menu_bytes(event):
+    user_id = event.sender_id
+    if user_id in user_states:
+        del user_states[user_id]
+    await safe_edit_message(event, "🏠 Main Menu:", buttons=[
+        [style_btn("🛒 Buy Account", "buy_account_cb", "primary")]
+    ])
+
+@bot.on(events.CallbackQuery(pattern=r"^buy_account_cb$"))
+async def cb_buy_account_cb(event):
+    await show_buy_menu(event)
 
 @bot.on(events.CallbackQuery(pattern=r"^search_country_btn$"))
 async def cb_search_country_btn(event):
     uid = event.sender_id
     search_state[uid] = True
+    user_states[uid] = "AWAITING_COUNTRY"
     msg = "<blockquote expandable>🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b>\n\nPlease type the country name or dial code (e.g., <code>India</code> or <code>+91</code>) in chat below.</blockquote>"
     btns = [[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]]
     await event.edit(msg, buttons=btns)
 
 @bot.on(events.NewMessage)
-async def handle_country_search_input(event):
+async def process_combined_text_input(event):
+    if event.text.startswith("/"):
+        return
+        
     uid = event.sender_id
-    if search_state.get(uid):
+    
+    # State verification for AWAITING_COUNTRY or search_state
+    if search_state.get(uid) or user_states.get(uid) == "AWAITING_COUNTRY":
         search_state[uid] = False
+        user_states[uid] = None
+        
         query = event.text.strip().lower()
+        clean_query = query.replace("+", "")
+        
+        # Check static mapping first
+        mapped_name = COUNTRY_MAP.get(query) or COUNTRY_MAP.get(clean_query)
+        if mapped_name:
+            query = mapped_name.lower()
+
         countries_all = await get_countries_list()
         
         matches = [
             (c, cnt) for c, cnt in countries_all 
-            if query in c.lower() or query.replace('+', '') in str(COUNTRY_CODES.get(c, '')).lower()
+            if query in c.lower() or clean_query in str(COUNTRY_CODES.get(c, '')).lower()
         ]
         
         if not matches:
-            return await event.respond(f"❌ No country found matching '<code>{html.escape(event.text)}</code>'.", buttons=[[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]])
+            return await event.respond(f"❌ No country found matching '<code>{html.escape(event.text)}</code>'. Please try again with a valid country or code (e.g. India, +91, +1).", buttons=[[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]])
             
         btns = []
         for c_name, count in matches[:10]:
