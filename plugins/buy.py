@@ -129,7 +129,7 @@ async def show_filters_catalog(event, page=1):
     btns = []
     for f_id, label, icon in items:
         if f_id == "aged":
-            btns.append([style_btn(label, b"by_years_menu", "primary", icon=icon)])
+            btns.append([style_btn(label, "by_years_menu", "primary", icon=icon)])
         else:
             btns.append([style_btn(label, f"pg_c|{f_id}|1", "primary", icon=icon)])
 
@@ -138,7 +138,7 @@ async def show_filters_catalog(event, page=1):
     if offset + limit < total: nav.append(style_btn("𝐍𝐞𝐱𝐭 ➡️", f"pg_filters|{page+1}", "primary", icon=6129732880529628243))
     if nav: btns.append(nav)
 
-    btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", b"buy_menu_main", "danger", icon=6129812419028982717)])
+    btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)])
 
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -153,17 +153,17 @@ async def show_buy_menu(event):
            f"🟡 <b>𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩):</b> 𝐁𝐮𝐝𝐠𝐞𝐭 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬 (𝐂𝐡𝐚𝐧𝐧𝐞𝐥 𝐉𝐨𝐢𝐧𝐞𝐫𝐬 & 𝐌𝐞𝐦𝐛𝐞𝐫𝐬).\n"
            f"🎯 <b>𝐌𝐨𝐫𝐞 𝐅𝐢𝐥𝐭𝐞𝐫𝐬:</b> 𝐒𝐭𝐚𝐫𝐬, 𝐄𝐦𝐚𝐢𝐥, 2𝐅𝐀, 𝐏𝐫𝐞𝐦𝐢𝐮𝐦, 𝐃𝐂...\n"
            f"🌍 <b>𝐀𝐥𝐥 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬:</b> 𝐁𝐫𝐨𝐰𝐬𝐞 50+ 𝐜𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬 𝐬𝐭𝐨𝐜𝐤 (𝐅𝐫𝐞𝐬𝐡 & 𝐀𝐥𝐥).\n"
-           f"🏛️️ <b>𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> 𝐅𝐢𝐥𝐭𝐞𝐫 𝐛𝐲 𝐒𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐘𝐞𝐚𝐫 (2025, 2024, 2023...).</blockquote>")
+           f"🏛 <b>𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> 𝐅𝐢𝐥𝐭𝐞𝐫 𝐛𝐲 𝐒𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐘𝐞𝐚𝐫 (2025, 2024, 2023...).</blockquote>")
     btns = [
-        [style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", b"search_country_btn", "primary", icon=5409098988156629257)],
+        [style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "search_country_btn", "primary", icon=5409098988156629257)],
         [
-            style_btn("🟢 𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 / 𝐂𝐥𝐞𝐚𝐧", b"pg_c|nonspam|1", "success", icon=5409320020058584473),
-            style_btn("🟡 𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩)", b"pg_c|spam|1", "primary", icon=5408995930416362034)
+            style_btn("🟢 𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 / 𝐂𝐥𝐞𝐚𝐧", "pg_c|nonspam|1", "success", icon=5409320020058584473),
+            style_btn("🟡 𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩)", "pg_c|spam|1", "primary", icon=5408995930416362034)
         ],
-        [style_btn("🎯 𝐌𝐨𝐫𝐞 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐅𝐢𝐥𝐭𝐞𝐫𝐬 (𝐒𝐭𝐚𝐫𝐬/2𝐅𝐀...)", b"pg_filters|1", "success", icon=5409320020058584473)],
-        [style_btn("🌍 𝐀𝐥𝐥 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬 (𝐅𝐫𝐞𝐬𝐡 & 𝐀𝐥𝐥)", b"pg_c|bulk|1", "primary", icon=6154249597532248059)],
-        [style_btn("🏛️ 𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬 (𝐛𝐲 𝐘𝐞𝐚𝐫)", b"by_years_menu", "primary", icon=5408995930416362034)],
-        [style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐃𝐚𝐬𝐡𝐛𝐨𝐚𝐫𝐝", b"dashboard_main", "danger", icon=6129812419028982717)]
+        [style_btn("🎯 𝐌𝐨𝐫𝐞 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐅𝐢𝐥𝐭𝐞𝐫𝐬 (𝐒𝐭𝐚𝐫𝐬/2𝐅𝐀...)", "pg_filters|1", "success", icon=5409320020058584473)],
+        [style_btn("🌍 𝐀𝐥𝐥 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬 (𝐅𝐫𝐞𝐬𝐡 & 𝐀𝐥𝐥)", "pg_c|bulk|1", "primary", icon=6154249597532248059)],
+        [style_btn("🏛️ 𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬 (𝐛𝐲 𝐘𝐞𝐚𝐫)", "by_years_menu", "primary", icon=5408995930416362034)],
+        [style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐃𝐚𝐬𝐡𝐛𝐨𝐚𝐫𝐝", "dashboard_main", "danger", icon=6129812419028982717)]
     ]
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -178,7 +178,7 @@ async def show_years_catalog(event):
     for y in [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019]:
         label = YEAR_BADGES.get(y, f"📅 {y}")
         btns.append([style_btn(label, f"c_by_yr|{y}|1", "primary", icon=5408995930416362034)])
-    btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", b"buy_menu_main", "danger", icon=6129812419028982717)])
+    btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)])
     
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -209,7 +209,7 @@ async def show_countries_for_year(event, year, page):
     if offset + limit < total: nav.append(style_btn("𝐍𝐞𝐱𝐭 ➡️", f"c_by_yr|{year}|{page+1}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
     
-    f_btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐘𝐞𝐚𝐫𝐬", b"by_years_menu", "danger", icon=6129812419028982717)])
+    f_btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐘𝐞𝐚𝐫𝐬", "by_years_menu", "danger", icon=6129812419028982717)])
     
     total_pages = (total + limit - 1) // limit
     msg = f"<blockquote>🏛️ <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 𝐟𝐨𝐫 {year} 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> (𝐏𝐚𝐠𝐞 {page}/{total_pages})</blockquote>"
@@ -238,14 +238,14 @@ async def show_countries(event, mode, page):
     
     nav = []
     if page > 1: nav.append(style_btn("⬅️ 𝐏𝐫𝐞𝐯", f"pg_c|{mode}|{page-1}", "primary", icon=6129627894349045589))
-    nav.append(style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡", b"search_country_btn", "primary", icon=5409098988156629257))
+    nav.append(style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡", "search_country_btn", "primary", icon=5409098988156629257))
     if offset + limit < total: nav.append(style_btn("𝐍𝐞𝐱𝐭 ➡️", f"pg_c|{mode}|{page+1}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
     
     back_row = []
     if mode != 'bulk':
-        back_row.append(style_btn("🎯 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐅𝐢𝐥𝐭𝐞𝐫𝐬", b"pg_filters|1", "primary", icon=5409320020058584473))
-    back_row.append(style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", b"buy_menu_main", "danger", icon=6129812419028982717))
+        back_row.append(style_btn("🎯 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐅𝐢𝐥𝐭𝐞𝐫𝐬", "pg_filters|1", "primary", icon=5409320020058584473))
+    back_row.append(style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717))
     f_btns.append(back_row)
     
     total_pages = (total + limit - 1) // limit
@@ -346,7 +346,7 @@ async def confirm_purchase(event, mode, country, year, price):
     else: cat_badge = "🌍 𝐒𝐭𝐚𝐧𝐝𝐚𝐫𝐝"
 
     msg = (f"<blockquote>🎁 <b>𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐔𝐑𝐂𝐇𝐀𝐒𝐄</b> 💎\n\n"
-           f"🏳️ <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {flag} {country}\n"
+           f"🏳️️ <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {flag} {country}\n"
            f"🏷️ <b>𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲:</b> {cat_badge}\n"
            f"📆 <b>𝐘𝐞𝐚𝐫:</b> {badge}\n"
            f"💵 <b>𝐏𝐫𝐢𝐜𝐞:</b> ₹{price}\n\n"
@@ -684,19 +684,19 @@ async def cb_by_years_menu(event):
 
 @bot.on(events.CallbackQuery(pattern=r"^pg_filters\|(\d+)"))
 async def cb_pg_filters(event):
-    page = int(event.pattern_match.group(1))
+    page = int(event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1))
     await show_filters_catalog(event, page)
 
 @bot.on(events.CallbackQuery(pattern=r"^c_by_yr\|(\d+)\|(\d+)"))
 async def cb_c_by_yr(event):
     year = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
-    page = int(event.pattern_match.group(2))
+    page = int(event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2))
     await show_countries_for_year(event, year, page)
 
 @bot.on(events.CallbackQuery(pattern=r"^pg_c\|([^|]+)\|(\d+)"))
 async def cb_pg_c(event):
     mode = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
-    page = int(event.pattern_match.group(2))
+    page = int(event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2))
     await show_countries(event, mode, page)
 
 @bot.on(events.CallbackQuery(pattern=r"^bc\|([^|]+)\|(.+)"))
@@ -767,4 +767,4 @@ async def cb_finish_order(event):
                 await ord_info['client'].disconnect()
         except Exception: pass
         del active_orders[phone]
-    await event.edit(f"✅ <b>Order completed successfully! Thank you.</b>")
+    await event.edit("✅ <b>Order completed successfully! Thank you.</b>")
