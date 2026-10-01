@@ -1,4 +1,4 @@
-From telethon import Button
+from telethon import Button
 from telethon.tl.types import ReplyKeyboardMarkup, KeyboardButtonRow, KeyboardButton, KeyboardButtonStyle
 from config import TERMS_URL, JOIN_URLS
 from database import is_admin, get_support_url, get_fsub_urls
