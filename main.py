@@ -12,14 +12,20 @@ logger = logging.getLogger(__name__)
 
 os.makedirs("sessions", exist_ok=True)
 
-# Plugins, Utilities & Database Functions
+# Plugins, Health Server & Utilities
 from plugins import register_all_handlers
 from utils.health import start_health_server
 
-# Assumptions for state management & helper functions (Ensure these are defined in your utils/config)
-# from utils.helpers import get_countries_list, get_flag_by_country_name, style_btn, COUNTRY_CODES
-# search_state = {}
-# user_states = {}
+# Imports for helpers (Ensure these exist in your helper/utils files, or adjust imports as per project structure)
+try:
+    from utils.helpers import get_countries_list, get_flag_by_country_name, style_btn, COUNTRY_CODES
+except ImportError:
+    # Fallback definitions if imported elsewhere via plugins
+    pass
+
+# Global In-memory States
+search_state = {}
+user_states = {}
 
 def validate_runtime_config():
     missing = []
@@ -60,7 +66,30 @@ async def show_buy_menu(event):
 
 
 # ---------------------------------------------------------
-# HANDLER 1: REPLY KEYBOARD DISPATCHER ("BUY ACCOUNT" FIX)
+# 1. CALLBACK QUERY HANDLER (Search Country & Navigation Buttons)
+# ---------------------------------------------------------
+@bot.on(events.CallbackQuery)
+async def main_callback_handler(event):
+    data = event.data.decode('utf-8') if isinstance(event.data, bytes) else str(event.data)
+    uid = event.sender_id
+
+    if data == "btn_search_country":
+        # Enable search mode
+        search_state[uid] = True
+        user_states[uid] = "AWAITING_COUNTRY"
+        
+        msg = "🔎 <b>𝐄𝐧𝐭𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 𝐍𝐚𝐦𝐞 𝐨𝐫 𝐃𝐢𝐚𝐥 𝐂𝐨𝐝𝐞:</b>\n\n<i>Example: India, +91, USA, +1</i>"
+        await event.edit(msg, buttons=[[style_btn("🔙 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)]])
+
+    elif data == "buy_menu_main":
+        # Reset search mode on back button press
+        search_state[uid] = False
+        user_states[uid] = None
+        await show_buy_menu(event)
+
+
+# ---------------------------------------------------------
+# 2. REPLY KEYBOARD DISPATCHER ("BUY ACCOUNT" Button Fix)
 # ---------------------------------------------------------
 @bot.on(events.NewMessage)
 async def reply_keyboard_dispatcher(event):
@@ -70,7 +99,7 @@ async def reply_keyboard_dispatcher(event):
     text = event.text.strip()
     uid = event.sender_id
 
-    # Strip emojis and punctuation for strict command checking
+    # Clean text to ignore custom emojis/formatting in string comparison
     clean_btn_text = re.sub(r'[^\w\s]', '', text).strip().upper()
 
     # 🛒 BUY ACCOUNT Button Trigger
@@ -80,14 +109,14 @@ async def reply_keyboard_dispatcher(event):
         await show_buy_menu(event)
         raise events.StopPropagation
 
-    # 🔝 RESET STATES ON OTHER NAVIGATION BUTTONS
+    # Reset states when clicking other navigation menu buttons
     elif any(cmd in clean_btn_text for cmd in ["STOCK", "PROFILE", "BALANCE", "START", "CLOSE"]):
         search_state[uid] = False
         user_states[uid] = None
 
 
 # ---------------------------------------------------------
-# HANDLER 2: SEARCH COUNTRY INPUT PROCESSOR
+# 3. SEARCH INPUT PROCESSOR (Country Search Fix)
 # ---------------------------------------------------------
 @bot.on(events.NewMessage)
 async def process_combined_text_input(event):
@@ -96,7 +125,7 @@ async def process_combined_text_input(event):
         
     uid = event.sender_id
     
-    # Process only if search mode is active
+    # Process text input only when user is in search state
     if search_state.get(uid) or user_states.get(uid) == "AWAITING_COUNTRY":
         search_state[uid] = False
         user_states[uid] = None
@@ -151,6 +180,9 @@ async def process_combined_text_input(event):
         )
 
 
+# ---------------------------------------------------------
+# MAIN BOT ASYNC LOOP
+# ---------------------------------------------------------
 async def main():
     # 1. Health server start
     try:
@@ -159,13 +191,13 @@ async def main():
     except Exception as e:
         logger.error(f"⚠️ Health server startup failed: {e}")
 
-    # 2. Enable HTML mode for rendering Custom/Premium Emojis & Formatting
+    # 2. Enable HTML parse mode for Custom/Premium Emojis & Formatting
     bot.parse_mode = 'html'
 
-    # 3. Register all plugin handlers first
+    # 3. Register all plugin handlers
     register_all_handlers(bot)
 
-    # 4. Global Callback Catch-All Handler (To prevent infinite loading spinner)
+    # 4. Global Callback Catch-All Handler (Prevents infinite button loading spinner)
     @bot.on(events.CallbackQuery)
     async def global_callback_debug(e):
         logger.info(f"🔘 CALLBACK RECEIVED: {e.data}")
