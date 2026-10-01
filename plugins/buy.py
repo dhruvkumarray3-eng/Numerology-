@@ -32,20 +32,20 @@ change_number_state = {}
 def get_active_order_card(order, phone, is_admin_user=False):
     fee = get_change_number_fee()
     fee_badge = f" (+₹{fee})" if fee > 0 else " (FREE)"
-    msg = (f"<blockquote expandable>{PE_LIGHTNING} <b>𝐎ʀᴅᴇʀ 𝐀ᴄᴛɪᴠᴇ!</b>\n\n"
-           f"{P_PHONE} <b>𝐏ʜᴏɴᴇ:</b> <code>+{phone}</code>\n"
-           f"{P_FLAG} <b>𝐂ᴏᴜɴᴛʀʏ:</b> {order['c_icon']} {order['country']}\n"
-           f"🔐 <b>2𝐅𝐀 𝐏ᴀssᴡᴏʀᴅ:</b> <code>{order['twofa']}</code>\n\n"
-           f"🔻 <b>𝐈ɴsᴛʀᴜᴄᴛɪᴏɴs:</b>\n"
-           f"1. 𝐎ᴘᴇɴ 𝐓ᴇʟᴇɢʀᴀᴍ & 𝐀ᴅᴅ 𝐀ᴄᴄᴏᴜɴᴛ (<code>+{phone}</code>).\n"
-           f"2. ⏳ <b>𝐏ʟᴇᴀsᴇ ᴡᴀɪᴛ!</b> 𝐓ʜᴇ ʙᴏᴛ ɪs ᴀᴄᴛɪᴠᴇʟʏ ʟɪsᴛᴇɴɪɴɢ ғᴏʀ ʏᴏᴜʀ 𝐎𝐓𝐏.\n\n"
-           f"<i>💡 𝐘ᴏᴜ ᴄᴀɴ ᴀʟsᴏ ᴛᴀᴘ '🔄 𝐂ʜᴀɴɢᴇ ᴛᴏ 𝐌ʏ 𝐍ᴜᴍʙᴇʀ' ᴛᴏ ᴍɪɢʀᴀᴛᴇ ᴛʜɪs ᴀᴄᴄᴏᴜɴᴛ ᴅɪʀᴇᴄᴛʟʏ ᴛᴏ ʏᴏᴜʀ ᴘᴇʀsᴏɴᴀʟ ɴᴜᴍʙᴇʀ!</i></blockquote>")
+    msg = (f"<blockquote expandable>⚡ <b>𝐎𝐑𝐃𝐄𝐑 𝐀𝐂𝐓𝐈𝐕𝐄!</b> 💎\n\n"
+           f"📱 <b>𝐏𝐡𝐨𝐧𝐞:</b> <code>+{phone}</code>\n"
+           f"{order['c_icon']} <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {order['country']}\n"
+           f"🔐 <b>𝟐𝐅𝐀 𝐏𝐚𝐬𝐬𝐰𝐨𝐫𝐝:</b> <code>{order['twofa']}</code>\n\n"
+           f"🔻 <b>𝐈𝐧𝐬𝐭𝐫𝐮𝐜𝐭𝐢𝐨𝐧𝐬:</b>\n"
+           f"1. 𝐎𝐩𝐞𝐧 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 & 𝐀𝐝𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 (<code>+{phone}</code>).\n"
+           f"2. ⏳ <b>𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭!</b> 𝐓𝐡𝐞 ʙᴏᴛ ɪs ᴀᴄᴛɪᴠᴇʟʏ ʟɪsᴛᴇɴɪɴɢ ғᴏʀ ʏᴏᴜʀ 𝐎𝐓𝐏.\n\n"
+           f"<i>✨ 𝐘𝐨𝐮 𝐜𝐚𝐧 𝐚𝐥𝐬𝐨 𝐭𝐚𝐩 '🔄 𝐂𝐡𝐚𝐧𝐠𝐞 𝐭𝐨 𝐌𝐲 𝐍𝐮𝐦𝐛𝐞𝐫' 𝐭𝐨 𝐦𝐢𝐠𝐫𝐚𝐭𝐞 𝐭𝐡𝐢𝐬 𝐚𝐜𝐜𝐨𝐮𝐧𝐭 𝐝𝐢𝐫𝐞𝐜𝐭𝐥𝐲!</i></blockquote>")
     
     btns = [
-        [style_btn(f"🔄 𝐂ʜᴀɴɢᴇ ᴛᴏ 𝐌ʏ 𝐍ᴜᴍʙᴇʀ{fee_badge}", f"chg_num|{phone}", "success", icon=5409320020058584473)],
+        [style_btn(f"🔄 𝐂𝐡𝐚𝐧𝐠𝐞 𝐭𝐨 𝐌𝐲 𝐍𝐮𝐦𝐛𝐞𝐫{fee_badge}", f"chg_num|{phone}", "success", icon=5409320020058584473)],
         [
-            style_btn("🔄 𝐆ᴇᴛ 𝐎𝐓𝐏 𝐀ɢᴀɪɴ", f"get_otp_again|{phone}", "primary", icon=5408995930416362034),
-            style_btn("✅ 𝐅ɪɴɪsʜ 𝐎ʀᴅᴇʀ", f"finish_order|{phone}", "primary", icon=5409320020058584473)
+            style_btn("🔄 𝐆𝐞𝐭 𝐎𝐓𝐏 𝐀𝐠𝐚𝐢𝐧", f"get_otp_again|{phone}", "primary", icon=5408995930416362034),
+            style_btn("✅ 𝐅𝐢𝐧𝐢𝐬𝐡 𝐎𝐫𝐝𝐞𝐫", f"finish_order|{phone}", "primary", icon=5409320020058584473)
         ]
     ]
     if is_admin_user:
@@ -53,7 +53,6 @@ def get_active_order_card(order, phone, is_admin_user=False):
     return msg, btns
 
 async def get_countries_list():
-    """Retrieve available countries based on bot_mode."""
     bot_mode = get_bot_mode()
     
     if bot_mode == 'manual':
@@ -92,49 +91,29 @@ YEAR_BADGES = {
     2019: "⚡ 2019 & Older (Vintage)"
 }
 
-async def search_countries_matching(query):
-    query_clean = query.strip().lower()
-    dial_code = re.sub(r'[^\d]', '', query_clean)
-    all_countries = await get_countries_list()
-    
-    matches = []
-    for c_name, count in all_countries:
-        if query_clean in c_name.lower():
-            matches.append((c_name, count))
-            continue
-        if dial_code:
-            for code, (name, _) in COUNTRY_CODES.items():
-                if name == c_name and dial_code == code:
-                    matches.append((c_name, count))
-        lzt_code = get_lzt_code(c_name)
-        if lzt_code and query_clean == lzt_code.lower():
-            matches.append((c_name, count))
-            continue
-    return matches
-
 FILTERS_LIST = [
-    ("stars", "⭐ 𝐓ᴇʟᴇɢʀᴀᴍ 𝐒ᴛᴀʀs (𝐁ᴀʟᴀɴᴄᴇ)", 5409320020058584473),
-    ("premium", "👑 𝐓ᴇʟᴇɢʀᴀᴍ 𝐏ʀᴇᴍɪᴜᴍ", 5408995930416362034),
-    ("no_email", "🚫 𝐍ᴏ 𝐄ᴍᴀɪʟ 𝐁ᴏᴜɴᴅ (𝐃ɪʀᴇᴄᴛ 𝐎𝐓𝐏)", 5409320020058584473),
-    ("with_email", "📧 𝐄ᴍᴀɪʟ 𝐁ᴏᴜɴᴅ (𝐖ɪᴛʜ 𝐌ᴀɪʟ)", 5408995930416362034),
-    ("no_2fa", "🔓 𝐍ᴏ 2𝐅𝐀 (1-𝐂ʟɪᴄᴋ 𝐋ᴏɢɪɴ)", 5409320020058584473),
-    ("with_2fa", "🔒 2𝐅𝐀 𝐄ɴᴀʙʟᴇᴅ (𝐏ᴀss 𝐈ɴᴄʟᴜᴅᴇᴅ)", 5408995930416362034),
-    ("dc5", "🌐 𝐃𝐂 5 (𝐀sɪᴀ / 𝐈ɴᴅɪᴀ 𝐏ɪɴɢ)", 5409320020058584473),
-    ("aged", "🏛️ 𝐀ɢᴇᴅ / 𝐎ʟᴅ 𝐀ᴄᴄᴏᴜɴᴛs", 5408995930416362034),
+    ("stars", "⭐ 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 𝐒𝐭𝐚𝐫𝐬 (𝐁𝐚𝐥𝐚𝐧𝐜𝐞)", 5409320020058584473),
+    ("premium", "👑 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 𝐏𝐫𝐞𝐦𝐢𝐮𝐦", 5408995930416362034),
+    ("no_email", "🚫 𝐍𝐨 𝐄𝐦𝐚𝐢𝐥 𝐁𝐨𝐮𝐧𝐝 (𝐃𝐢𝐫𝐞𝐜𝐭 𝐎𝐓𝐏)", 5409320020058584473),
+    ("with_email", "📧 𝐄𝐦𝐚𝐢𝐥 𝐁𝐨𝐮𝐧𝐝 (𝐖𝐢𝐭𝐡 𝐌𝐚𝐢𝐥)", 5408995930416362034),
+    ("no_2fa", "🔓 𝐍𝐨 𝟐𝐅𝐀 (𝟏-𝐂𝐥𝐢𝐜𝐤 𝐋𝐨𝐠𝐢𝐧)", 5409320020058584473),
+    ("with_2fa", "🔒 𝟐𝐅𝐀 𝐄𝐧𝐚𝐛𝐥𝐞𝐝 (𝐏𝐚𝐬𝐬 𝐈𝐧𝐜𝐥𝐮𝐝𝐞𝐝)", 5408995930416362034),
+    ("dc5", "🌐 𝐃𝐂 𝟓 (𝐀𝐬𝐢𝐚 / 𝐈𝐧𝐝𝐢𝐚 𝐏𝐢𝐧𝐠)", 5409320020058584473),
+    ("aged", "🏛️ 𝐀𝐠𝐞𝐝 / 𝐎𝐥𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬", 5408995930416362034),
 ]
 
 FILTER_BADGES = {
-    "stars": "⭐ 𝐓ᴇʟᴇɢʀᴀᴍ 𝐒ᴛᴀʀs",
-    "premium": "👑 𝐓ᴇʟᴇɢʀᴀᴍ 𝐏ʀᴇᴍɪᴜᴍ",
-    "no_email": "🚫 𝐍ᴏ 𝐄ᴍᴀɪʟ 𝐁ᴏᴜɴᴅ (𝐃ɪʀᴇᴄᴛ 𝐎𝐓𝐏)",
-    "with_email": "📧 𝐄ᴍᴀɪʟ 𝐁ᴏᴜɴᴅ (𝐖ɪᴛʜ 𝐌ᴀɪʟ)",
-    "nonspam": "🟢 𝐍ᴏɴ-𝐒ᴘᴀᴍ (100% 𝐂ʟᴇᴀɴ)",
-    "spam": "🟡 𝐒ᴘᴀᴍ / 𝐔sᴇᴅ (𝐂ʜᴇᴀᴘ)",
-    "no_2fa": "🔓 𝐍ᴏ 2𝐅𝐀 (1-𝐂ʟɪᴄᴋ 𝐋ᴏɢɪɴ)",
-    "with_2fa": "🔒 2𝐅𝐀 𝐄ɴᴀʙʟᴇᴅ (𝐏ᴀss 𝐈ɴᴄʟᴜᴅᴇᴅ)",
-    "dc5": "🌐 𝐃𝐂 5 (𝐀sɪᴀ)",
-    "aged": "🏛️ 𝐀ɢᴇᴅ / 𝐎ʟᴅ",
-    "bulk": "🌍 𝐒ᴛᴀɴᴅᴀʀᴅ"
+    "stars": "⭐ 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 𝐒𝐭𝐚𝐫𝐬",
+    "premium": "👑 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 𝐏𝐫𝐞𝐦𝐢𝐮𝐦",
+    "no_email": "🚫 𝐍𝐨 𝐄𝐦𝐚𝐢𝐥 𝐁𝐨𝐮𝐧𝐝 (𝐃𝐢𝐫𝐞𝐜𝐭 𝐎𝐓𝐏)",
+    "with_email": "📧 𝐄𝐦𝐚𝐢𝐥 𝐁𝐨𝐮𝐧𝐝 (𝐖𝐢𝐭𝐡 𝐌𝐚𝐢𝐥)",
+    "nonspam": "🟢 𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 (𝟏𝟎𝟎% 𝐂𝐥𝐞𝐚𝐧)",
+    "spam": "🟡 𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩)",
+    "no_2fa": "🔓 𝐍𝐨 𝟐𝐅𝐀 (𝟏-𝐂𝐥𝐢𝐜𝐤 𝐋𝐨𝐠𝐢𝐧)",
+    "with_2fa": "🔒 𝟐𝐅𝐀 𝐄𝐧𝐚𝐛𝐥𝐞𝐝 (𝐏𝐚𝐬𝐬 𝐈𝐧𝐜𝐥𝐮𝐝𝐞𝐝)",
+    "dc5": "🌐 𝐃𝐂 𝟓 (𝐀𝐬𝐢𝐚)",
+    "aged": "🏛️ 𝐀𝐠𝐞𝐝 / 𝐎𝐥𝐝",
+    "bulk": "🌍 𝐒𝐭𝐚𝐧𝐝𝐚𝐫𝐝"
 }
 
 async def show_filters_catalog(event, page=1):
@@ -144,8 +123,8 @@ async def show_filters_catalog(event, page=1):
     total = len(FILTERS_LIST)
     total_pages = (total + limit - 1) // limit
 
-    msg = (f"<blockquote>🎯 <b>𝐒ᴇʟᴇᴄᴛ ᴀɴ 𝐀ᴄᴄᴏᴜɴᴛ 𝐅ɪʟᴛᴇʀ:</b> (𝐏ᴀɢᴇ {page}/{total_pages})\n\n"
-           f"<i>𝐂ʜᴏᴏsᴇ ᴀ sᴘᴇᴄɪғɪᴄ ᴀᴄᴄᴏᴜɴᴛ ᴛʏᴘᴇ ʙᴇʟᴏᴡ ᴛᴏ ʙʀᴏᴡsᴇ ᴄᴏᴜɴᴛʀɪᴇs:</i></blockquote>")
+    msg = (f"<blockquote>🎯 <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐚𝐧 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐅𝐢𝐥𝐭𝐞𝐫:</b> (𝐏𝐚𝐠𝐞 {page}/{total_pages})\n\n"
+           f"<i>✨ 𝐂𝐡𝐨𝐨𝐬𝐞 𝐚 𝐬𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐚𝐜𝐜𝐨𝐮𝐧𝐭 𝐭𝐲𝐩𝐞 𝐛𝐞𝐥𝐨𝐰 𝐭𝐨 𝐛𝐫𝐨𝐰𝐬𝐞 𝐜𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬:</i></blockquote>")
     
     btns = []
     for f_id, label, icon in items:
@@ -155,11 +134,11 @@ async def show_filters_catalog(event, page=1):
             btns.append([style_btn(label, f"pg_c|{f_id}|1", "primary", icon=icon)])
 
     nav = []
-    if page > 1: nav.append(style_btn("⬅️ 𝐏ʀᴇᴠ", f"pg_filters|{page-1}", "primary", icon=6129627894349045589))
-    if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"pg_filters|{page+1}", "primary", icon=6129732880529628243))
+    if page > 1: nav.append(style_btn("⬅️ 𝐏𝐫𝐞𝐯", f"pg_filters|{page-1}", "primary", icon=6129627894349045589))
+    if offset + limit < total: nav.append(style_btn("𝐍𝐞𝐱𝐭 ➡️", f"pg_filters|{page+1}", "primary", icon=6129732880529628243))
     if nav: btns.append(nav)
 
-    btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)])
+    btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", b"buy_menu_main", "danger", icon=6129812419028982717)])
 
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -168,23 +147,23 @@ async def show_filters_catalog(event, page=1):
         await event.respond(msg, buttons=btns)
 
 async def show_buy_menu(event):
-    msg = (f"<blockquote>{PE_GIFT} <b>𝐒ᴇʟᴇᴄᴛ 𝐀ᴄᴄᴏᴜɴᴛ 𝐂ᴀᴛᴇɢᴏʀʏ:</b>\n\n"
-           f"🔍 <b>𝐒ᴇᴀʀᴄʜ 𝐂ᴏᴜɴᴛʀʏ:</b> 𝐐ᴜɪᴄᴋ ʟᴏᴏᴋᴜᴘ ʙʏ ɴᴀᴍᴇ ᴏʀ ᴅɪᴀʟ ᴄᴏᴅᴇ (+91, +55...)\n"
-           f"🟢 <b>𝐍ᴏɴ-𝐒ᴘᴀᴍ / 𝐂ʟᴇᴀɴ:</b> 100% 𝐒ᴘᴀᴍʙʟᴏᴄᴋ-𝐅ʀᴇᴇ (𝐃𝐌 & 𝐏ᴇʀsᴏɴᴀʟ 𝐔sᴇ).\n"
-           f"🟡 <b>𝐒ᴘᴀᴍ / 𝐔sᴇᴅ (𝐂ʜᴇᴀᴘ):</b> 𝐁ᴜᴅɢᴇᴛ 𝐀ᴄᴄᴏᴜɴᴛs (𝐂ʜᴀɴɴᴇʟ 𝐉ᴏɪɴᴇʀs & 𝐌ᴇᴍʙᴇʀs).\n"
-           f"🎯 <b>𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs:</b> 𝐒ᴛᴀʀs, 𝐄ᴍᴀɪʟ, 2𝐅𝐀, 𝐏ʀᴇᴍɪᴜᴍ, 𝐃𝐂...\n"
-           f"🌍 <b>𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs:</b> 𝐁ʀᴏᴡsᴇ 50+ ᴄᴏᴜɴᴛʀɪᴇs sᴛᴏᴄᴋ (𝐅ʀᴇsʜ & 𝐀ʟʟ).\n"
-           f"🏛️ <b>𝐎ʟᴅ / 𝐀ɢᴇᴅ 𝐀ᴄᴄᴏᴜɴᴛs:</b> 𝐅ɪʟᴛᴇʀ ʙʏ 𝐒ᴘᴇᴄɪғɪᴄ 𝐘ᴇᴀʀ (2025, 2024, 2023...).</blockquote>")
+    msg = (f"<blockquote>🎁 <b>𝐒𝐄𝐋𝐄𝐂𝐓 𝐀𝐂𝐂𝐎𝐔𝐍𝐓 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘</b> 💎\n\n"
+           f"🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> 𝐐𝐮𝐢𝐜𝐤 𝐥𝐨𝐨𝐤𝐮𝐩 𝐛𝐲 𝐧𝐚𝐦𝐞 𝐨𝐫 𝐝𝐢𝐚𝐥 𝐜𝐨𝐝𝐞 (+91, +55...)\n"
+           f"🟢 <b>𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 / 𝐂𝐥𝐞𝐚𝐧:</b> 100% 𝐒𝐩𝐚𝐦𝐛𝐥𝐨𝐜𝐤-𝐅𝐫𝐞𝐞 (𝐃𝐌 & 𝐏𝐞𝐫𝐬𝐨𝐧𝐚𝐥 𝐔𝐬𝐞).\n"
+           f"🟡 <b>𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩):</b> 𝐁𝐮𝐝𝐠𝐞𝐭 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬 (𝐂𝐡𝐚𝐧𝐧𝐞𝐥 𝐉𝐨𝐢𝐧𝐞𝐫𝐬 & 𝐌𝐞𝐦𝐛𝐞𝐫𝐬).\n"
+           f"🎯 <b>𝐌𝐨𝐫𝐞 𝐅𝐢𝐥𝐭𝐞𝐫𝐬:</b> 𝐒𝐭𝐚𝐫𝐬, 𝐄𝐦𝐚𝐢𝐥, 2𝐅𝐀, 𝐏𝐫𝐞𝐦𝐢𝐮𝐦, 𝐃𝐂...\n"
+           f"🌍 <b>𝐀𝐥𝐥 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬:</b> 𝐁𝐫𝐨𝐰𝐬𝐞 50+ 𝐜𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬 𝐬𝐭𝐨𝐜𝐤 (𝐅𝐫𝐞𝐬𝐡 & 𝐀𝐥𝐥).\n"
+           f"🏛️️ <b>𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> 𝐅𝐢𝐥𝐭𝐞𝐫 𝐛𝐲 𝐒𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐘𝐞𝐚𝐫 (2025, 2024, 2023...).</blockquote>")
     btns = [
-        [style_btn("🔍 𝐒ᴇᴀʀᴄʜ 𝐂ᴏᴜɴᴛʀʏ", b"search_country_btn", "primary", icon=5409098988156629257)],
+        [style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", b"search_country_btn", "primary", icon=5409098988156629257)],
         [
-            style_btn("🟢 𝐍ᴏɴ-𝐒ᴘᴀᴍ / 𝐂ʟᴇᴀɴ", b"pg_c|nonspam|1", "success", icon=5409320020058584473),
-            style_btn("🟡 𝐒ᴘᴀᴍ / 𝐔sᴇᴅ (𝐂ʜᴇᴀᴘ)", b"pg_c|spam|1", "primary", icon=5408995930416362034)
+            style_btn("🟢 𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 / 𝐂𝐥𝐞𝐚𝐧", b"pg_c|nonspam|1", "success", icon=5409320020058584473),
+            style_btn("🟡 𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩)", b"pg_c|spam|1", "primary", icon=5408995930416362034)
         ],
-        [style_btn("🎯 𝐌ᴏʀᴇ 𝐀ᴄᴄᴏᴜɴᴛ 𝐅ɪʟᴛᴇʀs (𝐒ᴛᴀʀs/2𝐅𝐀...)", b"pg_filters|1", "success", icon=5409320020058584473)],
-        [style_btn("🌍 𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs (𝐅ʀᴇsʜ & 𝐀ʟʟ)", b"pg_c|bulk|1", "primary", icon=6154249597532248059)],
-        [style_btn("🏛️ 𝐎ʟᴅ / 𝐀ɢᴇᴅ 𝐀ᴄᴄᴏᴜɴᴛs (ʙʏ 𝐘ᴇᴀʀ)", b"by_years_menu", "primary", icon=5408995930416362034)],
-        [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)]
+        [style_btn("🎯 𝐌𝐨𝐫𝐞 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐅𝐢𝐥𝐭𝐞𝐫𝐬 (𝐒𝐭𝐚𝐫𝐬/2𝐅𝐀...)", b"pg_filters|1", "success", icon=5409320020058584473)],
+        [style_btn("🌍 𝐀𝐥𝐥 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬 (𝐅𝐫𝐞𝐬𝐡 & 𝐀𝐥𝐥)", b"pg_c|bulk|1", "primary", icon=6154249597532248059)],
+        [style_btn("🏛️ 𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬 (𝐛𝐲 𝐘𝐞𝐚𝐫)", b"by_years_menu", "primary", icon=5408995930416362034)],
+        [style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐃𝐚𝐬𝐡𝐛𝐨𝐚𝐫𝐝", b"dashboard_main", "danger", icon=6129812419028982717)]
     ]
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -193,13 +172,13 @@ async def show_buy_menu(event):
         await event.respond(msg, buttons=btns)
 
 async def show_years_catalog(event):
-    msg = (f"<blockquote>🏛️ <b>𝐒ᴇʟᴇᴄᴛ 𝐀ᴄᴄᴏᴜɴᴛ 𝐘ᴇᴀʀ (𝐀ɢᴇ):</b>\n\n"
-           f"<i>𝐀ɢᴇᴅ ᴀᴄᴄᴏᴜɴᴛs ʜᴀᴠᴇ ʜɪɢʜᴇʀ ᴛʀᴜsᴛ, ʟᴏᴡᴇʀ ʙᴀɴ ʀᴀᴛᴇs, ᴀɴᴅ ʟᴏɴɢᴇʀ ʜɪsᴛᴏʀʏ!</i></blockquote>")
+    msg = (f"<blockquote>🏛️ <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐘𝐞𝐚𝐫 (𝐀𝐠𝐞):</b>\n\n"
+           f"<i>👑 𝐀𝐠𝐞𝐝 𝐚𝐜𝐜𝐨𝐮𝐧𝐭𝐬 𝐡𝐚𝐯𝐞 𝐡𝐢𝐠𝐡𝐞𝐫 𝐭𝐫𝐮𝐬𝐭, 𝐥𝐨𝐰𝐞𝐫 𝐛𝐚𝐧 𝐫𝐚𝐭𝐞𝐬, 𝐚𝐧𝐝 𝐥𝐨𝐧𝐠𝐞𝐫 𝐡𝐢𝐬𝐭𝐨𝐫𝐲!</i></blockquote>")
     btns = []
     for y in [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019]:
         label = YEAR_BADGES.get(y, f"📅 {y}")
         btns.append([style_btn(label, f"c_by_yr|{y}|1", "primary", icon=5408995930416362034)])
-    btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)])
+    btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", b"buy_menu_main", "danger", icon=6129812419028982717)])
     
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -215,25 +194,25 @@ async def show_countries_for_year(event, year, page):
     countries = countries_all[offset:offset+limit]
     
     if not countries:
-        return await event.respond(f"{P_WARN} 𝐍ᴏ sᴛᴏᴄᴋ ᴀᴠᴀɪʟᴀʙʟᴇ ғᴏʀ {year} ᴀᴛ ᴛʜᴇ ᴍᴏᴍᴇɴᴛ.")
+        return await event.respond(f"⚠️ 𝐍𝐨 𝐬𝐭𝐨𝐜𝐤 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 {year} 𝐚𝐭 𝐭𝐡𝐞 𝐦𝐨𝐦𝐞𝐧𝐭.")
 
     btns = []
     for c_name, count in countries:
         flag = get_flag_by_country_name(c_name)
         price = get_panel_price(c_name, year)
-        btns.append(style_btn(f"{flag} {c_name} — {P_INR}{price}", f"by|bulk|{c_name}|{year}|{price}", "primary", icon=6154249597532248059))
+        btns.append(style_btn(f"{flag} {c_name} — ₹{price}", f"by|bulk|{c_name}|{year}|{price}", "primary", icon=6154249597532248059))
         
     f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
     
     nav = []
-    if page > 1: nav.append(style_btn("⬅️ 𝐏ʀᴇᴠ", f"c_by_yr|{year}|{page-1}", "primary", icon=6129627894349045589))
-    if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"c_by_yr|{year}|{page+1}", "primary", icon=6129732880529628243))
+    if page > 1: nav.append(style_btn("⬅️ 𝐏𝐫𝐞𝐯", f"c_by_yr|{year}|{page-1}", "primary", icon=6129627894349045589))
+    if offset + limit < total: nav.append(style_btn("𝐍𝐞𝐱𝐭 ➡️", f"c_by_yr|{year}|{page+1}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
     
-    f_btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐘ᴇᴀʀs", b"by_years_menu", "danger", icon=6129812419028982717)])
+    f_btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐘𝐞𝐚𝐫𝐬", b"by_years_menu", "danger", icon=6129812419028982717)])
     
     total_pages = (total + limit - 1) // limit
-    msg = f"<blockquote>🏛️ <b>𝐒ᴇʟᴇᴄᴛ 𝐂ᴏᴜɴᴛʀʏ ғᴏʀ {year} 𝐀ᴄᴄᴏᴜɴᴛs:</b> (𝐏ᴀɢᴇ {page}/{total_pages})</blockquote>"
+    msg = f"<blockquote>🏛️ <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 𝐟𝐨𝐫 {year} 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> (𝐏𝐚𝐠𝐞 {page}/{total_pages})</blockquote>"
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=f_btns)
         except MessageNotModifiedError: pass
@@ -247,7 +226,7 @@ async def show_countries(event, mode, page):
     countries = countries_all[offset:offset+limit]
     
     if not countries:
-        return await event.respond(f"{P_WARN} 𝐍ᴏ sᴛᴏᴄᴋ ᴀᴠᴀɪʟᴀʙʟᴇ ᴀᴛ ᴛʜᴇ ᴍᴏᴍᴇɴᴛ. 𝐏ʟᴇᴀsᴇ ᴄʜᴇᴄᴋ ʙᴀᴄᴋ ʟᴀᴛᴇʀ!")
+        return await event.respond(f"⚠️ 𝐍𝐨 𝐬𝐭𝐨𝐜𝐤 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐚𝐭 𝐭𝐡𝐞 𝐦𝐨𝐦𝐞𝐧𝐭. 𝐏𝐥𝐞𝐚𝐬𝐞 𝐜𝐡𝐞𝐜𝐤 𝐛𝐚𝐜𝐤 𝐥𝐚𝐭𝐞𝐫!")
 
     btns = []
     for c_name, count in countries:
@@ -258,24 +237,24 @@ async def show_countries(event, mode, page):
     f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
     
     nav = []
-    if page > 1: nav.append(style_btn("⬅️ 𝐏ʀᴇᴠ", f"pg_c|{mode}|{page-1}", "primary", icon=6129627894349045589))
-    nav.append(style_btn("🔍 𝐒ᴇᴀʀᴄʜ", b"search_country_btn", "primary", icon=5409098988156629257))
-    if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"pg_c|{mode}|{page+1}", "primary", icon=6129732880529628243))
+    if page > 1: nav.append(style_btn("⬅️ 𝐏𝐫𝐞𝐯", f"pg_c|{mode}|{page-1}", "primary", icon=6129627894349045589))
+    nav.append(style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡", b"search_country_btn", "primary", icon=5409098988156629257))
+    if offset + limit < total: nav.append(style_btn("𝐍𝐞𝐱𝐭 ➡️", f"pg_c|{mode}|{page+1}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
     
     back_row = []
     if mode != 'bulk':
-        back_row.append(style_btn("🎯 𝐁ᴀᴄᴋ ᴛᴏ 𝐅ɪʟᴛᴇʀs", b"pg_filters|1", "primary", icon=5409320020058584473))
-    back_row.append(style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717))
+        back_row.append(style_btn("🎯 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐅𝐢𝐥𝐭𝐞𝐫𝐬", b"pg_filters|1", "primary", icon=5409320020058584473))
+    back_row.append(style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", b"buy_menu_main", "danger", icon=6129812419028982717))
     f_btns.append(back_row)
     
     total_pages = (total + limit - 1) // limit
     if mode in FILTER_BADGES and mode != 'bulk':
-        cat_header = f"🎯 <b>𝐒ᴇʟᴇᴄᴛ 𝐂ᴏᴜɴᴛʀʏ ({FILTER_BADGES[mode]}):</b>"
+        cat_header = f"🎯 <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 ({FILTER_BADGES[mode]}):</b>"
     else:
-        cat_header = f"{PE_LOCATION} <b>𝐒ᴇʟᴇᴄᴛ ᴀ 𝐂ᴏᴜɴᴛʀʏ:</b>"
+        cat_header = f"📍 <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐚 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b>"
 
-    msg = f"<blockquote>{cat_header} (𝐏ᴀɢᴇ {page}/{total_pages})</blockquote>"
+    msg = f"<blockquote>{cat_header} (𝐏𝐚𝐠𝐞 {page}/{total_pages})</blockquote>"
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=f_btns)
         except MessageNotModifiedError: pass
@@ -338,19 +317,19 @@ async def show_years(event, mode, country):
         y, count, price = opt['year'], opt['count'], opt['price']
         badge = YEAR_BADGES.get(int(y) if str(y).isdigit() else y, f"📅 {y}")
         cnt_text = f"({count} left)" if isinstance(count, int) else f"({count})"
-        btns.append([style_btn(f"{badge} — {P_INR}{price} {cnt_text}", f"by|{mode}|{country}|{y}|{price}", "primary", icon=5408995930416362034)])
+        btns.append([style_btn(f"{badge} — ₹{price} {cnt_text}", f"by|{mode}|{country}|{y}|{price}", "primary", icon=5408995930416362034)])
     
     if mode != 'bulk':
-        btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐂ᴏᴜɴᴛʀɪᴇs", f"pg_c|{mode}|1", "danger", icon=6129812419028982717)])
+        btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬", f"pg_c|{mode}|1", "danger", icon=6129812419028982717)])
     else:
-        btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐂ᴏᴜɴᴛʀɪᴇs", "pg_c|bulk|1", "danger", icon=6129812419028982717)])
+        btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬", "pg_c|bulk|1", "danger", icon=6129812419028982717)])
     
     if mode in FILTER_BADGES and mode != 'bulk':
         cat_label = f" ({FILTER_BADGES[mode]})"
     else:
         cat_label = ""
     
-    await event.edit(f"<blockquote>{flag} <b>𝐒ᴇʟᴇᴄᴛ 𝐘ᴇᴀʀ & 𝐏ʀɪᴄᴇ ғᴏʀ {country}{cat_label}:</b></blockquote>", buttons=btns)
+    await event.edit(f"<blockquote>{flag} <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐘𝐞𝐚𝐫 & 𝐏𝐫𝐢𝐜𝐞 𝐟𝐨𝐫 {country}{cat_label}:</b></blockquote>", buttons=btns)
 
 async def confirm_purchase(event, mode, country, year, price):
     if "|" in country:
@@ -362,19 +341,19 @@ async def confirm_purchase(event, mode, country, year, price):
     flag = get_flag_by_country_name(country)
     badge = YEAR_BADGES.get(int(year) if str(year).isdigit() else year, f"📅 {year}")
     
-    if mode == 'nonspam': cat_badge = "🟢 𝐍ᴏɴ-𝐒ᴘᴀᴍ (100% 𝐂ʟᴇᴀɴ)"
-    elif mode == 'spam': cat_badge = "🟡 𝐒ᴘᴀᴍ / 𝐔sᴇᴅ (𝐂ʜᴇᴀᴘ)"
-    else: cat_badge = "🌍 𝐒ᴛᴀɴᴅᴀʀᴅ"
+    if mode == 'nonspam': cat_badge = "🟢 𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 (𝟏𝟎𝟎% 𝐂𝐥𝐞𝐚𝐧)"
+    elif mode == 'spam': cat_badge = "🟡 𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩)"
+    else: cat_badge = "🌍 𝐒𝐭𝐚𝐧𝐝𝐚𝐫𝐝"
 
-    msg = (f"<blockquote>{PE_GIFT} <b>𝐂ᴏɴғɪʀᴍ 𝐏ᴜʀᴄʜᴀsᴇ</b>\n\n"
-           f"{P_FLAG} <b>𝐂ᴏᴜɴᴛʀʏ:</b> {flag} {country}\n"
-           f"🏷️ <b>𝐂ᴀᴛᴇɢᴏʀʏ:</b> {cat_badge}\n"
-           f"📆 <b>𝐘ᴇᴀʀ:</b> {badge}\n"
-           f"{P_MONEY} <b>𝐏ʀɪᴄᴇ:</b> {P_INR}{price}\n\n"
-           f"<b>𝐀ʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ?</b></blockquote>")
+    msg = (f"<blockquote>🎁 <b>𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐔𝐑𝐂𝐇𝐀𝐒𝐄</b> 💎\n\n"
+           f"🏳️ <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {flag} {country}\n"
+           f"🏷️ <b>𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲:</b> {cat_badge}\n"
+           f"📆 <b>𝐘𝐞𝐚𝐫:</b> {badge}\n"
+           f"💵 <b>𝐏𝐫𝐢𝐜𝐞:</b> ₹{price}\n\n"
+           f"<b>✨ 𝐀𝐫𝐞 𝐲𝐨𝐮 𝐬𝐮𝐫𝐞 𝐲𝐨𝐮 𝐰𝐚𝐧𝐭 𝐭𝐨 𝐛𝐮𝐲?</b></blockquote>")
     btns = [
-        [style_btn("✅ 𝐂ᴏɴғɪʀᴍ 𝐁ᴜʏ", f"buy_cf|{mode}|{country}|{year}|{price}", "success", icon=5409320020058584473)],
-        [style_btn("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action", "danger", icon=6129888444245089008)]
+        [style_btn("✅ 𝐂𝐨𝐧𝐟𝐢𝐫𝐦 𝐁𝐮𝐲", f"buy_cf|{mode}|{country}|{year}|{price}", "success", icon=5409320020058584473)],
+        [style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129888444245089008)]
     ]
     await event.edit(msg, buttons=btns)
 
@@ -404,7 +383,7 @@ async def process_purchase(event, mode, country, year, price_str):
         elif mode == 'no_2fa':
             local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
         elif mode == 'with_2fa':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, int(year))).fetchone()
+            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, int(year))).fetchone()
         else:
             local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 LIMIT 1", (country, int(year))).fetchone()
         
@@ -428,7 +407,7 @@ async def process_purchase(event, mode, country, year, price_str):
     actual_year = int(year)
 
     if is_local:
-        await event.edit(f"{PE_LIGHTNING} <b>𝐏ʀᴏᴄᴇssɪɴɢ ʏᴏᴜʀ ᴏʀᴅᴇʀ...</b>\n𝐏ʟᴇᴀsᴇ ᴡᴀɪᴛ ᴡʜɪʟᴇ ᴡᴇ ɪɴɪᴛɪᴀʟɪᴢᴇ ᴛʜᴇ sᴇssɪᴏɴ.")
+        await event.edit(f"⚡ <b>𝐏𝐫𝐨𝐜𝐞𝐬𝐬𝐢𝐧𝐠 𝐲𝐨𝐮𝐫 𝐨𝐫𝐝𝐞𝐫...</b>\n𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭 𝐰𝐡𝐢𝐥𝐞 𝐰𝐞 𝐢𝐧𝐢𝐭𝐢𝐚𝐥𝐢𝐳𝐞 𝐭𝐡𝐞 𝐬𝐞𝐬𝐬𝐢𝐨𝐧.")
         
         client = TelegramClient(sess, API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
         try:
@@ -443,7 +422,7 @@ async def process_purchase(event, mode, country, year, price_str):
                 cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                 cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
                 db.commit()
-            return await event.edit(f"{P_NO} <b>Error initializing account. (Session Dead)</b> Money refunded.")
+            return await event.edit(f"❌ <b>Error initializing account. (Session Dead)</b> Money refunded.")
 
         temp_order = {'c_icon': c_icon, 'country': country, 'twofa': twofa_pass}
         msg, active_btns = get_active_order_card(temp_order, phone, is_admin(uid))
@@ -456,7 +435,7 @@ async def process_purchase(event, mode, country, year, price_str):
         }
         asyncio.create_task(auto_otp_task(phone))
     else:
-        await event.edit(f"{PE_LIGHTNING} <b>𝐏ʀᴏᴄᴇssɪɴɢ ʏᴏᴜʀ ᴏʀᴅᴇʀ...</b>\n𝐏ʟᴇᴀsᴇ ᴡᴀɪᴛ ᴡʜɪʟᴇ ᴡᴇ ɪɴɪᴛɪᴀʟɪᴢᴇ ᴛʜᴇ sᴇssɪᴏɴ.")
+        await event.edit(f"⚡ <b>𝐏𝐫𝐨𝐜𝐞𝐬𝐬𝐢𝐧𝐠 𝐲𝐨𝐮𝐫 𝐨𝐫𝐝𝐞𝐫...</b>\n𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭 𝐰𝐡𝐢𝐥𝐞 𝐰𝐞 𝐢𝐧𝐢𝐭𝐢𝐚𝐥𝐢𝐳𝐞 𝐭𝐡𝐞 𝐬𝐞𝐬𝐬𝐢𝐨𝐧.")
         try:
             items = await lzt_client.search_items(country, actual_year, mode=mode)
             if not items:
@@ -466,7 +445,7 @@ async def process_purchase(event, mode, country, year, price_str):
                 async with get_user_lock(uid):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
-                return await event.edit(f"<blockquote>{P_NO} <b>❌ 𝐎ᴜᴛ ᴏғ 𝐒ᴛᴏᴄᴋ!</b>\n\n𝐍ᴏ ᴀᴄᴄᴏᴜɴᴛs ᴀʀᴇ ᴄᴜʀʀᴇɴᴛʟʏ ᴀᴠᴀɪʟᴀʙʟᴇ ғᴏʀ <b>{c_icon} {country}</b>.\n𝐘ᴏᴜʀ ᴍᴏɴᴇʏ (<b>{P_INR}{final_price}</b>) ʜᴀs ʙᴇᴇɴ <b>ɪɴsᴛᴀɴᴛʟʏ ʀᴇғᴜɴᴅᴇᴅ</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɴᴏᴛʜᴇʀ 𝐂ᴏᴜɴᴛʀʏ", "buy_menu_main", "primary", icon=5408995930416362034)]])
+                return await event.edit(f"<blockquote>❌ <b>𝐎𝐮𝐭 𝐨𝐟 𝐒𝐭𝐨𝐜𝐤!</b>\n\n𝐍𝐨 𝐚𝐜𝐜𝐨𝐮𝐧𝐭𝐬 𝐚𝐫𝐞 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 <b>{c_icon} {country}</b>.\n𝐘𝐨𝐮𝐫 𝐦𝐨𝐧𝐞𝐲 (<b>₹{final_price}</b>) 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 <b>𝐢𝐧𝐬𝐭𝐚𝐧𝐭𝐥𝐲 𝐫𝐞𝐟𝐮𝐧𝐝𝐞𝐝</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁𝐮𝐲 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "buy_menu_main", "primary", icon=5408995930416362034)]])
 
             buy_success = False
             bought_info = None
@@ -483,10 +462,8 @@ async def process_purchase(event, mode, country, year, price_str):
                     bought_data = buy_result.get("item_data") or {}
                     post_sb = bought_data.get("telegram_spam_block")
                     if mode == 'nonspam' and post_sb is not None and post_sb != -1:
-                        logger.warning(f"Bought item {item_id} has spamblock {post_sb}, rejecting for nonspam mode...")
                         continue
                     if mode == 'spam' and post_sb == -1:
-                        logger.warning(f"Bought item {item_id} in spam mode is clean, rejecting for spam mode...")
                         continue
 
                     str_sess = buy_result.get("string_session")
@@ -504,20 +481,18 @@ async def process_purchase(event, mode, country, year, price_str):
                                 buy_success = True
                                 break
                             else:
-                                logger.warning(f"Session for item {item_id} expired on Telegram, trying next...")
                                 try: await test_client.disconnect()
                                 except Exception: pass
                         except Exception as conn_err:
-                            logger.warning(f"Connection error for item {item_id}: {conn_err}, trying next...")
+                            logger.warning(f"Connection error: {conn_err}")
                 else:
                     last_err = str(buy_result)
-                    logger.warning(f"Fast-buy attempt failed for {item_id}: {last_err}, trying next...")
 
             if not buy_success or not client:
                 async with get_user_lock(uid):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
-                return await event.edit(f"{P_NO} <b>Error initializing account.</b> {last_err or 'Session unavailable.'}\nYour money has been refunded.")
+                return await event.edit(f"❌ <b>Error initializing account.</b> {last_err or 'Session unavailable.'}\nYour money has been refunded.")
 
             item_id = bought_info['item_id']
             twofa_pass = bought_info.get("twofa") or "None"
@@ -539,7 +514,7 @@ async def process_purchase(event, mode, country, year, price_str):
             async with get_user_lock(uid):
                 cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                 db.commit()
-            return await event.edit(f"{P_NO} <b>Error initializing account.</b> Money refunded.")
+            return await event.edit(f"❌ <b>Error initializing account.</b> Money refunded.")
 
 def extract_otp_from_text(text):
     if not text:
@@ -565,36 +540,19 @@ async def fetch_order_otp(order):
     if client:
         try:
             if not client.is_connected():
-                try:
-                    await client.connect()
-                except Exception as ce:
-                    logger.warning(f"Reconnecting client failed: {ce}")
+                try: await client.connect()
+                except Exception: pass
             
             if client.is_connected():
                 msgs = []
-                try:
-                    msgs = await client.get_messages(777000, limit=5)
-                except Exception:
-                    try:
-                        await client.get_dialogs(limit=10)
-                        msgs = await client.get_messages(777000, limit=5)
-                    except Exception as e:
-                        logger.debug(f"Failed to fetch 777000 messages directly: {e}")
-                        try:
-                            dialogs = await client.get_dialogs(limit=5)
-                            for d in dialogs:
-                                if getattr(d.entity, 'id', None) == 777000 or getattr(d, 'name', '') == 'Telegram':
-                                    msgs = await client.get_messages(d.entity, limit=5)
-                                    break
-                        except Exception:
-                            pass
+                try: msgs = await client.get_messages(777000, limit=5)
+                except Exception: pass
                 
                 for m in msgs:
                     if hasattr(m, 'date') and m.date.timestamp() > start_time - 15:
                         if m.message:
                             code = extract_otp_from_text(m.message)
-                            if code:
-                                return code
+                            if code: return code
         except Exception as e:
             logger.error(f"Error checking Telegram messages: {e}")
 
@@ -603,8 +561,7 @@ async def fetch_order_otp(order):
             lzt_code = await lzt_client.get_otp_code(order['item_id'])
             if lzt_code:
                 code = extract_otp_from_text(str(lzt_code)) or str(lzt_code).strip()
-                if code and re.match(r"^\d{4,8}$", code):
-                    return code
+                if code and re.match(r"^\d{4,8}$", code): return code
         except Exception as lzt_err:
             logger.debug(f"LZT get_otp_code error: {lzt_err}")
 
@@ -634,31 +591,31 @@ async def auto_otp_task(phone):
                         
                         for log_ch in get_log_channels_db():
                             try:
-                                await bot.send_message(log_ch, f"{P_YES} <b>ACCOUNT SOLD</b>\n\n👤 <b>User:</b> <code>{uid}</code>\n📱 <b>Phone:</b> <code>+{phone}</code>\n💰 <b>Price:</b> ₹{order['price']}\n🌍 <b>Country:</b> {order['country']}")
+                                await bot.send_message(log_ch, f"✅ <b>ACCOUNT SOLD</b>\n\n👤 <b>User:</b> <code>{uid}</code>\n📱 <b>Phone:</b> <code>+{phone}</code>\n💰 <b>Price:</b> ₹{order['price']}\n🌍 <b>Country:</b> {order['country']}")
                             except Exception as log_ex:
-                                logger.error(f"Failed to log sale to {log_ch}: {log_ex}")
+                                logger.error(f"Failed to log sale: {log_ex}")
                 
-                twofa_text = f"{P_2FA} <b>2FA:</b> <code>{order['twofa']}</code>" if order['twofa'] != "None" else "🔓 <b>2FA:</b> <code>Disabled (No Password)</code>"
-                msg_text = (f"<blockquote>{PE_CHECK} <b>𝐎𝐓𝐏 𝐑ᴇᴄᴇɪᴠᴇᴅ!</b>\n\n"
-                            f"{P_PHONE} <b>𝐏ʜᴏɴᴇ:</b> <code>+{phone}</code>\n"
-                            f"{P_OTP} <b>𝐎𝐓𝐏 𝐂ᴏᴅᴇ:</b> <code>{code}</code>\n"
+                twofa_text = f"🔐 <b>2FA:</b> <code>{order['twofa']}</code>" if order['twofa'] != "None" else "🔓 <b>2FA:</b> <code>Disabled (No Password)</code>"
+                msg_text = (f"<blockquote>✅ <b>𝐎𝐓𝐏 𝐑𝐄𝐂𝐄𝐈𝐕𝐄𝐃!</b> 🔥\n\n"
+                            f"📱 <b>𝐏𝐡𝐨𝐧𝐞:</b> <code>+{phone}</code>\n"
+                            f"🔑 <b>𝐎𝐓𝐏 𝐂𝐨𝐝𝐞:</b> <code>{code}</code>\n"
                             f"{twofa_text}\n\n"
                             f"<i>⚡ Tap code to copy! Complete login now.</i></blockquote>")
                 
                 btns = [
                     [
-                        style_btn("📥 𝐃ᴏᴡɴʟᴏᴀᴅ .𝐒𝐄𝐒𝐒𝐈𝐎𝐍", f"dl_telethon_{phone}", "success", icon=5409320020058584473),
-                        style_btn("📥 𝐃ᴏᴡɴʟᴏᴀᴅ 𝐓𝐃𝐀𝐓𝐀", f"dl_tdata_{phone}", "primary", icon=5408995930416362034)
+                        style_btn("📥 𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 .𝐒𝐄𝐒𝐒𝐈𝐎𝐍", f"dl_telethon_{phone}", "success", icon=5409320020058584473),
+                        style_btn("📥 𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐓𝐃𝐀𝐓𝐀", f"dl_tdata_{phone}", "primary", icon=5408995930416362034)
                     ],
                     [
                         style_btn("📥 Pyrogram / JSON", f"dl_pyrogram_{phone}", "primary", icon=5408995930416362034),
-                        style_btn("🔑 𝐐𝐑 𝐋ᴏɢɪɴ", f"get_qr_{phone}", "primary", icon=5408995930416362034)
+                        style_btn("🔑 𝐐𝐑 𝐋𝐨𝐠𝐢𝐧", f"get_qr_{phone}", "primary", icon=5408995930416362034)
                     ],
                     [
-                        style_btn("🔄 𝐆ᴇᴛ 𝐀ɴᴏᴛʜᴇʀ 𝐎𝐓𝐏", f"get_code_{phone}", "primary", icon=5408995930416362034),
-                        style_btn("🚫 𝐓ᴇʀᴍɪɴᴀᴛᴇ 𝐎ᴛʜᴇʀ 𝐒ᴇssɪᴏɴs", f"reset_sessions_{phone}", "danger", icon=6129888444245089008)
+                        style_btn("🔄 𝐆𝐞𝐭 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐎𝐓𝐏", f"get_code_{phone}", "primary", icon=5408995930416362034),
+                        style_btn("🚫 𝐓𝐞𝐫𝐦𝐢𝐧𝐚𝐭𝐞 𝐎𝐭𝐡𝐞𝐫 𝐒𝐞𝐬𝐬𝐢𝐨𝐧𝐬", f"reset_sessions_{phone}", "danger", icon=6129888444245089008)
                     ],
-                    [style_btn("✅ 𝐅ɪɴɪsʜ / 𝐃ᴏɴᴇ", f"finish_order|{phone}", "success", icon=5409320020058584473)]
+                    [style_btn("✅ 𝐅𝐢𝐧𝐢𝐬𝐡 / 𝐃𝐨𝐧𝐞", f"finish_order|{phone}", "success", icon=5409320020058584473)]
                 ]
                 
                 try: await bot.edit_message(uid, msg_id, msg_text, buttons=btns)
@@ -684,7 +641,7 @@ async def auto_otp_task(phone):
         
         del active_orders[phone]
         
-        msg_text = f"<blockquote>{P_NO} <b>𝐎ʀᴅᴇʀ 𝐓ɪᴍᴇᴏᴜᴛ / 𝐂ᴀɴᴄᴇʟʟᴇᴅ</b>\n\nNo OTP was received in time. <b>{P_INR}{ord_info['price']}</b> has been refunded to your wallet!</blockquote>"
+        msg_text = f"<blockquote>❌ <b>𝐎𝐫𝐝𝐞𝐫 𝐓𝐢𝐦𝐞𝐨𝐮𝐭 / 𝐂𝐚𝐧𝐜𝐞𝐥𝐥𝐞𝐝</b>\n\nNo OTP was received in time. <b>₹{ord_info['price']}</b> has been refunded to your wallet!</blockquote>"
         try: await bot.edit_message(uid, msg_id, msg_text)
         except Exception as e: logger.error(f"Error sending timeout msg: {e}")
 
@@ -693,70 +650,116 @@ async def handle_format_downloads(event, phone, file_type):
         return await event.answer("❌ Session context no longer active. Use order history.", alert=True)
     
     order = active_orders[phone]
-    client = order.get('client')
     sess = order.get('sess')
-    
     ext = "json" if file_type == "json" else ("session" if file_type in ["telethon", "pyrogram"] else "zip")
     file_path = f"export_{phone}_{file_type}.{ext}"
     
     try:
         await event.answer("⏳ Generating requested session file...", alert=False)
-        
         if file_type == "telethon":
             if isinstance(sess, str) and os.path.exists(sess):
                 file_path = sess
             else:
-                from telethon.sessions import StringSession
-                temp_client = TelegramClient(StringSession(sess), API_ID, API_HASH)
                 file_path = f"{phone}.session"
                 with open(file_path, "w") as f:
-                    f.write(sess)
-                    
-        elif file_type == "tdata":
-            tdata_dir = f"tdata_{phone}"
-            os.makedirs(tdata_dir, exist_ok=True)
-            zip_path = f"tdata_{phone}.zip"
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                zipf.writestr("tdata/key_data", b"dummy_tdata_payload")
-            file_path = zip_path
-            
+                    f.write(sess or "")
         elif file_type == "json":
-            json_data = {
-                "phone": phone,
-                "twofa": order.get("twofa"),
-                "session": sess if isinstance(sess, str) else ""
-            }
-            with open(file_path, "w") as f:
-                json.dump(json_data, f, indent=4)
+            json_data = {"phone": phone, "twofa": order.get("twofa"), "session": sess if isinstance(sess, str) else ""}
+            with open(file_path, "w") as f: json.dump(json_data, f, indent=4)
                 
         await bot.send_file(event.chat_id, file_path, caption=f"📦 Here is your exported <b>{file_type.upper()}</b> file for <code>+{phone}</code>.")
     except Exception as e:
         logger.error(f"Format download error: {e}")
         await event.answer(f"❌ Failed to generate format: {e}", alert=True)
 
-# Register Handlers
+# ALL CALLBACK HANDLERS (EXACT PATTERN MATCHING)
+
+@bot.on(events.CallbackQuery(pattern=r"^buy_menu_main$"))
+async def cb_buy_menu_main(event):
+    await show_buy_menu(event)
+
+@bot.on(events.CallbackQuery(pattern=r"^by_years_menu$"))
+async def cb_by_years_menu(event):
+    await show_years_catalog(event)
+
+@bot.on(events.CallbackQuery(pattern=r"^pg_filters\|(\d+)"))
+async def cb_pg_filters(event):
+    page = int(event.pattern_match.group(1))
+    await show_filters_catalog(event, page)
+
+@bot.on(events.CallbackQuery(pattern=r"^c_by_yr\|(\d+)\|(\d+)"))
+async def cb_c_by_yr(event):
+    year = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    page = int(event.pattern_match.group(2))
+    await show_countries_for_year(event, year, page)
+
+@bot.on(events.CallbackQuery(pattern=r"^pg_c\|([^|]+)\|(\d+)"))
+async def cb_pg_c(event):
+    mode = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    page = int(event.pattern_match.group(2))
+    await show_countries(event, mode, page)
+
+@bot.on(events.CallbackQuery(pattern=r"^bc\|([^|]+)\|(.+)"))
+async def cb_bc(event):
+    mode = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    country = event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2)
+    await show_years(event, mode, country)
+
+@bot.on(events.CallbackQuery(pattern=r"^by\|([^|]+)\|([^|]+)\|([^|]+)\|(.+)"))
+async def cb_by(event):
+    mode = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    country = event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2)
+    year = event.pattern_match.group(3).decode('utf-8') if isinstance(event.pattern_match.group(3), bytes) else event.pattern_match.group(3)
+    price = event.pattern_match.group(4).decode('utf-8') if isinstance(event.pattern_match.group(4), bytes) else event.pattern_match.group(4)
+    await confirm_purchase(event, mode, country, year, price)
+
+@bot.on(events.CallbackQuery(pattern=r"^buy_cf\|([^|]+)\|([^|]+)\|([^|]+)\|(.+)"))
+async def cb_buy_cf(event):
+    mode = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    country = event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2)
+    year = event.pattern_match.group(3).decode('utf-8') if isinstance(event.pattern_match.group(3), bytes) else event.pattern_match.group(3)
+    price = event.pattern_match.group(4).decode('utf-8') if isinstance(event.pattern_match.group(4), bytes) else event.pattern_match.group(4)
+    await process_purchase(event, mode, country, year, price)
+
+@bot.on(events.CallbackQuery(pattern=r"^chg_num\|(.+)"))
+async def cb_chg_num(event):
+    phone = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    await event.answer("ℹ️ Please enter your new phone number in chat to migrate.", alert=True)
+
+@bot.on(events.CallbackQuery(pattern=r"^get_otp_again\|(.+)"))
+async def cb_get_otp_again(event):
+    phone = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    if phone not in active_orders:
+        return await event.answer("❌ Order no longer active.", alert=True)
+    code = await fetch_order_otp(active_orders[phone])
+    if code: await event.answer(f"🔑 Your OTP is: {code}", alert=True)
+    else: await event.answer("⏳ Waiting for OTP...", alert=True)
+
+@bot.on(events.CallbackQuery(pattern=r"^cancel_action$"))
+async def cb_cancel_action(event):
+    await show_buy_menu(event)
+
 @bot.on(events.CallbackQuery(pattern=r"^dl_(telethon|tdata|pyrogram|json)_(.+)"))
 async def cb_download_format(event):
-    file_type = event.pattern_match.group(1).decode('utf-8')
-    phone = event.pattern_match.group(2).decode('utf-8')
+    file_type = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
+    phone = event.pattern_match.group(2).decode('utf-8') if isinstance(event.pattern_match.group(2), bytes) else event.pattern_match.group(2)
     await handle_format_downloads(event, phone, file_type)
 
 @bot.on(events.CallbackQuery(pattern=r"^get_code_(.+)"))
 async def cb_get_code_again(event):
-    phone = event.pattern_match.group(1).decode('utf-8')
+    phone = event.pattern_match.group(1).decode('utf-8') if isinstance(event.pattern_match.group(1), bytes) else event.pattern_match.group(1)
     if phone not in active_orders:
         return await event.answer("❌ Order expired or completed.", alert=True)
-    
     order = active_orders[phone]
     code = await fetch_order_otp(order)
-    if code:
-        await event.answer(f"🔑 Latest OTP: {code}", alert=True)
-    else:
-        await event.answer("⏳ Waiting for new OTP...", alert=True)
+    if code: await event.answer(f"🔑 Latest OTP: {code}", alert=True)
+    else: await event.answer("⏳ Waiting for new OTP...", alert=True)
 
 @bot.on(events.CallbackQuery(pattern=r"^finish_order\|(.+)"))
 async def cb_finish_order(event):
     phone = event.pattern_match.group(1)
+    if isinstance(phone, bytes):
+        phone = phone.decode('utf-8')
     if phone in active_orders:
         ord_info = active_orders[phone]
         try:
@@ -764,4 +767,4 @@ async def cb_finish_order(event):
                 await ord_info['client'].disconnect()
         except Exception: pass
         del active_orders[phone]
-    await event.edit(f"{PE_CHECK} <b>Order completed successfully! Thank you.</b>")
+    await event.edit(f"✅ <b>Order completed successfully! Thank you.</b>")
