@@ -36,19 +36,25 @@ async def main():
     # 1. Health server start
     try:
         await start_health_server()
+        logger.info("✅ Health server started successfully.")
     except Exception as e:
         logger.error(f"⚠️ Health server startup failed: {e}")
 
-    # 2. Enable HTML mode for rendering Custom/Premium Emojis
+    # 2. Enable HTML mode for rendering Custom/Premium Emojis & Formatting
     bot.parse_mode = 'html'
 
-    # 3. Register all plugin handlers
+    # 3. Register all plugin handlers first
     register_all_handlers(bot)
 
-    # 4. Debug Handlers (Non-blocking, logging only)
+    # 4. Global Callback Catch-All Handler (To prevent infinite loading spinner)
     @bot.on(events.CallbackQuery)
-    async def debug_cb(e):
+    async def global_callback_debug(e):
         logger.info(f"🔘 CALLBACK RECEIVED: {e.data}")
+        # Automatically answer unhandled callbacks to stop button loading spinner
+        try:
+            await e.answer()
+        except Exception:
+            pass
 
     @bot.on(events.NewMessage)
     async def debug_msg(e):
@@ -57,7 +63,9 @@ async def main():
 
     # 5. Bot Connect & Start
     await bot.start(bot_token=BOT_TOKEN)
-    print("✅ Numbott Modular (Telethon) STARTED SUCCESSFULLY", flush=True)
+    print("==================================================", flush=True)
+    print("🚀 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!", flush=True)
+    print("==================================================", flush=True)
 
     # 6. Reconnection Loop
     while True:
