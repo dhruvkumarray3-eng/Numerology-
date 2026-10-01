@@ -1,4 +1,4 @@
-import os
+Import os
 import aiohttp
 import asyncio
 import json
@@ -73,8 +73,7 @@ def get_lzt_code(country_name):
     return None
 
 def get_country_from_lzt(code):
-    if not code: 
-        return "Unknown"
+    if not code: return "Unknown"
     return LZT_TO_COUNTRY.get(code.lower(), code.upper())
 
 DC_IPS = {
@@ -101,10 +100,8 @@ def extract_telethon_string_session(item_dict):
         if len(login_val) == 512:
             auth_key_hex = login_val
             dc_val = login_data.get('password') or item_dict.get('telegram_dc_id') or 2
-            try: 
-                dc_id = int(str(dc_val).strip())
-            except: 
-                dc_id = 2
+            try: dc_id = int(str(dc_val).strip())
+            except: dc_id = 2
             
         # Method 2: from raw string if login wasn't 512 hex
         if not auth_key_hex and raw:
@@ -113,10 +110,8 @@ def extract_telethon_string_session(item_dict):
                 k_hex, d_str = raw_clean.split(':', 1)
                 if len(k_hex.strip()) == 512:
                     auth_key_hex = k_hex.strip()
-                    try: 
-                        dc_id = int(d_str.strip())
-                    except: 
-                        dc_id = 2
+                    try: dc_id = int(d_str.strip())
+                    except: dc_id = 2
                     
         if not auth_key_hex:
             return None
@@ -140,13 +135,8 @@ class LZTClient:
         pass
 
     def get_token(self):
-        try:
-            res = cur.execute("SELECT value FROM settings WHERE key='lzt_api_key'").fetchone()
-            if res and res[0]:
-                return res[0]
-        except Exception:
-            pass
-        return os.getenv("LZT_API_KEY", "").strip()
+        res = cur.execute("SELECT value FROM settings WHERE key='lzt_api_key'").fetchone()
+        return res[0] if res and res[0] else os.getenv("LZT_API_KEY", "")
 
     def get_headers(self):
         token = self.get_token()
@@ -260,6 +250,7 @@ class LZTClient:
         if mode == 'spam':
             params["spam"] = "yes"
         else:
+            # Strictly request spam-free accounts from LZT for nonspam and other general catalog modes
             params["spam"] = "no"
 
         if balance_rub > 0:
@@ -274,15 +265,21 @@ class LZTClient:
                         results = []
                         import datetime
                         for item in items:
+                            # 1. STRICT COUNTRY ENFORCEMENT
                             item_c = (item.get("telegram_country") or item.get("country") or "").strip().upper()
                             if item_c != c_code.upper():
                                 continue
 
+                            # 2. STRICT SPAM FILTERING
+                            # In LZT Market:
+                            # -1 = clean / no spamblock (100% spam-free)
+                            # -3, -4 or positive unix timestamp (>0) = spamblocked
                             sb = item.get("telegram_spam_block")
                             if mode == 'spam':
                                 if sb == -1 or sb is None:
                                     continue
                             else:
+                                # For nonspam mode (and any general catalog mode), STRICTLY require clean account: sb MUST be -1!
                                 if sb != -1:
                                     continue
 
@@ -310,15 +307,14 @@ class LZTClient:
                             else:
                                 price_rub = float(price_rub)
 
+                            # Strictly ensure price is within our LZT wallet balance
                             if balance_rub > 0 and price_rub > balance_rub:
                                 continue
 
                             created_ts = item.get("telegram_session_created_at") or item.get("telegram_register_date") or item.get("register_date") or 0
                             if created_ts and created_ts > 1000000:
-                                try: 
-                                    item_year = datetime.datetime.fromtimestamp(created_ts).year
-                                except: 
-                                    item_year = 2026
+                                try: item_year = datetime.datetime.fromtimestamp(created_ts).year
+                                except: item_year = 2026
                             elif created_ts and 1900 < created_ts < 2100:
                                 item_year = int(created_ts)
                             else:
@@ -347,8 +343,6 @@ class LZTClient:
                                 "has_2fa": has_pwd,
                                 "twofa_pass": str(pwd_val) if has_pwd else "None"
                             })
-                            if len(results) >= limit:
-                                break
                         return results
         except Exception as e:
             logger.error(f"LZT search items error for {country_name}: {e}")
@@ -368,12 +362,7 @@ class LZTClient:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=self.get_headers(), json=payload, timeout=25) as resp:
-                    try:
-                        data_json = await resp.json()
-                    except Exception:
-                        text_resp = await resp.text()
-                        return False, f"Invalid API response (Status {resp.status}): {text_resp[:100]}"
-
+                    data_json = await resp.json()
                     if resp.status == 200 and not data_json.get("errors"):
                         item = data_json.get("item", {})
                         phone = item.get("telegram_phone") or item.get("phone") or ""
