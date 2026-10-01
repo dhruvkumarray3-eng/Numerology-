@@ -171,3 +171,46 @@ P_DOC = '📃'
 P_SOS = '🆘'
 P_ASST = '🤖'
 P_ACC = '👤'
+
+# ==========================================
+# LZT MARKET & CUSTOM EMOJI CONFIGURATIONS
+# ==========================================
+
+LZT_API_KEY = os.getenv("LZT_API_KEY", "")
+USDT_TO_INR = float(os.getenv("USDT_TO_INR", "88.0"))       # Base USDT rate
+ADMIN_PROFIT_INR = float(os.getenv("ADMIN_PROFIT_INR", "50.0")) # Margin in INR
+
+PREMIUM_EMOJIS = {
+    "TELEGRAM": "6028346797368283073",   # ✈️ Telegram Icon
+    "APPLE": "5775870512127283512",      # 🍏 Apple
+    "STAR": "6028338546736107668",       # ⭐️ Star
+    "GIFT": "5307949733786976205",       # 🎁 Gift
+    "CHECK_RED": "6296577138615125756",  # Red Check
+    "HEART": "6298356878573307709",      # ❤️ Heart
+    "VIP": "6219549292458150316",        # 👑 VIP Crown
+    "EYE": "6220029508456548253",        # 👁 Eye
+    "ERROR_CROSS": "6298671811345254603",# 😭 Error / Cancel
+    "SUCCESS_GREEN": "6296367896398399651", # Green Check
+    "FIRE": "6235291666152953756",       # 🔥 Fire
+    "LIGHTNING": "5224607267797606837",  # ⚡ Lightning
+    "LOGIN": "6242333741776115895",      # LOG IN Badge
+    "LOGOUT": "6240145013557173263",     # LOG OUT Badge
+    "CANDY": "6242174063481984917",      # 🍭 Candy
+    "NUMBER": "5823219494318773845",     # 🔢 Number
+    "SHIELD": "6086672466132865380",     # 🛡 Shield
+    "SPARKLE": "6086639764251873025",    # 💫 Sparkle
+    "SMILE": "6086690887247597839",      # 🙂 Smile
+    "DEVIL": "6089217174126203362",      # 👹 Troll / Devil
+    "DIAMOND": "6086778246882399112",    # 💎 Diamond
+    "PERCENT": "6093421221259514937",    # 100%
+    "PINK_PLANE": "6255963511252322252", # Pink Plane
+    "PURPLE_STAR": "6136464120779638846"# Purple Star
+}
+
+def get_emoji(key: str) -> str:
+    """Renders HTML-compatible Telegram Custom Premium Emoji"""
+    emoji_id = PREMIUM_EMOJIS.get(key, "")
+    if emoji_id:
+        return f'<tg-emoji emoji-id="{emoji_id}">🔹</tg-emoji>'
+    return "🔹"
+
