@@ -1034,3 +1034,333 @@ def register_buy(bot):
             except Exception as ex:
                 logger.error(f"ChangePhone error: {ex}")
                 await loading.edit(f"<blockquote>{P_NO} <b>❌ 𝐄ʀʀᴏʀ:</b> {str(ex)}</blockquote>", buttons=[[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐎ʀᴅᴇʀ", f"back_to_order|{orig_phone}", "primary", icon=6129812419028982717)]])
+
+# =====================================================================
+# LZT AUTOMATIC PURCHASE & FULL TELEGRAM ACCOUNT MANAGEMENT
+# =====================================================================
+
+import os
+import json
+import requests
+from telethon import events, Button
+from config import bot, LZT_API_KEY, USDT_TO_INR
+from utils.keyboards import style_btn
+
+# Admin Profit Margin (INR mein)
+ADMIN_PROFIT_PER_ID_INR = float(os.getenv("ADMIN_PROFIT_PER_ID_INR", "5.0"))
+
+HEADERS = {
+    "Authorization": f"Bearer {LZT_API_KEY}",
+    "Accept": "application/json"
+}
+
+# ---------------------------------------------------------------------
+# PREMIUM CUSTOM EMOJI MAP (Telethon HTML Rendering)
+# ---------------------------------------------------------------------
+PREMIUM_EMOJIS = {
+    "PLANE": '<tg-emoji emoji-id="6028346797368283073">✈️</tg-emoji>',
+    "APPLE": '<tg-emoji emoji-id="5775870512127283512">🍏</tg-emoji>',
+    "STAR_1": '<tg-emoji emoji-id="6028338546736107668">⭐️</tg-emoji>',
+    "GIFT": '<tg-emoji emoji-id="5307949733786976205">🎁</tg-emoji>',
+    "CHECK_1": '<tg-emoji emoji-id="6296577138615125756">✅</tg-emoji>',
+    "HEART": '<tg-emoji emoji-id="6298356878573307709">❤️</tg-emoji>',
+    "CROWN": '<tg-emoji emoji-id="6219549292458150316">👑</tg-emoji>',
+    "EYE": '<tg-emoji emoji-id="6220029508456548253">👁</tg-emoji>',
+    "CRY": '<tg-emoji emoji-id="6298671811345254603">😭</tg-emoji>',
+    "CHECK_2": '<tg-emoji emoji-id="6296367896398399651">✅</tg-emoji>',
+    "CHECK_3": '<tg-emoji emoji-id="6235291666152953756">✅</tg-emoji>',
+    "COMET": '<tg-emoji emoji-id="5224607267797606837">☄️️</tg-emoji>',
+    "LIGHTNING_1": '<tg-emoji emoji-id="6242333741776115895">⚡</tg-emoji>',
+    "LIGHTNING_2": '<tg-emoji emoji-id="6240145013557173263">⚡</tg-emoji>',
+    "LIGHTNING_3": '<tg-emoji emoji-id="6061916283228655823">⚡</tg-emoji>',
+    "CANDY": '<tg-emoji emoji-id="6242174063481984917">🍭</tg-emoji>',
+    "NUMBER": '<tg-emoji emoji-id="5823219494318773845">🔢</tg-emoji>',
+    "SHIELD": '<tg-emoji emoji-id="6086672466132865380">🛡</tg-emoji>',
+    "SPARKLES": '<tg-emoji emoji-id="6086639764251873025">💫</tg-emoji>',
+    "SMILE": '<tg-emoji emoji-id="6086690887247597839">🙂</tg-emoji>',
+    "DEVIL": '<tg-emoji emoji-id="6089217174126203362">👹</tg-emoji>',
+    "DIAMOND": '<tg-emoji emoji-id="6086778246882399112">💎</tg-emoji>',
+    "HUNDRED": '<tg-emoji emoji-id="6093421221259514937">💯</tg-emoji>',
+    "VERIFIED": '<tg-emoji emoji-id="6255963511252322252">✔️</tg-emoji>',
+    "STAR_2": '<tg-emoji emoji-id="6136464120779638846">⭐</tg-emoji>',
+    "SAD": '<tg-emoji emoji-id="6298649503285118920">😔</tg-emoji>',
+    "GLOW_STAR": '<tg-emoji emoji-id="6062159782104535288">🌟</tg-emoji>',
+}
+
+def get_p_emoji(name: str) -> str:
+    """Helper to fetch custom premium emoji HTML tag"""
+    return PREMIUM_EMOJIS.get(name, "✨")
+
+def get_calculated_price(usdt_price: float) -> float:
+    """Margin calculation (USDT to INR conversion + profit)"""
+    base_inr = usdt_price * USDT_TO_INR
+    return round(base_inr + ADMIN_PROFIT_PER_ID_INR, 2)
+
+def fetch_active_devices(item_id: str) -> list:
+    """API call for device session retrieval"""
+    try:
+        url = f"https://api.lzt.market/{item_id}/sessions"
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            return data.get("sessions", []) or data.get("items", [])
+    except Exception as e:
+        print(f"Device Fetch Error: {e}")
+    return []
+
+# ---------------------------------------------------------------------
+# 1. AUTO PURCHASE & INTERACTIVE CONTROL PANEL
+# ---------------------------------------------------------------------
+@bot.on(events.NewMessage(pattern=r"^/buy_lzt_(\d+)"))
+async def handle_lzt_auto_buy(event):
+    """Instant auto-buy handler"""
+    item_id = event.pattern_match.group(1)
+    
+    sparkle = get_p_emoji("SPARKLES")
+    error_icon = get_p_emoji("SAD")
+    success_icon = get_p_emoji("VERIFIED")
+    fire_icon = get_p_emoji("LIGHTNING_1")
+    crown = get_p_emoji("CROWN")
+    diamond = get_p_emoji("DIAMOND")
+    star = get_p_emoji("GLOW_STAR")
+
+    msg = await event.respond(
+        f"{sparkle} <b>Item ID: <code>{item_id}</code> buy ho raha hai...</b>", 
+        parse_mode="html"
+    )
+
+    try:
+        # 1. LZT Item check
+        item_resp = requests.get(f"https://api.lzt.market/{item_id}", headers=HEADERS, timeout=10)
+        if item_resp.status_code != 200:
+            await msg.edit(f"{error_icon} <b>Yeh item out of stock hai ya available nahi hai.</b>", parse_mode="html")
+            return
+
+        item_data = item_resp.json().get("item", {})
+        usdt_price = float(item_data.get("price", 0))
+        final_inr = get_calculated_price(usdt_price)
+
+        # 2. Balance Verification
+        me_resp = requests.get("https://api.lzt.market/me", headers=HEADERS, timeout=10)
+        if me_resp.status_code == 200:
+            balance_usdt = float(me_resp.json().get("user", {}).get("balance", 0))
+            if balance_usdt < usdt_price:
+                await msg.edit(
+                    f"{error_icon} <b>System balance low hai. Admin se contact karein.</b>",
+                    parse_mode="html"
+                )
+                return
+
+        # 3. Fast-Buy Execution
+        buy_url = f"https://api.lzt.market/{item_id}/fast-buy"
+        # Price validation parameter pass karna zaroori hota hai
+        buy_resp = requests.post(buy_url, headers=HEADERS, data={"price": usdt_price}, timeout=15)
+
+        if buy_resp.status_code == 200 and buy_resp.json().get("success", True):
+            buy_result = buy_resp.json().get("item", {}) or item_data
+            
+            phone_num = buy_result.get("phone", buy_result.get("title", "N/A"))
+            auth_key = buy_result.get("auth_key", "File export hone par milega")
+            dc_id = buy_result.get("dc_id", "5")
+            user_id = buy_result.get("user_id", "N/A")
+
+            # Active Sessions Fetch
+            sessions = fetch_active_devices(item_id)
+            device_text = ""
+            if sessions:
+                device_text = f"\n\n{fire_icon} <b>Active Connected Devices ({len(sessions)}):</b>\n"
+                for idx, sess in enumerate(sessions, 1):
+                    dev_name = sess.get("device_model", sess.get("device", "Unknown Device"))
+                    app_ver = sess.get("app_version", "N/A")
+                    ip_addr = sess.get("ip", "Hidden")
+                    country = sess.get("country", "Unknown")
+                    device_text += f"▫️ <b>{idx}. {dev_name}</b> ({app_ver}) | 📍 <code>{country}</code> | 🌐 <code>{ip_addr}</code>\n"
+            else:
+                device_text = f"\n\n{fire_icon} <b>Active Devices:</b> <code>1 Active Device (Current Session)</code>"
+
+            response_msg = (
+                f"{success_icon} <b>PURCHASE SUCCESSFUL!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{crown} <b>Price Paid:</b> ₹{final_inr}\n"
+                f"{diamond} <b>Item Reference:</b> <code>#{item_id}</code>\n\n"
+                f"📱 <b>Phone Number:</b> <code>{phone_num}</code>\n"
+                f"🔑 <b>Auth Key (HEX):</b> <code>{auth_key}</code>\n"
+                f"🌐 <b>DC ID:</b> <code>{dc_id}</code> | 👤 <b>User ID:</b> <code>{user_id}</code>"
+                f"{device_text}"
+            )
+
+            # Interactive Buttons
+            buttons = [
+                [
+                    style_btn("📦 TData", f"dl_tdata_{item_id}", "primary"),
+                    style_btn("📄 Telethon", f"dl_telethon_{item_id}", "primary")
+                ],
+                [
+                    style_btn("🔥 Pyrogram", f"dl_pyrogram_{item_id}", "primary"),
+                    style_btn("📋 JSON Data", f"dl_json_{item_id}", "primary")
+                ],
+                [
+                    style_btn("💬 Get Telegram Code", f"get_code_{item_id}", "success"),
+                    style_btn("📱 Login via QR", f"get_qr_{item_id}", "success")
+                ],
+                [
+                    style_btn("⚡ Reset Other Authorizations", f"reset_sessions_{item_id}", "danger")
+                ]
+            ]
+
+            await msg.edit(response_msg, buttons=buttons, parse_mode="html")
+
+            # Default Zip File Download
+            download_url = f"https://api.lzt.market/{item_id}/download"
+            dl_resp = requests.get(download_url, headers=HEADERS, timeout=15)
+            if dl_resp.status_code == 200:
+                file_name = f"session_{item_id}.zip"
+                with open(file_name, "wb") as f:
+                    f.write(dl_resp.content)
+
+                await event.client.send_file(
+                    event.chat_id,
+                    file_name,
+                    caption=f"{star} <b>Session File for ID: <code>{item_id}</code></b>",
+                    parse_mode="html"
+                )
+                if os.path.exists(file_name):
+                    os.remove(file_name)
+        else:
+            err_msg = buy_resp.json().get("errors", ["Purchase fail ho gaya ya item sell ho chuka hai."])[0]
+            await msg.edit(f"{error_icon} <b>Error:</b> {err_msg}", parse_mode="html")
+
+    except Exception as e:
+        await msg.edit(f"{error_icon} <b>Error processing transaction:</b> {str(e)}", parse_mode="html")
+
+# ---------------------------------------------------------------------
+# 2. FILE DOWNLOAD HANDLERS VIA API
+# ---------------------------------------------------------------------
+@bot.on(events.CallbackQuery(pattern=r"^dl_(tdata|telethon|pyrogram|json)_(\d+)"))
+async def handle_format_downloads(event):
+    file_type = event.pattern_match.group(1).decode("utf-8")
+    item_id = event.pattern_match.group(2).decode("utf-8")
+    
+    sparkle = get_p_emoji("SPARKLES")
+    error_icon = get_p_emoji("SAD")
+
+    await event.answer(f"{file_type.upper()} file fetch ho rahi hai...", alert=False)
+
+    try:
+        # LZT API Format Specific Download URL
+        download_url = f"https://api.lzt.market/{item_id}/download?type={file_type}"
+        dl_resp = requests.get(download_url, headers=HEADERS, timeout=15)
+
+        if dl_resp.status_code == 200:
+            ext = "json" if file_type == "json" else ("session" if file_type in ["telethon", "pyrogram"] else "zip")
+            file_name = f"{file_type}_{item_id}.{ext}"
+            
+            with open(file_name, "wb") as f:
+                f.write(dl_resp.content)
+
+            await event.client.send_file(
+                event.chat_id,
+                file_name,
+                caption=f"{sparkle} <b>{file_type.upper()} File for ID: <code>{item_id}</code></b>",
+                parse_mode="html"
+            )
+            if os.path.exists(file_name):
+                os.remove(file_name)
+        else:
+            await event.answer("Requested format export nahi ho saka.", alert=True)
+    except Exception as e:
+        await event.respond(f"{error_icon} <b>Download Error:</b> {str(e)}", parse_mode="html")
+
+# ---------------------------------------------------------------------
+# 3. GET TELEGRAM LOGIN CODE VIA API
+# ---------------------------------------------------------------------
+@bot.on(events.CallbackQuery(pattern=r"^get_code_(\d+)"))
+async def handle_get_login_code(event):
+    item_id = event.pattern_match.group(1).decode("utf-8")
+    
+    success_icon = get_p_emoji("VERIFIED")
+    error_icon = get_p_emoji("SAD")
+
+    await event.answer("Login OTP code check ho raha hai...", alert=False)
+
+    try:
+        # LZT Telegram OTP Code Endpoint
+        code_url = f"https://api.lzt.market/{item_id}/telegram-code"
+        res = requests.get(code_url, headers=HEADERS, timeout=10)
+        
+        if res.status_code == 200:
+            data = res.json()
+            login_code = data.get("code") or data.get("login_code")
+            if login_code:
+                await event.respond(
+                    f"{success_icon} <b>Telegram Login Code:</b>\n\n"
+                    f"🔑 <code>{login_code}</code>\n\n"
+                    f"<i>Is code se Telegram login complete kar lo.</i>",
+                    parse_mode="html"
+                )
+            else:
+                await event.answer("Code abhi tak nahi aaya. App par request bhej kar retry karo.", alert=True)
+        else:
+            await event.answer("Koi naya code nahi mila. Pehle Telegram app par code request bhejo.", alert=True)
+    except Exception as e:
+        await event.respond(f"{error_icon} <b>Code Fetch Error:</b> {str(e)}", parse_mode="html")
+
+# ---------------------------------------------------------------------
+# 4. QR CODE LOGIN GENERATOR VIA API
+# ---------------------------------------------------------------------
+@bot.on(events.CallbackQuery(pattern=r"^get_qr_(\d+)"))
+async def handle_get_qr_login(event):
+    item_id = event.pattern_match.group(1).decode("utf-8")
+    
+    sparkle = get_p_emoji("SPARKLES")
+    error_icon = get_p_emoji("SAD")
+
+    await event.answer("QR Login link generate ho raha hai...", alert=False)
+
+    try:
+        qr_url = f"https://api.lzt.market/{item_id}/qr-code"
+        res = requests.get(qr_url, headers=HEADERS, timeout=10)
+
+        if res.status_code == 200:
+            qr_link = res.json().get("qr_link", "")
+            if qr_link:
+                await event.respond(
+                    f"{sparkle} <b>Scan QR Code to Login:</b>\n\n"
+                    f"🔗 <a href='{qr_link}'>QR Code Open karne ke liye yahan click karein</a>",
+                    parse_mode="html"
+                )
+            else:
+                await event.answer("Is account ke liye QR link nahi mila.", alert=True)
+        else:
+            await event.answer("Is account ke liye QR login filhaal available nahi hai.", alert=True)
+    except Exception as e:
+        await event.respond(f"{error_icon} <b>QR Login Error:</b> {str(e)}", parse_mode="html")
+
+# ---------------------------------------------------------------------
+# 5. RESET OTHER AUTHORIZATIONS VIA API
+# ---------------------------------------------------------------------
+@bot.on(events.CallbackQuery(pattern=r"^reset_sessions_(\d+)"))
+async def handle_reset_authorizations(event):
+    item_id = event.pattern_match.group(1).decode("utf-8")
+    
+    success_icon = get_p_emoji("VERIFIED")
+    error_icon = get_p_emoji("SAD")
+    shield_icon = get_p_emoji("SHIELD")
+
+    try:
+        # LZT Reset Sessions Endpoint
+        reset_url = f"https://api.lzt.market/{item_id}/reset-sessions"
+        res = requests.post(reset_url, headers=HEADERS, timeout=10)
+
+        if res.status_code == 200:
+            await event.answer("Baki saari active sessions terminate ho gayi!", alert=True)
+            await event.respond(
+                f"{success_icon} <b>Security Action Completed!</b>\n\n"
+                f"{shield_icon} <i>Primary session ko chodkar baaki saare devices log out kar diye gaye hain (Item ID: <code>#{item_id}</code>).</i>",
+                parse_mode="html"
+            )
+        else:
+            await event.answer("Sessions terminate nahi ho sake. Baad mein try karein.", alert=True)
+    except Exception as e:
+        await event.respond(f"{error_icon} <b>Reset Error:</b> {str(e)}", parse_mode="html")
+
