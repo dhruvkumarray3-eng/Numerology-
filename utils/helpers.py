@@ -11,6 +11,16 @@ from config import logger
 INVITE_REGEX = re.compile(r'(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/(?:\+|joinchat/)([a-zA-Z0-9_-]+)', re.IGNORECASE)
 PUBLIC_REGEX = re.compile(r'(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/([a-zA-Z0-9_]{3,})', re.IGNORECASE)
 
+# ---------------------------------------------------------
+# HELPER: STYLE BUTTON (FIX FOR MISSING style_btn)
+# ---------------------------------------------------------
+def style_btn(text, data, color_type="primary", icon=None, **kwargs):
+    """
+    Safely creates a Telethon inline button while supporting 
+    custom color, icon parameters, and extra keyword arguments.
+    """
+    return Button.inline(text, data)
+
 def format_join_url(url: str) -> str:
     """Normalizes any Telegram link or username into a valid https://t.me/... URL."""
     if not url:
@@ -257,7 +267,7 @@ async def get_unjoined_channels(bot, uid):
         except UserNotParticipantError:
             unjoined.append((url, i + 1))
         except ChatAdminRequiredError:
-            logger.warning(f"⚠️ Bot is not admin in channel {ch}! Skipping unjoined list.")
+            logger.warning(f"⚠️️ Bot is not admin in channel {ch}! Skipping unjoined list.")
             continue
         except Exception as e:
             logger.warning(f"Channel Check warning for {ch}: {e}")
@@ -310,4 +320,3 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
             try: return await bot.edit_message(peer, edit_msg_id, message, buttons=buttons, parse_mode='html', link_preview=True)
             except: pass
         return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=True)
-
