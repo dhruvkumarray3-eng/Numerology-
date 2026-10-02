@@ -762,12 +762,14 @@ async def process_combined_text_input(event):
         # Resolve via mapping or direct match
         query = COUNTRY_MAP.get(raw_query) or COUNTRY_MAP.get(clean_query) or raw_query
 
-        countries_all = await get_countries_list()
+                countries_all = await get_countries_list()
         
+        # Exact match check first, followed by partial/code match
         matches = [
             (c, cnt) for c, cnt in countries_all 
-            if query in c.lower() or clean_query in str(COUNTRY_CODES.get(c, '')).lower()
+            if query == c.lower() or query in c.lower() or clean_query in str(COUNTRY_CODES.get(c, '')).lower()
         ]
+
         
         if not matches:
             return await event.respond(f"❌ No country found matching '<code>{html.escape(event.text)}</code>'. Please try again with a valid country or code (e.g. India, +91, +1).", buttons=[[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]])
