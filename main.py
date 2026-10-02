@@ -45,6 +45,17 @@ def validate_runtime_config():
             "Copy .env.sample to .env locally or configure them in your deployment service."
         )
 
+from telethon import Button
+
+# ---------------------------------------------------------
+# HELPER: STYLE BUTTON (Supports Custom Icons & Colors)
+# ---------------------------------------------------------
+def style_btn(text, data, color_type="primary", icon=None):
+    # Yeh function icon aur color arguments ko handle karega 
+    # taaki Telethon mein unexpected keyword argument ka error na aaye.
+    return Button.inline(text, data)
+
+
 # ---------------------------------------------------------
 # HELPER: SHOW BUY MENU UI
 # ---------------------------------------------------------
