@@ -133,8 +133,14 @@ class LZTClient:
         pass
 
     def get_token(self):
-        res = cur.execute("SELECT value FROM settings WHERE key='lzt_api_key'").fetchone()
-        return res[0] if res and res[0] else os.getenv("LZT_API_KEY", "")
+        try:
+            if cur:
+                res = cur.execute("SELECT value FROM settings WHERE key='lzt_api_key'").fetchone()
+                if res and res[0]:
+                    return res[0]
+        except Exception as e:
+            logger.error(f"Error fetching token from database: {e}")
+        return os.getenv("LZT_API_KEY", "")
 
     def get_headers(self):
         token = self.get_token()
