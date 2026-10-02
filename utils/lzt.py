@@ -368,3 +368,252 @@ class LZTClient:
         return None
 
 lzt_client = LZTClient()
+
+# ==========================================
+# LZT Search Module (Added at the end)
+# ==========================================
+
+COUNTRY_EMOJI_MAP = {
+    'af': {'name': 'Afghanistan', 'flag': '🇦🇫', 'code': '+93'},
+    'al': {'name': 'Albania', 'flag': '🇦🇱', 'code': '+355'},
+    'dz': {'name': 'Algeria', 'flag': '🇩🇿', 'code': '+213'},
+    'ad': {'name': 'Andorra', 'flag': '🇦🇩', 'code': '+376'},
+    'ao': {'name': 'Angola', 'flag': '🇦🇴', 'code': '+244'},
+    'ag': {'name': 'Antigua and Barbuda', 'flag': '🇦🇬', 'code': '+1-268'},
+    'ar': {'name': 'Argentina', 'flag': '🇦🇷', 'code': '+54'},
+    'am': {'name': 'Armenia', 'flag': '🇦🇲', 'code': '+374'},
+    'au': {'name': 'Australia', 'flag': '🇦🇺', 'code': '+61'},
+    'at': {'name': 'Austria', 'flag': '🇦🇹', 'code': '+43'},
+    'az': {'name': 'Azerbaijan', 'flag': '🇦🇿', 'code': '+994'},
+    'bs': {'name': 'Bahamas', 'flag': '🇧🇸', 'code': '+1-242'},
+    'bh': {'name': 'Bahrain', 'flag': '🇧🇭', 'code': '+973'},
+    'bd': {'name': 'Bangladesh', 'flag': '🇧🇩', 'code': '+880'},
+    'bb': {'name': 'Barbados', 'flag': '🇧🇧', 'code': '+1-246'},
+    'by': {'name': 'Belarus', 'flag': '🇧🇾', 'code': '+375'},
+    'be': {'name': 'Belgium', 'flag': '🇧🇪', 'code': '+32'},
+    'bz': {'name': 'Belize', 'flag': '🇧🇿', 'code': '+501'},
+    'bj': {'name': 'Benin', 'flag': '🇧🇯', 'code': '+229'},
+    'bt': {'name': 'Bhutan', 'flag': '🇧🇹', 'code': '+975'},
+    'bo': {'name': 'Bolivia', 'flag': '🇧🇴', 'code': '+591'},
+    'ba': {'name': 'Bosnia and Herzegovina', 'flag': '🇧🇦', 'code': '+387'},
+    'bw': {'name': 'Botswana', 'flag': '🇧🇼', 'code': '+267'},
+    'br': {'name': 'Brazil', 'flag': '🇧🇷', 'code': '+55'},
+    'bn': {'name': 'Brunei', 'flag': '🇧🇳', 'code': '+673'},
+    'bg': {'name': 'Bulgaria', 'flag': '🇧🇬', 'code': '+359'},
+    'bf': {'name': 'Burkina Faso', 'flag': '🇧🇫', 'code': '+226'},
+    'bi': {'name': 'Burundi', 'flag': '🇧🇮', 'code': '+257'},
+    'cv': {'name': 'Cabo Verde', 'flag': '🇨🇻', 'code': '+238'},
+    'kh': {'name': 'Cambodia', 'flag': '🇰🇭', 'code': '+855'},
+    'cm': {'name': 'Cameroon', 'flag': '🇨🇲', 'code': '+237'},
+    'ca': {'name': 'Canada', 'flag': '🇨🇦', 'code': '+1'},
+    'cf': {'name': 'Central African Republic', 'flag': '🇨🇫', 'code': '+236'},
+    'td': {'name': 'Chad', 'flag': '🇹🇩', 'code': '+235'},
+    'cl': {'name': 'Chile', 'flag': '🇨🇱', 'code': '+56'},
+    'cn': {'name': 'China', 'flag': '🇨🇳', 'code': '+86'},
+    'co': {'name': 'Colombia', 'flag': '🇨🇴', 'code': '+57'},
+    'km': {'name': 'Comoros', 'flag': '🇰🇲', 'code': '+269'},
+    'cg': {'name': 'Congo', 'flag': '🇨🇬', 'code': '+242'},
+    'cd': {'name': 'Congo (DRC)', 'flag': '🇨🇩', 'code': '+243'},
+    'cr': {'name': 'Costa Rica', 'flag': '🇨🇷', 'code': '+506'},
+    'ci': {'name': 'Ivory Coast', 'flag': '🇨🇮', 'code': '+225'},
+    'hr': {'name': 'Croatia', 'flag': '🇭🇷', 'code': '+385'},
+    'cu': {'name': 'Cuba', 'flag': '🇨🇺', 'code': '+53'},
+    'cy': {'name': 'Cyprus', 'flag': '🇨🇾', 'code': '+357'},
+    'cz': {'name': 'Czech Republic', 'flag': '🇨🇿', 'code': '+420'},
+    'dk': {'name': 'Denmark', 'flag': '🇩🇰', 'code': '+45'},
+    'dj': {'name': 'Djibouti', 'flag': '🇩🇯', 'code': '+253'},
+    'dm': {'name': 'Dominica', 'flag': '🇩🇲', 'code': '+1-767'},
+    'do': {'name': 'Dominican Republic', 'flag': '🇩🇴', 'code': '+1-809'},
+    'ec': {'name': 'Ecuador', 'flag': '🇪🇨', 'code': '+593'},
+    'eg': {'name': 'Egypt', 'flag': '🇪🇬', 'code': '+20'},
+    'sv': {'name': 'El Salvador', 'flag': '🇸🇻', 'code': '+503'},
+    'gq': {'name': 'Equatorial Guinea', 'flag': '🇬🇶', 'code': '+240'},
+    'er': {'name': 'Eritrea', 'flag': '🇪🇷', 'code': '+291'},
+    'ee': {'name': 'Estonia', 'flag': '🇪🇪', 'code': '+372'},
+    'sz': {'name': 'Eswatini', 'flag': '🇸🇿', 'code': '+268'},
+    'et': {'name': 'Ethiopia', 'flag': '🇪🇹', 'code': '+251'},
+    'fj': {'name': 'Fiji', 'flag': '🇫🇯', 'code': '+679'},
+    'fi': {'name': 'Finland', 'flag': '🇫🇮', 'code': '+358'},
+    'fr': {'name': 'France', 'flag': '🇫🇷', 'code': '+33'},
+    'ga': {'name': 'Gabon', 'flag': '🇬🇦', 'code': '+241'},
+    'gm': {'name': 'Gambia', 'flag': '🇬🇲', 'code': '+220'},
+    'ge': {'name': 'Georgia', 'flag': '🇬🇪', 'code': '+995'},
+    'de': {'name': 'Germany', 'flag': '🇩🇪', 'code': '+49'},
+    'gh': {'name': 'Ghana', 'flag': '🇬🇭', 'code': '+233'},
+    'gr': {'name': 'Greece', 'flag': '🇬🇷', 'code': '+30'},
+    'gd': {'name': 'Grenada', 'flag': '🇬🇩', 'code': '+1-473'},
+    'gt': {'name': 'Guatemala', 'flag': '🇬🇹', 'code': '+502'},
+    'gn': {'name': 'Guinea', 'flag': '🇬🇳', 'code': '+224'},
+    'gw': {'name': 'Guinea-Bissau', 'flag': '🇬🇼', 'code': '+245'},
+    'gy': {'name': 'Guyana', 'flag': '🇬🇾', 'code': '+592'},
+    'ht': {'name': 'Haiti', 'flag': '🇭🇹', 'code': '+509'},
+    'hn': {'name': 'Honduras', 'flag': '🇭🇳', 'code': '+504'},
+    'hk': {'name': 'Hong Kong', 'flag': '🇭🇰', 'code': '+852'},
+    'hu': {'name': 'Hungary', 'flag': '🇭🇺', 'code': '+36'},
+    'is': {'name': 'Iceland', 'flag': '🇮🇸', 'code': '+354'},
+    'in': {'name': 'India', 'flag': '🇮🇳', 'code': '+91'},
+    'id': {'name': 'Indonesia', 'flag': '🇮🇩', 'code': '+62'},
+    'ir': {'name': 'Iran', 'flag': '🇮🇷', 'code': '+98'},
+    'iq': {'name': 'Iraq', 'flag': '🇮🇶', 'code': '+964'},
+    'ie': {'name': 'Ireland', 'flag': '🇮🇪', 'code': '+353'},
+    'il': {'name': 'Israel', 'flag': '🇮🇱', 'code': '+972'},
+    'it': {'name': 'Italy', 'flag': '🇮🇹', 'code': '+39'},
+    'jm': {'name': 'Jamaica', 'flag': '🇯🇲', 'code': '+1-876'},
+    'jp': {'name': 'Japan', 'flag': '🇯🇵', 'code': '+81'},
+    'jo': {'name': 'Jordan', 'flag': '🇯🇴', 'code': '+962'},
+    'kz': {'name': 'Kazakhstan', 'flag': '🇰🇿', 'code': '+7'},
+    'ke': {'name': 'Kenya', 'flag': '🇰🇪', 'code': '+254'},
+    'ki': {'name': 'Kiribati', 'flag': '🇰🇮', 'code': '+686'},
+    'kp': {'name': 'North Korea', 'flag': '🇰🇵', 'code': '+850'},
+    'kr': {'name': 'South Korea', 'flag': '🇰🇷', 'code': '+82'},
+    'kw': {'name': 'Kuwait', 'flag': '🇰🇼', 'code': '+965'},
+    'kg': {'name': 'Kyrgyzstan', 'flag': '🇰🇬', 'code': '+996'},
+    'la': {'name': 'Laos', 'flag': '🇱🇦', 'code': '+856'},
+    'lv': {'name': 'Latvia', 'flag': '🇱🇻', 'code': '+371'},
+    'lb': {'name': 'Lebanon', 'flag': '🇱🇧', 'code': '+961'},
+    'ls': {'name': 'Lesotho', 'flag': '🇱🇸', 'code': '+266'},
+    'lr': {'name': 'Liberia', 'flag': '🇱🇷', 'code': '+231'},
+    'ly': {'name': 'Libya', 'flag': '🇱🇾', 'code': '+218'},
+    'li': {'name': 'Liechtenstein', 'flag': '🇱🇮', 'code': '+423'},
+    'lt': {'name': 'Lithuania', 'flag': '🇱🇹', 'code': '+370'},
+    'lu': {'name': 'Luxembourg', 'flag': '🇱🇺', 'code': '+352'},
+    'mo': {'name': 'Macau', 'flag': '🇲🇴', 'code': '+853'},
+    'mg': {'name': 'Madagascar', 'flag': '🇲🇬', 'code': '+261'},
+    'mw': {'name': 'Malawi', 'flag': '🇲🇼', 'code': '+265'},
+    'my': {'name': 'Malaysia', 'flag': '🇲🇾', 'code': '+60'},
+    'mv': {'name': 'Maldives', 'flag': '🇲🇻', 'code': '+960'},
+    'ml': {'name': 'Mali', 'flag': '🇲🇱', 'code': '+223'},
+    'mt': {'name': 'Malta', 'flag': '🇲🇹', 'code': '+356'},
+    'mh': {'name': 'Marshall Islands', 'flag': '🇲🇭', 'code': '+692'},
+    'mr': {'name': 'Mauritania', 'flag': '🇲🇷', 'code': '+222'},
+    'mu': {'name': 'Mauritius', 'flag': '🇲🇺', 'code': '+230'},
+    'mx': {'name': 'Mexico', 'flag': '🇲🇽', 'code': '+52'},
+    'fm': {'name': 'Micronesia', 'flag': '🇫🇲', 'code': '+691'},
+    'md': {'name': 'Moldova', 'flag': '🇲🇩', 'code': '+373'},
+    'mc': {'name': 'Monaco', 'flag': '🇲🇨', 'code': '+377'},
+    'mn': {'name': 'Mongolia', 'flag': '🇲🇳', 'code': '+976'},
+    'me': {'name': 'Montenegro', 'flag': '🇲🇪', 'code': '+382'},
+    'ma': {'name': 'Morocco', 'flag': '🇲🇦', 'code': '+212'},
+    'mz': {'name': 'Mozambique', 'flag': '🇲🇿', 'code': '+258'},
+    'mm': {'name': 'Myanmar', 'flag': '🇲🇲', 'code': '+95'},
+    'na': {'name': 'Namibia', 'flag': '🇳🇦', 'code': '+264'},
+    'nr': {'name': 'Nauru', 'flag': '🇳🇷', 'code': '+674'},
+    'np': {'name': 'Nepal', 'flag': '🇳🇵', 'code': '+977'},
+    'nl': {'name': 'Netherlands', 'flag': '🇳🇱', 'code': '+31'},
+    'nz': {'name': 'New Zealand', 'flag': '🇳🇿', 'code': '+64'},
+    'ni': {'name': 'Nicaragua', 'flag': '🇳🇮', 'code': '+505'},
+    'ne': {'name': 'Niger', 'flag': '🇳🇪', 'code': '+227'},
+    'ng': {'name': 'Nigeria', 'flag': '🇳🇬', 'code': '+234'},
+    'no': {'name': 'Norway', 'flag': '🇳🇴', 'code': '+47'},
+    'om': {'name': 'Oman', 'flag': '🇴🇲', 'code': '+968'},
+    'pk': {'name': 'Pakistan', 'flag': '🇵🇰', 'code': '+92'},
+    'pw': {'name': 'Palau', 'flag': '🇵🇼', 'code': '+680'},
+    'ps': {'name': 'Palestine', 'flag': '🇵🇸', 'code': '+970'},
+    'pa': {'name': 'Panama', 'flag': '🇵🇦', 'code': '+507'},
+    'pg': {'name': 'Papua New Guinea', 'flag': '🇵🇬', 'code': '+675'},
+    'py': {'name': 'Paraguay', 'flag': '🇵🇾', 'code': '+595'},
+    'pe': {'name': 'Peru', 'flag': '🇵🇪', 'code': '+51'},
+    'ph': {'name': 'Philippines', 'flag': '🇵🇭', 'code': '+63'},
+    'pl': {'name': 'Poland', 'flag': '🇵🇱', 'code': '+48'},
+    'pt': {'name': 'Portugal', 'flag': '🇵🇹', 'code': '+351'},
+    'qa': {'name': 'Qatar', 'flag': '🇶🇦', 'code': '+974'},
+    'ro': {'name': 'Romania', 'flag': '🇷🇴', 'code': '+40'},
+    'ru': {'name': 'Russia', 'flag': '🇷🇺', 'code': '+7'},
+    'rw': {'name': 'Rwanda', 'flag': '🇷🇼', 'code': '+250'},
+    'kn': {'name': 'Saint Kitts and Nevis', 'flag': '🇰🇳', 'code': '+1-869'},
+    'lc': {'name': 'Saint Lucia', 'flag': '🇱🇨', 'code': '+1-758'},
+    'vc': {'name': 'Saint Vincent and the Grenadines', 'flag': '🇻🇨', 'code': '+1-784'},
+    'ws': {'name': 'Samoa', 'flag': '🇼🇸', 'code': '+685'},
+    'sm': {'name': 'San Marino', 'flag': '🇸🇲', 'code': '+378'},
+    'st': {'name': 'Sao Tome and Principe', 'flag': '🇸🇹', 'code': '+239'},
+    'sa': {'name': 'Saudi Arabia', 'flag': '🇸🇦', 'code': '+966'},
+    'sn': {'name': 'Senegal', 'flag': '🇸🇳', 'code': '+221'},
+    'rs': {'name': 'Serbia', 'flag': '🇷🇸', 'code': '+381'},
+    'sc': {'name': 'Seychelles', 'flag': '🇸🇨', 'code': '+248'},
+    'sl': {'name': 'Sierra Leone', 'flag': '🇸🇱', 'code': '+232'},
+    'sg': {'name': 'Singapore', 'flag': '🇸🇬', 'code': '+65'},
+    'sk': {'name': 'Slovakia', 'flag': '🇸🇰', 'code': '+421'},
+    'si': {'name': 'Slovenia', 'flag': '🇸🇮', 'code': '+386'},
+    'sb': {'name': 'Solomon Islands', 'flag': '🇸🇧', 'code': '+677'},
+    'so': {'name': 'Somalia', 'flag': '🇸🇴', 'code': '+252'},
+    'za': {'name': 'South Africa', 'flag': '🇿🇦', 'code': '+27'},
+    'ss': {'name': 'South Sudan', 'flag': '🇸🇸', 'code': '+211'},
+    'es': {'name': 'Spain', 'flag': '🇪🇸', 'code': '+34'},
+    'lk': {'name': 'Sri Lanka', 'flag': '🇱🇰', 'code': '+94'},
+    'sd': {'name': 'Sudan', 'flag': '🇸🇩', 'code': '+249'},
+    'sr': {'name': 'Suriname', 'flag': '🇸🇷', 'code': '+597'},
+    'se': {'name': 'Sweden', 'flag': '🇸🇪', 'code': '+46'},
+    'ch': {'name': 'Switzerland', 'flag': '🇨🇭', 'code': '+41'},
+    'sy': {'name': 'Syria', 'flag': '🇸🇾', 'code': '+963'},
+    'tw': {'name': 'Taiwan', 'flag': '🇹🇼', 'code': '+886'},
+    'tj': {'name': 'Tajikistan', 'flag': '🇹🇯', 'code': '+992'},
+    'tz': {'name': 'Tanzania', 'flag': '🇹🇿', 'code': '+255'},
+    'th': {'name': 'Thailand', 'flag': '🇹🇭', 'code': '+66'},
+    'tl': {'name': 'Timor-Leste', 'flag': '🇹🇱', 'code': '+670'},
+    'tg': {'name': 'Togo', 'flag': '🇹🇬', 'code': '+228'},
+    'to': {'name': 'Tonga', 'flag': '🇹🇴', 'code': '+676'},
+    'tt': {'name': 'Trinidad and Tobago', 'flag': '🇹🇹', 'code': '+1-868'},
+    'tn': {'name': 'Tunisia', 'flag': '🇹🇳', 'code': '+216'},
+    'tr': {'name': 'Turkey', 'flag': '🇹🇷', 'code': '+90'},
+    'tm': {'name': 'Turkmenistan', 'flag': '🇹🇲', 'code': '+993'},
+    'tv': {'name': 'Tuvalu', 'flag': '🇹🇻', 'code': '+688'},
+    'ug': {'name': 'Uganda', 'flag': '🇺🇬', 'code': '+256'},
+    'ua': {'name': 'Ukraine', 'flag': '🇺🇦', 'code': '+380'},
+    'ae': {'name': 'UAE', 'flag': '🇦🇪', 'code': '+971'},
+    'gb': {'name': 'United Kingdom', 'flag': '🇬🇧', 'code': '+44'},
+    'us': {'name': 'USA', 'flag': '🇺🇸', 'code': '+1'},
+    'uy': {'name': 'Uruguay', 'flag': '🇺🇾', 'code': '+598'},
+    'uz': {'name': 'Uzbekistan', 'flag': '🇺🇿', 'code': '+998'},
+    'vu': {'name': 'Vanuatu', 'flag': '🇻🇺', 'code': '+678'},
+    'va': {'name': 'Vatican City', 'flag': '🇻🇦', 'code': '+379'},
+    've': {'name': 'Venezuela', 'flag': '🇻🇪', 'code': '+58'},
+    'vn': {'name': 'Vietnam', 'flag': '🇻🇳', 'code': '+84'},
+    'ye': {'name': 'Yemen', 'flag': '🇾🇪', 'code': '+967'},
+    'zm': {'name': 'Zambia', 'flag': '🇿🇲', 'code': '+260'},
+    'zw': {'name': 'Zimbabwe', 'flag': '🇿🇼', 'code': '+263'}
+}
+
+class LZTSearchModule:
+    def __init__(self, api_token: str = None):
+        self.client = LZTClient()
+
+    async def search_accounts(self, category: str = "telegram", params: dict = None) -> list:
+        """
+        Searches items from LZT market with specific category and filters, 
+        and automatically maps country flag, name, and phone code.
+        """
+        if params is None:
+            params = {}
+            
+        url = f"{LZT_BASE_URL}/{category}"
+        headers = self.client.get_headers()
+        
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(url, headers=headers, params=params, timeout=15) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        items = data.get("items", [])
+                        
+                        processed_items = []
+                        for item in items:
+                            c_code = (item.get("telegram_country") or item.get("country") or "").lower()
+                            
+                            if c_code in COUNTRY_EMOJI_MAP:
+                                item["country_info"] = COUNTRY_EMOJI_MAP[c_code]
+                            else:
+                                item["country_info"] = {
+                                    "name": c_code.upper() if c_code else "Unknown", 
+                                    "flag": "🏳️", 
+                                    "code": ""
+                                }
+                                
+                            processed_items.append(item)
+                            
+                        return processed_items
+                    else:
+                        logger.error(f"Failed to fetch LZT items. Status: {response.status}")
+                        return []
+            except Exception as e:
+                logger.error(f"LZT Search Module Exception: {e}")
+                return []
