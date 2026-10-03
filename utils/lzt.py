@@ -61,16 +61,44 @@ LZT_TO_COUNTRY = {v: k for k, v in COUNTRY_TO_LZT.items()}
 def get_lzt_code(country_name):
     if not country_name:
         return None
+
     clean = str(country_name).strip()
+    lower = clean.lower()
+
+    # Exact country name
     if clean in COUNTRY_TO_LZT:
         return COUNTRY_TO_LZT[clean]
-    clean_lower = clean.lower()
-    for k, v in COUNTRY_TO_LZT.items():
-        if k.lower() == clean_lower:
-            return v
-    if len(clean) == 2 and clean.isalpha():
-        return clean.lower()
-    return None
+
+    for name, code in COUNTRY_TO_LZT.items():
+        if name.lower() == lower:
+            return code
+
+    # ISO-2 code
+    if len(lower) == 2 and lower.isalpha():
+        return lower
+
+    # Phone country prefix
+    phone_prefixes = {
+        "91": "in",
+        "92": "pk",
+        "880": "bd",
+        "44": "gb",
+        "49": "de",
+        "33": "fr",
+        "39": "it",
+        "81": "jp",
+        "82": "kr",
+        "86": "cn",
+        "90": "tr",
+        "234": "ng",
+        "55": "br",
+        "61": "au",
+        "7": "ru",
+    }
+
+    phone = lower.replace("+", "").replace(" ", "").replace("-", "")
+
+    return phone_prefixes.get(phone)
 
 def get_country_from_lzt(code):
     if not code: return "Unknown"
@@ -224,9 +252,25 @@ class LZTClient:
                             balance_usd = float(user.get("balance", 0))
                             balance_rub = balance_usd * 84.0
                         return balance_id, balance_rub, balance_usd
-        except Exception as e:
-            logger.error(f"Error fetching LZT balance info: {e}")
-        return None, 0.0, 0.0
+        async with session.get(
+    url,
+    headers=self.get_headers(),
+    params=params,
+    timeout=15
+) as resp:
+
+    data = await resp.json(content_type=None)
+
+    if resp.status != 200:
+        logger.error(
+            f"LZT search failed | "
+            f"status={resp.status} | "
+            f"params={params} | "
+            f"response={data}"
+        )
+        return []
+
+    items = data.get("items", [])
 
     async def get_balance_rub(self):
         _, bal_rub, _ = await self.get_balance_info()
@@ -359,19 +403,39 @@ class LZTClient:
             logger.error(f"LZT fast_buy error for {item_id}: {e}")
             return False, f"Network error during purchase: {str(e)}"
 
-    async def get_otp_code(self, item_id):
-        url = f"{LZT_BASE_URL}/{item_id}/code"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=self.get_headers(), timeout=15) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        code = data.get("code") or data.get("sms_code") or data.get("telegram_code")
-                        if code:
-                            return str(code).strip()
-        except Exception as e:
-            logger.error(f"LZT get_otp_code error for {item_id}: {e}")
-        return None
+async def get_otp_code(self, item_id):
+    url = f"{LZT_BASE_URL}/{item_id}/telegram-login-code"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers=self.get_headers(),
+                timeout=30
+            ) as resp:
+
+                data = await resp.json(content_type=None)
+
+                if resp.status == 200:
+                    code = (
+                        data.get("code")
+                        or data.get("sms_code")
+                        or data.get("telegram_code")
+                    )
+
+                    if code:
+                        return str(code).strip()
+
+                logger.error(
+                    f"LZT OTP error {resp.status}: {data}"
+                )
+
+    except Exception as e:
+        logger.error(
+            f"LZT OTP request error for {item_id}: {e}"
+        )
+
+    return None
 
 lzt_client = LZTClient()
 
