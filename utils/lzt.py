@@ -228,49 +228,42 @@ class LZTClient:
         except Exception as e:
             logger.error(f"LZT get countries error: {e}")
         return {}
+async def get_balance_info(self):
+    url = f"{LZT_BASE_URL}/user"
 
-        async def get_balance_info(self):
-        url = f"{LZT_BASE_URL}/user"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers=self.get_headers()
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    user = data.get("user", {})
+                    balances = user.get("balances", [])
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url,
-                    headers=self.get_headers()
-                ) as resp:
+                    balance_id = None
+                    balance_rub = 0.0
+                    balance_usd = 0.0
 
-                    if resp.status == 200:
-                        data = await resp.json()
-                        user = data.get("user", {})
-                        balances = user.get("balances", [])
-
-                        balance_id = None
-                        balance_rub = 0.0
-                        balance_usd = 0.0
-
-                        for b in balances:
-                            if b.get("type") == "account":
-                                balance_id = b.get("balance_id")
-                                balance_rub = float(
-                                    b.get("balance", 0)
-                                )
-                                balance_usd = float(
-                                    b.get("convertedBalance", 0)
-                                )
-                                break
-
-                        if not balance_id:
+                    for b in balances:
+                        if b.get("type") == "account":
+                            balance_id = b.get("balance_id")
+                            balance_rub = float(b.get("balance", 0))
                             balance_usd = float(
-                                user.get("balance", 0)
+                                b.get("convertedBalance", 0)
                             )
-                            balance_rub = balance_usd * 84.0
+                            break
 
-                        return balance_id, balance_rub, balance_usd
+                    if not balance_id:
+                        balance_usd = float(user.get("balance", 0))
+                        balance_rub = balance_usd * 84.0
 
-                    logger.error(
-                        f"LZT balance request failed: {resp.status}"
-                    )
-                    return None, 0.0, 0.0
+                    return balance_id, balance_rub, balance_usd
+
+    except Exception as e:
+        logger.error(f"LZT balance info error: {e}")
+        return None, 0.0, 0.0
 
         except Exception as e:
             logger.error(
