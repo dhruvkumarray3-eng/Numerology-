@@ -314,7 +314,7 @@ async def show_years(event, mode, country):
 
     if (bot_mode == 'panel' or (bot_mode == 'hybrid' and not year_options)) and get_lzt_key():
         try:
-            items = await lzt_client.search_items(country, mode=mode, category_name='telegram')
+            items = await lzt_client.search_items(country, mode=mode)
             years_grouped = {}
             for itm in items:
                 y = itm['year']
@@ -464,9 +464,10 @@ async def process_purchase(event, mode, country, year, price_str):
     else:
         await event.edit(f"⚡ <b>𝐏𝐫𝐨𝐜𝐞𝐬𝐬𝐢𝐧𝐠 𝐲𝐨𝐮𝐫 𝐨𝐫𝐝𝐞𝐫...</b>\n𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭 𝐰𝐡𝐢𝐥𝐞 𝐰𝐞 𝐢𝐧𝐢𝐭𝐢𝐚𝐥𝐢𝐳𝐞 𝐭𝐡𝐞 𝐬𝐞𝐬𝐬𝐢𝐨𝐧.")
         try:
-            items = await lzt_client.search_items(country, actual_year, mode=mode, category_name='telegram')
-            if not items:
-                items = await lzt_client.search_items(country, mode=mode, category_name='telegram')
+            items = await lzt_client.search_items(country, actual_year, mode=mode)
+
+if not items:
+    items = await lzt_client.search_items(country, mode=mode)
             
             if not items:
                 async with get_user_lock(uid):
