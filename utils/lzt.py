@@ -229,34 +229,59 @@ class LZTClient:
             logger.error(f"LZT get countries error: {e}")
         return {}
 
-    async def get_balance_info(self):
+        async def get_balance_info(self):
         url = f"{LZT_BASE_URL}/user"
+
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=self.get_headers(), timeout=10) as resp:
+                async with session.get(
+                    url,
+                    headers=self.get_headers()
+                ) as resp:
+
                     if resp.status == 200:
                         data = await resp.json()
                         user = data.get("user", {})
                         balances = user.get("balances", [])
+
                         balance_id = None
                         balance_rub = 0.0
                         balance_usd = 0.0
+
                         for b in balances:
                             if b.get("type") == "account":
                                 balance_id = b.get("balance_id")
-                                balance_rub = float(b.get("balance", 0))
-                                balance_usd = float(b.get("convertedBalance", 0))
+                                balance_rub = float(
+                                    b.get("balance", 0)
+                                )
+                                balance_usd = float(
+                                    b.get("convertedBalance", 0)
+                                )
                                 break
+
                         if not balance_id:
-                            balance_usd = float(user.get("balance", 0))
+                            balance_usd = float(
+                                user.get("balance", 0)
+                            )
                             balance_rub = balance_usd * 84.0
+
                         return balance_id, balance_rub, balance_usd
-             except Exception as e:
-        logger.error(f"LZT balance info error: {e}")
-        return None, 0.0, 0.0
+
+                    logger.error(
+                        f"LZT balance request failed: {resp.status}"
+                    )
+                    return None, 0.0, 0.0
+
+        except Exception as e:
+            logger.error(
+                f"LZT balance info error: {e}"
+            )
+            return None, 0.0, 0.0
+
+
     async def get_balance_rub(self):
         _, bal_rub, _ = await self.get_balance_info()
-        return bal_rub
+        return bal_rubw
 
     async def search_items(self, country_name, year=None, limit=20, mode='bulk'):
         c_code = get_lzt_code(country_name)
