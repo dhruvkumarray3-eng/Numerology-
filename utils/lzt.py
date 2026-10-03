@@ -251,7 +251,9 @@ class LZTClient:
                             balance_usd = float(user.get("balance", 0))
                             balance_rub = balance_usd * 84.0
                         return balance_id, balance_rub, balance_usd
-        
+             except Exception as e:
+        logger.error(f"LZT balance info error: {e}")
+        return None, 0.0, 0.0
     async def get_balance_rub(self):
         _, bal_rub, _ = await self.get_balance_info()
         return bal_rub
