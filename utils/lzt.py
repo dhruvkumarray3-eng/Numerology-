@@ -265,13 +265,6 @@ async def get_balance_info(self):
         logger.error(f"LZT balance info error: {e}")
         return None, 0.0, 0.0
 
-        except Exception as e:
-            logger.error(
-                f"LZT balance info error: {e}"
-            )
-            return None, 0.0, 0.0
-
-
     async def get_balance_rub(self):
         _, bal_rub, _ = await self.get_balance_info()
         return bal_rubw
