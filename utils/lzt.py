@@ -65,7 +65,6 @@ def get_lzt_code(country_name):
     clean = str(country_name).strip()
     lower = clean.lower()
 
-    # Exact country name
     if clean in COUNTRY_TO_LZT:
         return COUNTRY_TO_LZT[clean]
 
@@ -73,32 +72,32 @@ def get_lzt_code(country_name):
         if name.lower() == lower:
             return code
 
-    # ISO-2 code
     if len(lower) == 2 and lower.isalpha():
         return lower
 
-    # Phone country prefix
-    phone_prefixes = {
+    phone_codes = {
         "91": "in",
         "92": "pk",
         "880": "bd",
         "44": "gb",
+        "1": "us",
+        "27": "za",
+        "55": "br",
+        "234": "ng",
+        "63": "ph",
+        "20": "eg",
+        "90": "tr",
         "49": "de",
         "33": "fr",
         "39": "it",
         "81": "jp",
         "82": "kr",
         "86": "cn",
-        "90": "tr",
-        "234": "ng",
-        "55": "br",
-        "61": "au",
         "7": "ru",
     }
 
     phone = lower.replace("+", "").replace(" ", "").replace("-", "")
-
-    return phone_prefixes.get(phone)
+    return phone_codes.get(phone)
 
 def get_country_from_lzt(code):
     if not code: return "Unknown"
@@ -252,26 +251,7 @@ class LZTClient:
                             balance_usd = float(user.get("balance", 0))
                             balance_rub = balance_usd * 84.0
                         return balance_id, balance_rub, balance_usd
-        async with session.get(
-    url,
-    headers=self.get_headers(),
-    params=params,
-    timeout=15
-) as resp:
-
-    data = await resp.json(content_type=None)
-
-    if resp.status != 200:
-        logger.error(
-            f"LZT search failed | "
-            f"status={resp.status} | "
-            f"params={params} | "
-            f"response={data}"
-        )
-        return []
-
-    items = data.get("items", [])
-
+        
     async def get_balance_rub(self):
         _, bal_rub, _ = await self.get_balance_info()
         return bal_rub
