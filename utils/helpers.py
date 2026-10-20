@@ -319,4 +319,4 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
  if edit_msg_id:
  try: return await bot.edit_message(peer, edit_msg_id, message, buttons=buttons, parse_mode='html', link_preview=True)
  except: pass
- return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=True)
+ return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=)
