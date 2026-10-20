@@ -82,18 +82,24 @@ async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
 
  # 2. Parse text if provided
  text = (text or "").strip()
- if text:
- parts = [p.strip() for p in re.split(r'[\s,\n]+', text) if p.strip()]
- if len(parts) >= 2:
- p1, p2 = parts[0], parts[1]
- if INVITE_REGEX.search(p1) or PUBLIC_REGEX.search(p1) or p1.startswith("http"):
- join_url = format_join_url(p1)
- channel_id = p2
- else:
- channel_id = p1
- join_url = format_join_url(p2)
- elif len(parts) == 1:
- p = parts[0]
+    if text:
+        parts = [p.strip() for p in re.split(r'[\s,\n]+', text) if p.strip()]
+        if len(parts) >= 2:
+            p1, p2 = parts[0], parts[1]
+            if INVITE_REGEX.search(p1) or PUBLIC_REGEX.search(p1) or p1.startswith("t.me/"):
+                join_url = format_join_url(p1)
+                channel_id = p2
+            else:
+                channel_id = p1
+                join_url = format_join_url(p2)
+        elif len(parts) == 1:
+            p = parts[0]
+            inv_m = INVITE_REGEX.search(p)
+            if inv_m:
+                join_url = format_join_url(p)
+                inv_hash = inv_m.group(1)
+
+ p = par'error': \"Koi valid Channel ID, Username ya Link nahi mila. Kripya valid username, link ya forwarded message bhejein.\"ts[0]
  inv_m = INVITE_REGEX.search(p)
  if inv_m:
  join_url = format_join_url(p)
