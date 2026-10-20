@@ -24,7 +24,7 @@ def style_btn(text, data, color_type="primary", icon=None, **kwargs):
 def format_join_url(url: str) -> str:
  """Normalizes any Telegram link or username into a valid https://t.me/... URL."""
  if not url:
- return ""
+     return ""
  url = str(url).strip()
  if url.startswith("http://") or url.startswith("https://"):
  return url
