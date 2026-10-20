@@ -22,19 +22,22 @@ def style_btn(text, data, color_type="primary", icon=None, **kwargs):
  return Button.inline(text, data)
 
 def format_join_url(url: str) -> str:
- """Normalizes any Telegram link or username into a valid https://t.me/... URL."""
- if not url:
-     return ""
- url = str(url).strip()
- if url.startswith("http://") or url.startswith("https://"):
- return url
- if url.startswith("t.me/") or url.startswith("telegram.me/"):
- return f"https://{url}"
- if url.startswith("@"):
- return f"https://t.me/{url[1:]}"
- if not (url.startswith("-") or url.isdigit()):
- return f"https://t.me/{url}"
- return url
+    """Normalizes any Telegram link or username into a valid https://t.me/..."""
+    if not url:
+        return ""
+    
+    url = str(url).strip()
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    if url.startswith("t.me/") or url.startswith("telegram.me/"):
+        return f"https://{url}"
+    if url.startswith("@"):
+        return f"https://t.me/{url[1:]}"
+    if not (url.startswith("-") or url.isdigit()):
+        return f"https://t.me/{url}"
+        
+    return url
+
 
 async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
  """
