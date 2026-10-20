@@ -4,44 +4,46 @@ import re
 from telethon import Button
 from telethon.errors import UserNotParticipantError, ChatAdminRequiredError
 from telethon.tl.functions.channels import GetParticipantRequest
+from telethon.tl.functions.messages import CheckChatInviteRequest, ExportChatInviteRequest
 from telethon.tl import types, functions
 from database import get_fsub_channels, get_fsub_urls, get_fsub_status
 from config import logger
 
+# Regex patterns for parsing links
 INVITE_REGEX = re.compile(r'(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/(?:\+|joinchat/)([a-zA-Z0-9_-]+)', re.IGNORECASE)
 PUBLIC_REGEX = re.compile(r'(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/([a-zA-Z0-9_]{3,})', re.IGNORECASE)
 
 # ---------------------------------------------------------
-# HELPER: STYLE BUTTON (FIX FOR MISSING style_btn)
+# 🎨 HELPER: STYLE BUTTON (FIX FOR MISSING style_btn)
 # ---------------------------------------------------------
 def style_btn(text, data, color_type="primary", icon=None, **kwargs):
  """
- Safely creates a Telethon inline button while supporting 
- custom color, icon parameters, and extra keyword arguments.
+ 🚀 Safely creates a Telethon inline button with premium style support.
+ ✅ Supports custom color, icon parameters, and extra kwargs.
  """
  return Button.inline(text, data)
 
 def format_join_url(url: str) -> str:
-    """Normalizes any Telegram link or username into a valid https://t.me/..."""
-    if not url:
-        return ""
-    
-    url = str(url).strip()
-    if url.startswith("http://") or url.startswith("https://"):
-        return url
-    if url.startswith("t.me/") or url.startswith("telegram.me/"):
-        return f"https://{url}"
-    if url.startswith("@"):
-        return f"https://t.me/{url[1:]}"
-    if not (url.startswith("-") or url.isdigit()):
-        return f"https://t.me/{url}"
-        
-    return url
+ """🧹 Normalizes any Telegram link or username into a valid https://t.me/..."""
+ if not url:
+ return ""
+ 
+ url = str(url).strip()
+ if url.startswith("http://") or url.startswith("https://"):
+ return url
+ if url.startswith("t.me/") or url.startswith("telegram.me/"):
+ return f"https://{url}"
+ if url.startswith("@"):
+ return f"https://t.me/{url[1:]}"
+ if not (url.startswith("-") or url.isdigit()):
+ return f"https://t.me/{url}"
+ 
+ return url
 
 
 async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
  """
- Intelligently parses any format:
+ 🧠 Intelligently parses any Telegram format:
  - Forwarded message from a channel
  - @username or username
  - https://t.me/username or t.me/username
@@ -82,24 +84,18 @@ async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
 
  # 2. Parse text if provided
  text = (text or "").strip()
-    if text:
-        parts = [p.strip() for p in re.split(r'[\s,\n]+', text) if p.strip()]
-        if len(parts) >= 2:
-            p1, p2 = parts[0], parts[1]
-            if INVITE_REGEX.search(p1) or PUBLIC_REGEX.search(p1) or p1.startswith("t.me/"):
-                join_url = format_join_url(p1)
-                channel_id = p2
-            else:
-                channel_id = p1
-                join_url = format_join_url(p2)
-        elif len(parts) == 1:
-            p = parts[0]
-            inv_m = INVITE_REGEX.search(p)
-            if inv_m:
-                join_url = format_join_url(p)
-                inv_hash = inv_m.group(1)
-
- p = par'error': \"Koi valid Channel ID, Username ya Link nahi mila. Kripya valid username, link ya forwarded message bhejein.\"ts[0]
+ if text:
+ parts = [p.strip() for p in re.split(r'[\s,\n]+', text) if p.strip()]
+ if len(parts) >= 2:
+ p1, p2 = parts[0], parts[1]
+ if INVITE_REGEX.search(p1) or PUBLIC_REGEX.search(p1) or p1.startswith("t.me/"):
+ join_url = format_join_url(p1)
+ channel_id = p2
+ else:
+ channel_id = p1
+ join_url = format_join_url(p2)
+ elif len(parts) == 1:
+ p = parts[0]
  inv_m = INVITE_REGEX.search(p)
  if inv_m:
  join_url = format_join_url(p)
@@ -121,6 +117,7 @@ async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
  except Exception:
  channel_id = join_url
  else:
+ # 🔍 Parse Public Links, @, IDs, and Raw Usernames
  pub_m = PUBLIC_REGEX.search(p)
  if pub_m:
  username = pub_m.group(1)
@@ -145,7 +142,7 @@ async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
  'join_url': '',
  'title': '',
  'is_admin': False,
- 'error': "Koi valid Channel ID, Username ya Link nahi mila. Kripya valid username, link ya forwarded message bhejein."
+ 'error': "❌ Koi valid Channel ID, Username ya Link nahi mila. Kripya valid username, link ya forwarded message bhejein."
  }
 
  # 3. Resolve Entity in Telethon to get exact numeric ID and title
@@ -173,7 +170,6 @@ async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
  join_url = f"https://t.me/{username}"
  else:
  try:
- from telethon.tl.functions.messages import ExportChatInviteRequest
  exp = await bot(ExportChatInviteRequest(peer=entity))
  join_url = exp.link
  except Exception:
@@ -209,7 +205,7 @@ async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
  }
 
 async def check_channel_joined(bot, uid, is_admin_func):
- """Returns True if all required channels joined, False otherwise."""
+ """✅ Returns True if all required channels joined, False otherwise."""
  if is_admin_func(uid): return True
  if get_fsub_status() == 'off': return True
 
@@ -245,7 +241,7 @@ async def check_channel_joined(bot, uid, is_admin_func):
  return True
 
 async def get_unjoined_channels(bot, uid):
- """Returns list of (url, index) for channels the user has NOT joined."""
+ """📋 Returns list of (url, index) for channels the user has NOT joined."""
  unjoined = []
  if get_fsub_status() == 'off': return []
 
@@ -293,7 +289,7 @@ def to_small_caps(text):
  return "".join(SMALL_CAPS_MAP.get(c, c) for c in str(text))
 
 async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id=None):
- """Sends or edits a message with WebPage link preview inverted ON TOP."""
+ """🖼️ Sends or edits a message with WebPage link preview inverted ON TOP."""
  try:
  text, entities = await bot._parse_message_text(message, 'html')
  markup = bot.build_reply_markup(buttons) if buttons else None
