@@ -46,7 +46,7 @@ async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
  - -1001234567890 (channel ID)
  - -1001234567890 https://t.me/... (space or newline separated)
  - https://t.me/... -1001234567890
- 
+
  Returns:
  {
  'success': bool,
@@ -156,7 +156,7 @@ async def resolve_channel_and_link(bot, text: str = "", forward_msg=None):
  title = getattr(entity, 'title', getattr(entity, 'first_name', title))
  e_id = str(entity.id)
  channel_id = f"-100{e_id}" if not e_id.startswith("-100") else e_id
- 
+
  # If join_url not yet set, generate it
  if not join_url:
  username = getattr(entity, 'username', None)
@@ -203,15 +203,15 @@ async def check_channel_joined(bot, uid, is_admin_func):
  """Returns True if all required channels joined, False otherwise."""
  if is_admin_func(uid): return True
  if get_fsub_status() == 'off': return True
- 
+
  check_channels = get_fsub_channels()
  if not check_channels: return True
- 
+
  for ch in check_channels:
  try:
  ch_str = str(ch).strip()
  if not ch_str: continue
- 
+
  # Skip raw invite links that cannot be checked as entities directly
  if "t.me/+" in ch_str or "joinchat" in ch_str:
  continue
@@ -222,7 +222,7 @@ async def check_channel_joined(bot, uid, is_admin_func):
  entity = await bot.get_entity(target)
  except Exception:
  pass
- 
+
  peer = entity if entity is not None else target
  await bot(GetParticipantRequest(channel=peer, participant=uid))
  except UserNotParticipantError:
@@ -239,19 +239,19 @@ async def get_unjoined_channels(bot, uid):
  """Returns list of (url, index) for channels the user has NOT joined."""
  unjoined = []
  if get_fsub_status() == 'off': return []
- 
+
  check_channels = get_fsub_channels()
  join_urls = get_fsub_urls()
- 
+
  for i, ch in enumerate(check_channels):
  raw_url = join_urls[i] if i < len(join_urls) else ""
  url = format_join_url(raw_url)
  if not url: continue
- 
+
  try:
  ch_str = str(ch).strip()
  if not ch_str: continue
- 
+
  if "t.me/+" in ch_str or "joinchat" in ch_str:
  continue
 
@@ -261,7 +261,7 @@ async def get_unjoined_channels(bot, uid):
  entity = await bot.get_entity(target)
  except Exception:
  pass
- 
+
  peer = entity if entity is not None else target
  await bot(GetParticipantRequest(channel=peer, participant=uid))
  except UserNotParticipantError:
@@ -290,7 +290,7 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
  markup = bot.build_reply_markup(buttons) if buttons else None
  peer_obj = await bot.get_input_entity(peer)
  media_obj = types.InputMediaWebPage(url=url, force_large_media=True)
- 
+
  if edit_msg_id:
  try:
  return await bot(functions.messages.EditMessageRequest(
@@ -304,7 +304,7 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
  ))
  except Exception as e:
  logger.error(f"Edit invert_media error: {e}")
- 
+
  return await bot(functions.messages.SendMediaRequest(
  peer=peer_obj,
  media=media_obj,
@@ -319,4 +319,4 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
  if edit_msg_id:
  try: return await bot.edit_message(peer, edit_msg_id, message, buttons=buttons, parse_mode='html', link_preview=True)
  except: pass
- return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=)
+ return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=True)
