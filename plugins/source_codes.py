@@ -88,8 +88,16 @@ async def add_source_code_handler(event):
  if not event.message.media:
  return await event.respond("❌ Please attach a ZIP file with the source code.")
 
- # Save the file to local storage (ensure 'downloads' folder exists)
- file_path = f"downloads/source_{event.message.id}.zip"
+ # --- HANDLE FOLDER CREATION ---
+ folder = "downloads"
+ if not os.path.exists(folder):
+ os.makedirs(folder)
+ logger.info(f"Created folder: {folder}")
+
+ # Save the file to local storage
+ # Naming: download_{unique_id}.zip
+ filename = f"download_{event.message.id}.zip"
+ file_path = os.path.join(folder, filename)
  
  try:
  # Download the file
