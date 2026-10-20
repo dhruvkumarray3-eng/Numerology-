@@ -4,96 +4,610 @@ import zipfile
 import shutil
 import html
 import time
+import asyncio
 from telethon import events, Button, TelegramClient
+from telethon.errors import SessionPasswordNeededError, FloodWaitError, UserIsBlockedError, InputUserDeactivatedError
 from telethon.tl.functions.account import GetPasswordRequest
-from telethon.errors import SessionPasswordNeededError
-from database import cur, db, is_bot_online, is_admin, has_perm, ADMIN_ID, get_flag_by_country_name, get_country_info, update_balance, get_bot_mode, get_change_number_fee, get_lzt_margin, set_lzt_margin
-from config import PE_CROWN, PE_LOCATION, PE_LIGHTNING, P_USERS, P_PKG, P_WAIT, P_ON, P_YES, P_NO, P_WARN, P_DOC, P_FLAG, P_MONEY, P_PHONE, P_GLOBE, P_2FA, P_CAL, P_OTP, P_CARD, P_TG, P_ACC, P_USDT, P_UPI, P_CART, P_GIFT, P_STATS, P_OFF, API_ID, API_HASH, bot, is_super_admin
+from database import (
+ cur, db, is_admin, has_perm, ADMIN_ID, get_usdt_rate, COUNTRY_CODES,
+ get_flag_by_country_name, get_country_info, update_balance, is_bot_online,
+ get_bot_mode, set_bot_mode, get_lzt_key, set_lzt_key, get_rub_rate,
+ set_rub_rate, get_lzt_margin, set_lzt_margin, get_fsub_status, set_fsub_status,
+ get_fsub_channels, get_fsub_urls, set_fsub_data, add_fsub_channel,
+ remove_fsub_channel, get_log_channels_db, set_log_channels_db,
+ add_log_channel_db, remove_log_channel_db, get_change_number_fee,
+ set_change_number_fee
+)
+from config import *
 from utils.keyboards import style_btn
+from utils.states import admin_state
+from utils.lzt import lzt_client
+from plugins.admin import admin_panel_handler
 
-async def admin_panel_handler(event):
-    uid = event.sender_id
-    if not is_admin(uid): return
-    
-    status_text = "🟢 Bot is ON" if is_bot_online() else "🔴 Bot is OFF"
-    current_mode = get_bot_mode()
-    mode_text = "📂 Manual" if current_mode == 'manual' else ("🌐 Panel (LZT)" if current_mode == 'panel' else "⚡ Hybrid")
-    total_users = cur.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    total_stock = cur.execute("SELECT COUNT(*) FROM stock WHERE available=1").fetchone()[0]
-    pending_deposits = cur.execute("SELECT COUNT(*) FROM deposits WHERE status='pending'").fetchone()[0]
-    chg_fee = get_change_number_fee()
-    btns = []
-    
-    if is_super_admin(uid) or has_perm(uid, 'p_settings'):
-        btns.append([
-            style_btn(f"Status: {status_text}", "adm_togglebot", "primary", icon=5409098988156629257),
-            style_btn(f"Mode: {mode_text}", "adm_toggle_mode", "success", icon=5409271925014801629)
-        ])
-        
-    r1 = []
-    if is_super_admin(uid) or has_perm(uid, 'p_add_stock'):
-        r1.extend([style_btn("Add Single Acc", "adm_addstock", "primary", icon=6129732880529628243), style_btn("Add ZIP", "adm_addzip", "primary", icon=5355292788923593967)])
-    if r1: btns.append(r1)
+# Import admin actions handlers to register them
+from admin_actions import register_admin_actions
 
-    r2 = []
-    if is_super_admin(uid) or has_perm(uid, 'p_manage_stock'):
-        r2.extend([style_btn("Manage Stock", "adm_managestock", "success", icon=6129731974291527294), style_btn("Check Stock", "adm_checkstock", "primary", icon=5409098988156629257), style_btn("Auto Price", "adm_autoprice", "primary", icon=5409098988156629257)])
-    if r2: btns.append(r2)
+async def channels_manager_menu(event):
+ fsub_status = get_fsub_status()
+ fsub_btn_text = "🟢 FSub: ON" if fsub_status == 'on' else "🔴 FSub: OFF"
+ 
+ check_channels = get_fsub_channels()
+ join_urls = get_fsub_urls()
+ log_channels = get_log_channels_db()
+ 
+ fsub_list_str = ""
+ for i, ch in enumerate(check_channels):
+ url = join_urls[i] if i < len(join_urls) else "No link"
+ fsub_list_str += f" • <code>{ch}</code> ➡️ {url}\n"
+ if not fsub_list_str: fsub_list_str = " <i>No Must-Join channels configured.</i>\n"
 
-    r3 = []
-    if is_super_admin(uid) or has_perm(uid, 'p_stats'):
-        r3.extend([style_btn("Statistics", "adm_stats", "primary", icon=5409098988156629257), style_btn("Broadcast", "adm_bcast", "primary", icon=5409098988156629257)])
-        r3.append(style_btn("User Info", "adm_userinfo", "primary", icon=5409098988156629257))
-    if r3: btns.append(r3)
+ log_list_str = ""
+ for ch in log_channels:
+ log_list_str += f" • <code>{ch}</code>\n"
+ if not log_list_str: log_list_str = " <i>No Log channels configured.</i>\n"
 
-    r4 = []
-    if is_super_admin(uid) or has_perm(uid, 'p_bal'):
-        r4.extend([style_btn("Change Balance", "adm_bal", "primary", icon=6129888444245089008), style_btn("Ban User", "adm_ban", "danger", icon=5408832111773757273)])
-    if r4: btns.append(r4)
+ msg = (f"<blockquote>📢 <b>𝐂ʜᴀɴɴᴇʟs & 𝐅𝐒ᴜʙ 𝐌ᴀɴᴀɢᴇʀ</b>\n\n"
+ f"🛡️ <b>𝐅ᴏʀᴄᴇ 𝐒ᴜʙsᴄʀɪʙᴇ:</b> <b>{fsub_status.upper()}</b>\n"
+ f"{fsub_list_str}\n"
+ f"📝 <b>𝐋ᴏɢ / 𝐀ᴘᴘʀᴏᴠᴀʟ 𝐂ʜᴀɴɴᴇʟs:</b>\n"
+ f"{log_list_str}</blockquote>")
 
-    r5 = []
-    if is_super_admin(uid) or has_perm(uid, 'p_settings'):
-        r5.extend([style_btn("Discount", "adm_discount", "primary", icon=5409098988156629257), style_btn("Ref %", "adm_refpct", "primary", icon=5409098988156629257)])
-        btns.append(r5)
-        btns.append([style_btn("📢 Channels & FSub", "adm_channels_mgr", "success", icon=6129627894349045589), style_btn("Support URL", "adm_supporturl", "primary", icon=5409098988156629257)])
-        btns.append([style_btn("💳 Auto-UPI / IMAP", "adm_autoupi", "success", icon=5409271925014801629), style_btn("🌐 LZT Panel Settings", "adm_lzt_settings", "primary", icon=5409166771330494453)])
-        btns.append([style_btn(f"🔄 Change Num Fee: ₹{chg_fee}", "adm_setchangefee", "success", icon=5409320020058584473), style_btn("Set USDT Rate", "adm_usdtrate", "primary", icon=5409098988156629257)])
-        btns.append([style_btn("Payments", "adm_payments", "primary", icon=5409098988156629257), style_btn("Manage Admins", "adm_manageadmins", "primary", icon=5409098988156629257)])
-        btns.append([style_btn("𝐁ᴀᴄᴋup Users", "adm_backupusr", "primary", icon=5409098988156629257), style_btn("Restore Users", "adm_restoreusr", "primary", icon=5409098988156629257)])
-        btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴀɪɴ 𝐌ᴇɴᴜ", b"dashboard_main", "danger", icon=6129812419028982717)])
+ btns = [
+ [style_btn(fsub_btn_text, "adm_toggle_fsub", "primary", icon=5409098988156629257)],
+ [style_btn("➕ Add Must-Join Ch", "adm_add_fsub", "success", icon=5409271925014801629),
+ style_btn("🗑️ Remove Must-Join", "adm_rem_fsub", "danger", icon=5408832111773757273)],
+ [style_btn("➕ Add Log Channel", "adm_add_logch", "success", icon=5409271925014801629),
+ style_btn("🗑️ Remove Log Ch", "adm_rem_logch", "danger", icon=5408832111773757273)],
+ [style_btn("🔄 Set All FSub Data", "adm_set_all_fsub", "primary", icon=5409098988156629257)],
+ [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129812419028982717)]
+ ]
+ try: await event.edit(msg, buttons=btns)
+ except: await bot.send_message(event.chat_id, msg, buttons=btns)
 
-    header = (f"<blockquote>{PE_CROWN} <b>𝐀ᴅᴠᴀɴᴄᴇᴅ 𝐀ᴅᴍɪɴ 𝐃ᴀsʜʙᴏᴀʀᴅ</b>\n\n"
-              f"⚡ <b>𝐌ᴏᴅᴇ:</b> {mode_text}\n"
-              f"{P_USERS} 𝐔sᴇʀs: <b>{total_users}</b>\n"
-              f"{P_PKG} 𝐀ᴠᴀɪʟᴀʙʟᴇ 𝐒ᴛᴏᴄᴋ: <b>{total_stock}</b>\n"
-              f"{P_WAIT} 𝐏ᴇɴᴅɪɴɢ 𝐃ᴇᴘᴏsɪᴛs: <b>{pending_deposits}</b>")
-    try: await event.edit(header, buttons=btns)
-    except: await bot.send_message(event.chat_id, header, buttons=btns)
+async def run_stock_check(event):
+ msg = await event.respond("🔄 <b>Checking Stock...</b>\nPlease wait, this may take a while.", parse_mode="html")
+ stock_items = cur.execute("SELECT phone, session_file FROM stock WHERE available=1").fetchall()
+ total = len(stock_items)
+ if total == 0:
+ return await msg.edit("⚠️ <b>No stock to check.</b>", parse_mode="html")
+ 
+ dead = 0
+ alive = 0
+ for idx, (phone, sess) in enumerate(stock_items):
+ try:
+ client = TelegramClient(sess, API_ID, API_HASH)
+ await client.connect()
+ if not await client.is_user_authorized():
+ raise Exception("Dead")
+ alive += 1
+ except Exception:
+ dead += 1
+ cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
+ db.commit()
+ finally:
+ try: await client.disconnect()
+ except: pass
+ 
+ if (idx + 1) % 5 == 0:
+ try: await msg.edit(f"🔄 <b>Checking Stock...</b> {idx+1}/{total}\n✅ Alive: {alive}\n❌ Dead: {dead}", parse_mode="html")
+ except: pass
+ 
+ await msg.edit(f"✅ <b>Stock Check Complete!</b>\n\nTotal Checked: {total}\n✅ Alive: {alive}\n❌ Dead (Removed): {dead}", parse_mode="html")
 
-def register_admin(bot):
-    @bot.on(events.NewMessage(pattern=r"(?i)^([/!]?admin|🔐 𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ|🔐 Admin Panel)$"))
-    async def msg_admin(e):
-        await admin_panel_handler(e)
+async def detect_account_year(client):
+ """Detect account creation year from earliest dialog/message."""
+ try:
+ me = await client.get_me()
+ # Try using the user's own ID creation date approximation
+ # Get the earliest message in Saved Messages
+ async for msg in client.iter_messages('me', limit=1, reverse=True):
+ if msg.date:
+ return msg.date.year
+ # Fallback: check earliest dialog
+ async for dialog in client.iter_dialogs(limit=5):
+ if dialog.date:
+ return dialog.date.year
+ except Exception:
+ pass
+ from datetime import datetime
+ return datetime.now().year
 
-    @bot.on(events.NewMessage(pattern=r"(?i)^/(?:lztmargin|setlztmargin)(?:@\w+)?(?:\s+(\S+))?\s*$"))
-    async def lzt_margin_command(e):
-        if not is_admin(e.sender_id):
-            return
+async def manage_admins_menu(event):
+ rows = cur.execute("SELECT user_id FROM admins").fetchall()
+ msg = f"{PE_CROWN} <b>Manage Sub-Admins</b>\n\n"
+ for r in rows: msg += f"{P_ACC} <code>{r[0]}</code>\n"
+ btns = [[style_btn("Add Admin", "adm_addadmin", "primary", icon=5409098988156629257), style_btn("Edit Admin", "adm_editadminreq", "primary", icon=5409098988156629257)],
+ [style_btn("Back", "adm_adminmain", "danger", icon=6129888444245089008)]]
+ await event.edit(msg, buttons=btns)
 
-        amount_text = e.pattern_match.group(1)
-        if amount_text is None:
-            return await e.reply(
-                f"Current LZT markup: ₹{get_lzt_margin():g} per item.\n"
-                "Usage: /lztmargin 25"
-            )
+async def edit_admin_menu(event, target_id):
+ row = cur.execute("SELECT p_add_stock, p_manage_stock, p_stats, p_bal, p_settings FROM admins WHERE user_id=?", (target_id,)).fetchone()
+ if not row: return await event.answer("Admin not found", alert=True)
+ p = ["✅" if x==1 else "❌" for x in row]
+ 
+ btns = [
+ [style_btn(f"Add Stock: {p[0]}", f"adm_tglperm|{target_id}|p_add_stock", "primary", icon=5409098988156629257)],
+ [style_btn(f"Manage Stock: {p[1]}", f"adm_tglperm|{target_id}|p_manage_stock", "primary", icon=5409098988156629257)],
+ [style_btn(f"Stats & Bcast: {p[2]}", f"adm_tglperm|{target_id}|p_stats", "primary", icon=5409098988156629257)],
+ [style_btn(f"Bal & Users: {p[3]}", f"adm_tglperm|{target_id}|p_bal", "primary", icon=5409098988156629257)],
+ [style_btn(f"Settings: {p[4]}", f"adm_tglperm|{target_id}|p_settings", "primary", icon=5409098988156629257)],
+ [style_btn("Remove Admin", f"adm_deladmin|{target_id}", "danger", icon=6129888444245089008)],
+ [style_btn("Back", "adm_manageadmins", "danger", icon=6129888444245089008)]
+ ]
+ await event.edit(f"✏️ <b>Editing Admin:</b> <code>{target_id}</code>", buttons=btns)
 
-        try:
-            set_lzt_margin(float(amount_text))
-        except (TypeError, ValueError, OverflowError):
-            return await e.reply(
-                "Enter a finite, non-negative INR amount. Example: /lztmargin 25"
-            )
+async def send_manage_stock_page(event, page):
+ limit = 10
+ offset = (page - 1) * limit
+ rows = cur.execute("SELECT DISTINCT country_name FROM stock ORDER BY country_name").fetchall()
+ total = len(rows)
+ countries = rows[offset:offset+limit]
+ 
+ btns = []
+ for (c,) in countries: 
+ flag = get_flag_by_country_name(c)
+ btns.append([style_btn(f"{flag} {c}", f"adm_msc|{c}", "primary", icon=5409098988156629257)])
+ 
+ nav = []
+ if page > 1: nav.append(style_btn("Prev", f"adm_mspg|{page-1}", "primary", icon=5409098988156629257))
+ if offset + limit < total: nav.append(style_btn("Next", f"adm_mspg|{page+1}", "primary", icon=5409098988156629257))
+ if nav: btns.append(nav)
+ btns.append([style_btn("Back", "adm_adminmain", "danger", icon=6129888444245089008)])
+ await event.edit(f"{PE_LOCATION} <b>Manage Stock</b> (Page {page})\nSelect a country to edit its properties:", buttons=btns)
 
-        return await e.reply(
-            f"✅ LZT markup set to ₹{get_lzt_margin():g} per item."
-        )
+async def send_manage_stock_country(event, c_name):
+ years = cur.execute("SELECT DISTINCT account_year FROM stock WHERE country_name=? ORDER BY account_year DESC", (c_name,)).fetchall()
+ flag = get_flag_by_country_name(c_name)
+ btns = [
+ [style_btn("Edit Country Name", f"adm_msedit|name|{c_name}", "primary", icon=5409098988156629257), style_btn("Edit Flag", f"adm_msedit|flag|{c_name}", "primary", icon=5409098988156629257)],
+ [style_btn("Edit Common Price (All Years)", f"adm_msedit|cprice|{c_name}", "primary", icon=5409098988156629257)]
+ ]
+ y_btns = []
+ for (y,) in years: y_btns.append(style_btn(f"{y}", f"adm_msedit|yprice|{c_name}|{y}", "primary", icon=5409098988156629257))
+ 
+ for i in range(0, len(y_btns), 3): btns.append(y_btns[i:i+3])
+ btns.append([style_btn("Back", "adm_mspg|1", "danger", icon=6129888444245089008)])
+ await event.edit(f"{flag} <b>Managing: {c_name}</b>\nSelect an option to edit:", buttons=btns)
+
+async def send_autoprice_page(event, page):
+ limit = 10
+ offset = (page - 1) * limit
+ c_list = set([c[0] for c in COUNTRY_CODES.values()])
+ db_countries = cur.execute("SELECT DISTINCT country_name FROM stock").fetchall()
+ for (c,) in db_countries: c_list.add(c)
+ 
+ custom_countries = cur.execute("SELECT DISTINCT name FROM custom_countries").fetchall()
+ for (c,) in custom_countries: c_list.add(c)
+
+ c_list = sorted(list(c_list))
+ total = len(c_list)
+ countries = c_list[offset:offset+limit]
+ 
+ btns = []
+ for c in countries: 
+ flag = get_flag_by_country_name(c)
+ btns.append([style_btn(f"{flag} {c}", f"adm_apc|{c}", "primary", icon=5409098988156629257)])
+ 
+ nav = []
+ if page > 1: nav.append(style_btn("Prev", f"adm_appg|{page-1}", "primary", icon=5409098988156629257))
+ if offset + limit < total: nav.append(style_btn("Next", f"adm_appg|{page+1}", "primary", icon=5409098988156629257))
+ if nav: btns.append(nav)
+ btns.append([style_btn("Add Custom Country", "adm_ap_add_country", "primary", icon=5409098988156629257)])
+ btns.append([style_btn("Back", "adm_adminmain", "danger", icon=6129888444245089008)])
+ await event.edit(f"{PE_LIGHTNING} <b>Auto Price Setup</b> (Page {page})\nSelect a country to set fixed prices:", buttons=btns)
+
+async def send_autoprice_country(event, c_name):
+ flag = get_flag_by_country_name(c_name)
+ btns = [[style_btn("Set Common Price (All Years)", f"adm_apset|{c_name}|Common", "primary", icon=5409098988156629257)]]
+ y_btns = []
+ for y in range(2026, 2017, -1): y_btns.append(style_btn(f"{y}", f"adm_apset|{c_name}|{y}", "primary", icon=5409098988156629257))
+ for i in range(0, len(y_btns), 3): btns.append(y_btns[i:i+3])
+ btns.append([style_btn("Back", "adm_appg|1", "danger", icon=6129888444245089008)])
+ await event.edit(f"{flag} <b>Auto Price: {c_name}</b>\nSelect 'Common' for default price, or a specific year:", buttons=btns)
+
+async def admin_actions(event):
+ data_full = event.data.decode()
+ if not data_full.startswith("adm_"): return
+ uid = event.sender_id
+ action_data = data_full[4:]
+ chat = event.chat_id
+ 
+ if action_data == "adminmain":
+ await event.delete()
+ class FakeEvent: chat_id = chat; sender_id = uid
+ return await admin_panel_handler(FakeEvent())
+
+ if action_data == "togglebot" and has_perm(uid, 'p_settings'):
+ new_status = 'off' if is_bot_online() else 'on'
+ cur.execute("UPDATE settings SET value=? WHERE key='bot_status'", (new_status,))
+ db.commit()
+ await event.answer(f"Bot turned {new_status.upper()}", alert=True)
+ class FakeEvent: chat_id = chat; sender_id = uid
+ await admin_panel_handler(FakeEvent())
+ await event.delete()
+ return
+
+ elif action_data == "toggle_mode" and has_perm(uid, 'p_settings'):
+ curr = get_bot_mode()
+ nxt = 'panel' if curr == 'manual' else ('hybrid' if curr == 'panel' else 'manual')
+ set_bot_mode(nxt)
+ mode_names = {'manual': '📂 Manual Mode', 'panel': '🌐 Panel (LZT) Mode', 'hybrid': '⚡ Hybrid Mode'}
+ await event.answer(f"Switched to {mode_names[nxt]}", alert=True)
+ class FakeEvent: chat_id = chat; sender_id = uid
+ await admin_panel_handler(FakeEvent())
+ await event.delete()
+ return
+
+ elif action_data == "lzt_settings" and has_perm(uid, 'p_settings'):
+ key = get_lzt_key()
+ masked_key = (key[:6] + "..." + key[-4:]) if key and len(key) > 10 else ("Set" if key else "Not Set ❌")
+ rub = get_rub_rate()
+ margin = get_lzt_margin()
+ mode = get_bot_mode()
+ 
+ msg = (f"<blockquote>🌐 <b>𝐋𝐙𝐓 𝐏ᴀɴᴇʟ 𝐒ᴇᴛᴛɪɴɢs</b>\n\n"
+ f"⚡ <b>𝐁ᴏᴛ 𝐌ᴏᴅᴇ:</b> <code>{mode.upper()}</code>\n"
+ f"🔑 <b>𝐋𝐙𝐓 𝐀𝐏𝐈 𝐊ᴇʏ:</b> <code>{masked_key}</code>\n"
+ f"💹 <b>𝐑𝐔𝐁 𝐭𝐨 𝐈𝐍𝐑 𝐑ᴀᴛᴇ:</b> ₹{rub}\n"
+ f"💰 <b>𝐏ʀᴏғɪᴛ 𝐌ᴀʀɢɪɴ (𝐈𝐍𝐑):</b> +₹{margin}\n\n"
+ f"<i>💡 In Panel/Hybrid mode, stock is fetched from LZT Market in real-time.</i></blockquote>")
+ 
+ btns = [
+ [style_btn("🔑 Set API Key", "adm_setlztkey", "primary", icon=5409098988156629257),
+ style_btn("📊 Test / Balance", "adm_lzttest", "success", icon=5409320020058584473)],
+ [style_btn("💹 Set RUB Rate", "adm_setrubrate", "primary", icon=5409098988156629257),
+ style_btn("💰 Set Profit Margin", "adm_setlztmargin", "primary", icon=5409098988156629257)],
+ [style_btn("📋 Custom Price List", "adm_autoprice", "primary", icon=5409098988156629257)],
+ [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129888444245089008)]
+ ]
+ return await event.edit(msg, buttons=btns)
+ 
+ elif action_data == "lzttest" and has_perm(uid, 'p_settings'):
+ await event.answer("Connecting to LZT...", alert=False)
+ ok, res_msg = await lzt_client.check_connection()
+ btns = [[style_btn("🔙 Back", "adm_lzt_settings", "danger", icon=6129888444245089008)]]
+ return await event.edit(f"<blockquote>{res_msg}</blockquote>", buttons=btns)
+
+ elif action_data == "autoupi" and has_perm(uid, 'p_settings'):
+ dep_mode_res = cur.execute("SELECT value FROM settings WHERE key='deposit_mode'").fetchone()
+ dep_mode = dep_mode_res[0] if dep_mode_res and dep_mode_res[0] else "auto"
+ mode_label = "🟢 Auto (IMAP UTR)" if dep_mode == 'auto' else ("⚡ Hybrid (Auto + Fallback)" if dep_mode == 'hybrid' else "📂 Manual (Screenshots)")
+ 
+ upi_res = cur.execute("SELECT value FROM settings WHERE key='upi_id'").fetchone()
+ active_upi = upi_res[0] if upi_res and upi_res[0] else "vinit-godara@fam"
+ 
+ gmail_res = cur.execute("SELECT value FROM settings WHERE key='gmail_user'").fetchone()
+ active_gmail = gmail_res[0] if gmail_res and gmail_res[0] else "vinitgodaragodara3@gmail.com"
+ 
+ msg = (f"<blockquote>💳 <b>𝐀ᴜᴛᴏ-𝐔𝐏𝐈 & 𝐈𝐌𝐀𝐏 𝐆ᴀᴛᴇᴡᴀʏ 𝐒ᴇᴛᴛɪɴɢs</b>\n\n"
+ f"⚙️ <b>𝐃ᴇᴘᴏsɪᴛ 𝐌ᴏᴅᴇ:</b> <b>{mode_label}</b>\n"
+ f"🆔 <b>𝐀𝐜𝐭𝐢𝐯𝐞 𝐔𝐏𝐈 𝐈𝐃:</b> <code>{active_upi}</code>\n"
+ f"📧 <b>𝐆𝐦𝐚𝐢𝐥 𝐀𝐜𝐜𝐨𝐮𝐧𝐭:</b> <code>{active_gmail}</code>\n"
+ f"🔒 <b>𝐀𝐧𝐭𝐢-𝐃𝐮𝐩𝐥𝐢𝐜𝐚𝐭𝐞 𝐔𝐓𝐑:</b> 🟢 <b>Active (100% Protected)</b>\n\n"
+ f"<i>💡 In Auto/Hybrid mode, payments are verified in real-time from bank notification emails!</i></blockquote>")
+ 
+ btns = [
+ [style_btn(f"🔄 Mode: {dep_mode.capitalize()}", "adm_toggle_dep_mode", "success", icon=5409271925014801629)],
+ [style_btn("✏️ Change UPI ID", "adm_change_upi", "primary", icon=5409098988156629257),
+ style_btn("📧 Change Gmail", "adm_change_gmail", "primary", icon=5409098988156629257)],
+ [style_btn("🧪 Test IMAP Connection", "adm_test_imap", "primary", icon=5409320020058584473)],
+ [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129888444245089008)]
+ ]
+ return await event.edit(msg, buttons=btns)
+
+ elif action_data == "toggle_dep_mode" and has_perm(uid, 'p_settings'):
+ dep_mode_res = cur.execute("SELECT value FROM settings WHERE key='deposit_mode'").fetchone()
+ curr = dep_mode_res[0] if dep_mode_res and dep_mode_res[0] else "auto"
+ nxt = "hybrid" if curr == "auto" else ("manual" if curr == "hybrid" else "auto")
+ cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('deposit_mode', ?)", (nxt,))
+ db.commit()
+ await event.answer(f"Deposit Mode switched to {nxt.upper()}!", alert=True)
+ # re-render menu
+ dep_mode = nxt
+ mode_label = "🟢 Auto (IMAP UTR)" if dep_mode == 'auto' else ("⚡ Hybrid (Auto + Fallback)" if dep_mode == 'hybrid' else "📂 Manual (Screenshots)")
+ upi_res = cur.execute("SELECT value FROM settings WHERE key='upi_id'").fetchone()
+ active_upi = upi_res[0] if upi_res and upi_res[0] else "vinit-godara@fam"
+ gmail_res = cur.execute("SELECT value FROM settings WHERE key='gmail_user'").fetchone()
+ active_gmail = gmail_res[0] if gmail_res and gmail_res[0] else "vinitgodaragodara3@gmail.com"
+ 
+ msg = (f"<blockquote>💳 <b>𝐀ᴜᴛᴏ-𝐔𝐏𝐈 & 𝐈𝐌𝐀𝐏 𝐆ᴀᴛᴇᴡᴀʏ 𝐒ᴇᴛᴛɪɴɢs</b>\n\n"
+ f"⚙️ <b>𝐃ᴇᴘᴏsɪᴛ 𝐌ᴏᴅᴇ:</b> <b>{mode_label}</b>\n"
+ f"🆔 <b>𝐀𝐜𝐭𝐢𝐯𝐞 𝐔𝐏𝐈 𝐈𝐃:</b> <code>{active_upi}</code>\n"
+ f"📧 <b>𝐆𝐦𝐚𝐢𝐥 𝐀𝐜𝐜𝐨𝐮𝐧𝐭:</b> <code>{active_gmail}</code>\n"
+ f"🔒 <b>𝐀𝐧𝐭𝐢-𝐃𝐮𝐩𝐥𝐢𝐜𝐚𝐭𝐞 𝐔𝐓𝐑:</b> 🟢 <b>Active (100% Protected)</b>\n\n"
+ f"<i>💡 In Auto/Hybrid mode, payments are verified in real-time from bank notification emails!</i></blockquote>")
+ btns = [
+ [style_btn(f"🔄 Mode: {dep_mode.capitalize()}", "adm_toggle_dep_mode", "success", icon=5409271925014801629)],
+ [style_btn("✏️ Change UPI ID", "adm_change_upi", "primary", icon=5409098988156629257),
+ style_btn("📧 Change Gmail", "adm_change_gmail", "primary", icon=5409098988156629257)],
+ [style_btn("🧪 Test IMAP Connection", "adm_test_imap", "primary", icon=5409320020058584473)],
+ [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129888444245089008)]
+ ]
+ return await event.edit(msg, buttons=btns)
+
+ elif action_data == "test_imap" and has_perm(uid, 'p_settings'):
+ await event.answer("Testing IMAP...", alert=False)
+ from utils.imap_verifier import get_imap_credentials
+ u, p = get_imap_credentials()
+ try:
+ import ssl, imaplib
+ context = ssl.create_default_context()
+ mail = imaplib.IMAP4_SSL("imap.gmail.com", 993, ssl_context=context)
+ mail.login(u, p)
+ mail.select("INBOX")
+ status, data = mail.search(None, "ALL")
+ total = len(data[0].split())
+ mail.logout()
+ await event.answer(f"✅ IMAP Connected!\n📧 {u}\nTotal Inbox Emails: {total}", alert=True)
+ except Exception as imap_err:
+ await event.answer(f"❌ IMAP Connection Failed: {imap_err}", alert=True)
+ return
+
+ elif action_data == "stats" and has_perm(uid, 'p_stats'):
+ u_row = cur.execute("SELECT COUNT(*) FROM users").fetchone()
+ u = u_row[0] if u_row else 0
+ s_row = cur.execute("SELECT COUNT(*) FROM stock WHERE available=1").fetchone()
+ s = s_row[0] if s_row else 0
+ r_row = cur.execute("SELECT value FROM settings WHERE key='upi_revenue'").fetchone()
+ r = r_row[0] if r_row else "0"
+ bal_row = cur.execute("SELECT SUM(balance) FROM users").fetchone()
+ total_bal = bal_row[0] if bal_row and bal_row[0] else 0
+ o_row = cur.execute("SELECT COUNT(*), SUM(price) FROM orders").fetchone()
+ total_orders = o_row[0] if o_row else 0
+ total_spent = o_row[1] if o_row and o_row[1] else 0
+ 
+ msg = (f"{P_STATS} <b>ADVANCED STATS</b>\n\n{P_USERS} <b>Total Users:</b> {u}\n{P_PKG} <b>Accounts in Stock:</b> {s}\n"
+ f"{P_MONEY} <b>Total UPI Revenue:</b> {P_INR}{r}\n\n{P_CARD} <b>Overall Users Balance:</b> {P_INR}{total_bal}\n"
+ f"{P_CART} <b>Total Accounts Sold:</b> {total_orders}\n{P_USDT} <b>Overall Sales Amount:</b> {P_INR}{total_spent}")
+ return await event.edit(msg, buttons=[[style_btn("Back", "adm_adminmain", "danger", icon=6129888444245089008)]])
+
+ elif action_data == "channels_mgr" and has_perm(uid, 'p_settings'):
+ return await channels_manager_menu(event)
+
+ elif action_data == "toggle_fsub" and has_perm(uid, 'p_settings'):
+ curr = get_fsub_status()
+ nxt = 'off' if curr == 'on' else 'on'
+ set_fsub_status(nxt)
+ await event.answer(f"Force Subscribe turned {nxt.upper()}!", alert=True)
+ return await channels_manager_menu(event)
+
+ elif action_data == "rem_fsub" and has_perm(uid, 'p_settings'):
+ chs = get_fsub_channels()
+ urls = get_fsub_urls()
+ if not chs:
+ await event.answer("⚠️ No Must-Join channels to remove.", alert=True)
+ return await channels_manager_menu(event)
+ btns = []
+ for i, ch in enumerate(chs):
+ url_text = f" ({urls[i]})" if i < len(urls) else ""
+ btns.append([style_btn(f"🗑️ Delete #{i+1}: {ch}{url_text[:25]}", f"adm_delfsub|{i}", "danger", icon=5408832111773757273)])
+ btns.append([style_btn("🔙 Back", "adm_channels_mgr", "danger", icon=6129812419028982717)])
+ return await event.edit("<blockquote>🗑️ <b>Select Must-Join Channel to Remove:</b></blockquote>", buttons=btns)
+
+ elif action_data.startswith("delfsub|") and has_perm(uid, 'p_settings'):
+ idx = int(action_data.split("|")[1])
+ remove_fsub_channel(idx)
+ await event.answer("✅ Channel Removed from Must-Join!", alert=True)
+ return await channels_manager_menu(event)
+
+ elif action_data == "rem_logch" and has_perm(uid, 'p_settings'):
+ chs = get_log_channels_db()
+ if not chs:
+ await event.answer("⚠️ No Log channels to remove.", alert=True)
+ return await channels_manager_menu(event)
+ btns = []
+ for ch in chs:
+ btns.append([style_btn(f"🗑️ Delete Log: {ch}", f"adm_dellogch|{ch}", "danger", icon=5408832111773757273)])
+ btns.append([style_btn("🔙 Back", "adm_channels_mgr", "danger", icon=6129812419028982717)])
+ return await event.edit("<blockquote>🗑️ <b>Select Log Channel to Remove:</b></blockquote>", buttons=btns)
+
+ elif action_data.startswith("dellogch|") and has_perm(uid, 'p_settings'):
+ ch = action_data.split("|")[1]
+ remove_log_channel_db(ch)
+ await event.answer(f"✅ Log Channel {ch} Removed!", alert=True)
+ return await channels_manager_menu(event)
+
+ elif action_data == "payments" and has_perm(uid, 'p_settings'):
+ btns = [
+ [style_btn("Add Payment Method", "adm_addpay", "primary", icon=5409098988156629257)],
+ [style_btn("Remove Payment Method", "adm_delpay", "danger", icon=6129888444245089008)],
+ [style_btn("Back to Admin", "adm_adminmain", "danger", icon=6129888444245089008)]
+ ]
+ return await event.edit(f"{P_CARD} <b>Manage Payment Methods</b>", buttons=btns)
+
+ elif action_data == "manageadmins" and is_super_admin(uid):
+ return await manage_admins_menu(event)
+
+ elif action_data.startswith("tglperm|") and is_super_admin(uid):
+ _, t_id, p_name = action_data.split("|")
+ if int(t_id) == 6356015122:
+ return await event.answer("⚠️ Super Admin permissions cannot be modified!", alert=True)
+ cur.execute(f"UPDATE admins SET {p_name} = CASE WHEN {p_name}=1 THEN 0 ELSE 1 END WHERE user_id=?", (t_id,))
+ db.commit()
+ return await edit_admin_menu(event, t_id)
+ 
+ elif action_data.startswith("deladmin|") and is_super_admin(uid):
+ t_id = action_data.split("|")[1]
+ if int(t_id) == 6356015122:
+ return await event.answer("⚠️ Super Admin cannot be removed!", alert=True)
+ cur.execute("DELETE FROM admins WHERE user_id=?", (t_id,))
+ db.commit()
+ await event.answer("✅ Admin Removed", alert=True)
+ return await manage_admins_menu(event)
+
+ elif action_data == "managestock" and has_perm(uid, 'p_manage_stock'): return await send_manage_stock_page(event, 1)
+ elif action_data == "checkstock" and has_perm(uid, 'p_manage_stock'):
+ await event.answer("Checking stock started...", alert=False)
+ bot.loop.create_task(run_stock_check(event))
+ return
+ elif action_data.startswith("mspg|") and has_perm(uid, 'p_manage_stock'): return await send_manage_stock_page(event, int(action_data.split("|")[1]))
+ elif action_data.startswith("msc|") and has_perm(uid, 'p_manage_stock'): return await send_manage_stock_country(event, action_data.split("|")[1])
+ elif action_data == "autoprice" and has_perm(uid, 'p_manage_stock'): return await send_autoprice_page(event, 1)
+ elif action_data.startswith("appg|") and has_perm(uid, 'p_manage_stock'): return await send_autoprice_page(event, int(action_data.split("|")[1]))
+ elif action_data.startswith("apc|") and has_perm(uid, 'p_manage_stock'): return await send_autoprice_country(event, action_data.split("|")[1])
+ 
+ elif action_data == "backupusr" and has_perm(uid, 'p_settings'):
+ cur.execute("SELECT * FROM users")
+ with open("users_backup.csv", "w", newline="", encoding="utf-8") as f:
+ w = csv.writer(f); w.writerow([i[0] for i in cur.description]); w.writerows(cur.fetchall())
+ await bot.send_file(chat, "users_backup.csv", caption=f"{P_USERS} <b>Users Backup CSV</b>")
+ os.remove("users_backup.csv")
+ return await event.answer("✅ Backup Generated!", alert=True)
+
+ async with bot.conversation(chat, timeout=600) as conv:
+ async def get_reply(txt):
+ await conv.send_message(txt + "\n\n<i>(Type /cancel to abort)</i>")
+ resp = await conv.get_response()
+ if resp.text == "/cancel": raise ValueError("Cancelled")
+ return resp
+
+ try:
+ if action_data == "ap_add_country" and has_perm(uid, 'p_manage_stock'):
+ code = (await get_reply(f"{P_PHONE} <b>Enter Country Calling Code (without +):</b>\n<i>Example: 91</i>")).text.replace("+", "").strip()
+ flag = html.escape((await get_reply(f"{P_FLAG} <b>Enter Country Flag Emoji:</b>\n<i>Example: 🇮🇳</i>")).text.strip())
+ name = html.escape((await get_reply(f"{P_GLOBE} <b>Enter Country Name:</b>\n<i>Example: India</i>")).text.strip())
+ 
+ cur.execute("INSERT OR REPLACE INTO custom_countries (code, name, flag) VALUES (?,?,?)", (code, name, flag))
+ db.commit()
+ await conv.send_message(f"{P_YES} <b>Custom Country Added Successfully!</b>\n{flag} {name} (+{code})\n\n<i>It will now automatically be recognized when adding stock!</i>")
+
+ elif action_data == "userinfo" and has_perm(uid, 'p_stats'):
+ t_uid = int((await get_reply(f"{P_ACC} <b>Enter User ID:</b>")).text)
+ u_row = cur.execute("SELECT balance, total_deposited, joined_date, banned, discount FROM users WHERE user_id=?", (t_uid,)).fetchone()
+ if not u_row: return await conv.send_message(f"{P_NO} User not found.")
+ 
+ o_row = cur.execute("SELECT COUNT(*), SUM(price) FROM orders WHERE user_id=?", (t_uid,)).fetchone()
+ up_row = cur.execute("SELECT SUM(amount) FROM upi_orders WHERE user_id=? AND status='success'", (t_uid,)).fetchone()
+ 
+ bal, dep, joined, is_banned, disc = u_row
+ o_count = o_row[0] if o_row else 0
+ o_spent = o_row[1] if o_row and o_row[1] else 0
+ u_upi = up_row[0] if up_row and up_row[0] else 0
+ 
+ msg = (f"{P_ACC} <b>USER INFO:</b> <code>{t_uid}</code>\n\n"
+ f"{P_MONEY} Balance: {P_INR}{bal}\n"
+ f"{P_CARD} Total Deposited: {P_INR}{dep}\n"
+ f"{P_UPI} UPI Deposited: {P_INR}{u_upi}\n"
+ f"{P_CART} Total Orders: {o_count}\n"
+ f"{P_USDT} Total Spent: {P_INR}{o_spent}\n"
+ f"{P_GIFT} Discount: {disc}%\n"
+ f"{P_CAL} Joined: {joined}\n"
+ f"{P_OFF} Banned: {'Yes' if is_banned else 'No'}")
+ await conv.send_message(msg)
+
+ elif action_data == "addadmin" and is_super_admin(uid):
+ new_ad = int((await get_reply(f"{P_ACC} <b>Enter User ID for new Admin:</b>")).text)
+ cur.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (new_ad,))
+ db.commit()
+ await conv.send_message(f"{P_YES} Admin added!")
+ class FakeEvent: 
+ async def edit(self, text, buttons): await bot.send_message(chat, text, buttons=buttons)
+ async def answer(self, txt, alert): pass
+ await edit_admin_menu(FakeEvent(), new_ad)
+ 
+ elif action_data == "editadminreq" and is_super_admin(uid):
+ t_id = int((await get_reply(f"{P_ACC} <b>Enter User ID to edit:</b>")).text)
+ class FakeEvent: 
+ async def edit(self, text, buttons): await bot.send_message(chat, text, buttons=buttons)
+ async def answer(self, txt, alert): pass
+ await edit_admin_menu(FakeEvent(), t_id)
+
+ elif action_data.startswith("msedit|") and has_perm(uid, 'p_manage_stock'):
+ parts = action_data.split("|")
+ action, c_name = parts[1], parts[2]
+ 
+ if action == "name":
+ new_name = html.escape((await get_reply(f"{P_DOC} <b>Enter NEW Name for {c_name}:</b>")).text)
+ cur.execute("UPDATE stock SET country_name=? WHERE country_name=?", (new_name, c_name))
+ cur.execute("UPDATE auto_prices SET country=? WHERE country=?", (new_name, c_name))
+ db.commit()
+ await conv.send_message(f"{P_YES} Country '{c_name}' successfully renamed to '{new_name}'!")
+ 
+ elif action == "flag":
+ new_flag = html.escape((await get_reply(f"{P_FLAG} <b>Enter NEW Flag Emoji for {c_name}:</b>")).text)
+ cur.execute("UPDATE stock SET country_icon=? WHERE country_name=?", (new_flag, c_name))
+ db.commit()
+ await conv.send_message(f"{P_YES} Flag updated to {new_flag} for '{c_name}'!")
+ 
+ elif action == "cprice":
+ new_p = int((await get_reply(f"{P_MONEY} <b>Enter NEW Common Price for all {c_name} accounts:</b>")).text)
+ cur.execute("UPDATE stock SET price=? WHERE country_name=?", (new_p, c_name))
+ db.commit()
+ await conv.send_message(f"{P_YES} All existing '{c_name}' accounts updated to {P_INR}{new_p}!")
+ 
+ elif action == "yprice":
+ year = parts[3]
+ new_p = int((await get_reply(f"{P_MONEY} <b>Enter NEW Price for {c_name} ({year}):</b>")).text)
+ cur.execute("UPDATE stock SET price=? WHERE country_name=? AND account_year=?", (new_p, c_name, year))
+ db.commit()
+ await conv.send_message(f"{P_YES} All existing '{c_name}' ({year}) accounts updated to {P_INR}{new_p}!")
+ 
+ elif action_data.startswith("apset|") and has_perm(uid, 'p_manage_stock'):
+ parts = action_data.split("|")
+ c_name, year = parts[1], parts[2]
+ new_p = int((await get_reply(f"{P_ASST} <b>Enter Auto-Price for {c_name} ({year}):</b>\n<i>(Enter 0 to remove this auto-price)</i>")).text)
+ if new_p == 0:
+ cur.execute("DELETE FROM auto_prices WHERE country=? AND year=?", (c_name, year))
+ await conv.send_message(f"{P_YES} Auto-Price for {c_name} ({year}) removed!")
+ else:
+ cur.execute("INSERT OR REPLACE INTO auto_prices (country, year, price) VALUES (?,?,?)", (c_name, year, new_p))
+ await conv.send_message(f"{P_YES} Auto-Price for {c_name} ({year}) set to {P_INR}{new_p}! Incoming accounts will use this price automatically.")
+ db.commit()
+
+ elif action_data == "setchangefee" and has_perm(uid, 'p_settings'):
+ curr_fee = get_change_number_fee()
+ fee_text = (await get_reply(f"{P_MONEY} <b>Enter NEW Change Number Fee (in INR):</b>\n\n<i>Current Fee: ₹{curr_fee}</i>\n<i>(Enter 0 to make it free)</i>")).text
+ try:
+ new_fee = int(fee_text.strip())
+ if new_fee < 0: raise ValueError()
+ set_change_number_fee(new_fee)
+ await conv.send_message(f"{P_YES} <b>Change Phone Number Service Fee updated to ₹{new_fee}!</b>")
+ except:
+ await conv.send_message(f"{P_NO} Invalid fee amount. Please enter a valid positive number.")
+
+ elif action_data == "addpay" and has_perm(uid, 'p_settings'):
+ name = html.escape((await get_reply(f"{P_CARD} <b>Enter Payment Method Name:</b>\n<i>(e.g., Binance Pay, TRX)</i>")).text)
+ qr_msg = await get_reply(f"📸 <b>Send QR Code Image:</b>\n<i>(Or type <code>skip</code> if no QR needed)</i>")
+ qr_path = ""
+ if qr_msg.photo:
+ qr_path = f"qr_{int(time.time())}.jpg"
+ await bot.download_media(qr_msg, qr_path)
+ 
+ cap_msg = (await get_reply(f"{P_DOC} <b>Enter Payment Caption:</b>\n<i>(Use <code>text</code> to make wallet IDs or UPI copyable)</i>")).text
+ cap_msg = html.escape(cap_msg).replace("&lt;code&gt;", "<code>").replace("&lt;/code&gt;", "</code>")
+ cur.execute("INSERT INTO custom_payments (name, caption, qr_file_id) VALUES (?,?,?)", (name, cap_msg, qr_path))
+ db.commit()
+ await conv.send_message(f"{P_YES} Payment Method '{name}' added successfully!")
+
+ elif action_data == "delpay" and has_perm(uid, 'p_settings'):
+ rows = cur.execute("SELECT id, name FROM custom_payments").fetchall()
+ if not rows: return await conv.send_message(f"{P_NO} No custom payment methods.")
+ msg = f"{P_DOC} <b>Reply with the ID of the method to delete:</b>\n\n"
+ for r in rows: msg += f"ID: {r[0]} - {r[1]}\n"
+ del_id = (await get_reply(msg)).text
+ try:
+ del_id = int(del_id)
+ file_path = cur.execute("SELECT qr_file_id FROM custom_payments WHERE id=?", (del_id,)).fetchone()
+ if file_path and file_path[0] and os.path.exists(file_path[0]): os.remove(file_path[0])
+ cur.execute("DELETE FROM custom_payments WHERE id=?", (del_id,))
+ db.commit()
+ await conv.send_message(f"{P_YES} Deleted!")
+ except: await conv.send_message(f"{P_NO} Invalid ID.")
+
+ elif action_data == "addzip" and has_perm(uid, 'p_add_stock'):
+ resp = await get_reply(f"{P_PKG} <b>Send the ZIP file containing <code>.session</code> files:</b>")
+ if not resp.file or not resp.file.name.endswith('.zip'): return await conv.send_message(f"{P_NO} Invalid file.")
+ 
+ await conv.send_message(f"{P_WAIT} <b>Extracting & Scanning Accounts...</b>")
+ zip_path = await bot.download_media(resp, "temp_sessions.zip")
+ extracted_dir = f"temp_extracted_{int(time.time())}"
+ os.makedirs(extracted_dir, exist_ok=True)
+ with zipfile.ZipFile(zip_path, 'r') as zip_ref: zip_ref.extractall(extracted_dir)
+
+ groups = {}
+ for file in os.listdir(extracted_dir):
+ if not file.endswith(".session"): continue
+ sess_path = os.path.join(extracted_dir, file)
+ clean_path = sess_path[:-8]
+ try:
+ client = Telegram
