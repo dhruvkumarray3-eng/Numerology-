@@ -19,6 +19,7 @@ from config import (
 )
 from database import cur, db, get_user_currency, update_balance
 from utils.keyboards import style_btn
+from utils import stickers as sticker_engine
 from utils.otp_providers import (
     APP_CATALOG,
     available_providers,
@@ -143,6 +144,7 @@ async def do_buy(event, app_slug, country_iso):
         await event.edit(msg, buttons=btns)
     except MessageNotModifiedError:
         pass
+    await sticker_engine.send_for_event(event, country_iso, mode_required="country")
 
 
 def register_all_apps(bot):
