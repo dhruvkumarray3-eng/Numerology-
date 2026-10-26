@@ -6,33 +6,99 @@ import io
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
 from database import cur, db, get_usdt_rate, update_balance, to_usd, get_log_channels_db, is_admin
-from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_YES, P_WARN, P_INR, P_USDT, P_KEY, PE_CHECK, P_ACC, P_ID, LOG_CHANNEL_ID, LOG_CHANNELS, ADMIN_ID, SUPER_ADMINS, CWALLET_QR, CWALLET_ID, UPI_ID, bot, logger, BEP20_ADDRESS
+from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_YES, P_WARN, P_INR, P_USDT, P_KEY, PE_CHECK, P_ACC, P_ID, LOG_CHANNEL_ID, LOG_CHANNELS, ADMIN_ID, SUPER_ADMINS, CWALLET_QR, CWALLET_ID, UPI_ID, bot, logger, BEP20_ADDRESS, TRUST_WALLET_ADDRESS, TRUST_WALLET_QR
 from utils.keyboards import style_btn
 from utils.states import deposit_input, waiting_proof, admin_dep_state, custom_dep_amt, get_user_lock
 
 async def deposit_menu(event):
+    """Deposit screen - ONLY USDT (BEP-20 / BNB Smart Chain) via Trust Wallet."""
     btns = [
-        [style_btn("⚡ 𝐀ᴜᴛᴏ 𝐔𝐏𝐈 (𝐈ɴsᴛᴀɴᴛ 𝐐𝐑 & 𝐔𝐓𝐑)", "dep_choose_AutoUPI", "success", icon=5409271925014801629)],
-        [style_btn("✍️ 𝐌ᴀɴᴜᴀʟ 𝐔𝐏𝐈 (𝐒ᴄʀᴇᴇɴsʜᴏᴛ 𝐏ʀᴏᴏғ)", "dep_choose_ManualUPI", "primary", icon=5409098988156629257)],
-        [style_btn("💎 𝐂ᴡᴀʟʟᴇᴛ (5% 𝐁𝐎𝐍𝐔𝐒)", "dep_choose_Cwallet", "primary", icon=5440627033111557670)]
+        [style_btn("\U0001F48E \U0001D414\U0001D412\U0001D403\U0001D413 (\U0001D401\U0001D404\U0001D40F-20) \u2022 \U0001D413\U0001D42B\U0001D42E\U0001D42C\U0001D42D \U0001D416\U0001D41A\U0001D425\U0001D425\U0001D41E\U0001D42D",
+                   "dep_choose_BEP20", "success", icon=5440627033111557670)]
     ]
-    
-    customs = cur.execute("SELECT name FROM custom_payments").fetchall()
-    for c in customs:
-        btns.append([style_btn(f"{c[0]}", f"dep_choose_{c[0]}", "primary", icon=5408832111773757273)])
-        
-    btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)])
-    
-    msg = (f"<blockquote>💳 <b>𝐑ᴇᴄʜᴀʀɢᴇ / 𝐀ᴅᴅ 𝐅ᴜɴᴅs</b>\n\n"
-           f"⚡ <b>𝐀ᴜᴛᴏ 𝐔𝐏𝐈:</b> 𝐈ɴsᴛᴀɴᴛ ᴀᴜᴛᴏ-ᴄʀᴇᴅɪᴛ ᴠɪᴀ 12-ᴅɪɢɪᴛ 𝐔𝐓𝐑.\n"
-           f"✍️ <b>𝐌ᴀɴᴜᴀʟ 𝐔𝐏𝐈:</b> 𝐔ᴘʟᴏᴀᴅ ᴘᴀʏᴍᴇɴᴛ sᴄʀᴇᴇɴsʜᴏᴛ ғᴏʀ ᴀᴅᴍɪɴ ᴀᴘᴘʀᴏᴠᴀʟ.\n"
-           f"💎 <b>𝐂ᴡᴀʟʟᴇᴛ:</b> 𝐂ʀʏᴘᴛᴏ ᴘᴀʏᴍᴇɴᴛ ᴡɪᴛʜ 5% ᴇxᴛʀᴀ ʙᴏɴᴜs.\n\n"
-           f"<i>👇 𝐏ʟᴇᴀsᴇ sᴇʟᴇᴄᴛ ʏᴏᴜʀ ᴘʀᴇғᴇʀʀᴇᴅ ᴍᴇᴛʜᴏᴅ:</i></blockquote>")
-           
+    btns.append([style_btn("\U0001F519 \U0001D401\U0001D41A\U0001D41C\U0001D424 \U0001D42D\U0001D428 \U0001D403\U0001D41A\U0001D42C\U0001D421\U0001D41B\U0001D428\U0001D41A\U0001D42B\U0001D41D", b"dashboard_main", "danger", icon=6129812419028982717)])
+
+    msg = (f"<blockquote>\U0001F4B3 <b>\U0001D411\U0001D41E\U0001D41C\U0001D421\U0001D41A\U0001D42B\U0001D420\U0001D41E / \U0001D400\U0001D41D\U0001D41D \U0001D405\U0001D42E\U0001D427\U0001D41D\U0001D42C</b>\n\n"
+           f"\U0001F48E <b>\U0001D414\U0001D412\U0001D403\U0001D413 (\U0001D401\U0001D404\U0001D40F-20):</b> \U0001D40F\U0001D41A\U0001D432 \U0001D428\U0001D427\U0001D425\U0001D432 \U0001D42C\U0001D42D\U0001D41A\U0001D41B\U0001D425\U0001D41E \U0001D41C\U0001D428\U0001D428\U0001D427\U0001D427 \U0001D42C\U0001D42E\U0001D429\U0001D429\U0001D428\U0001D42B\U0001D42D\U0001D41E\U0001D41D.\n"
+           f"\U0001F4CD <b>\U0001D40D\U0001D41E\U0001D42D\U0001D430\U0001D428\U0001D42B\U0001D424:</b> BNB Smart Chain (BEP20)\n\n"
+           f"<i>\U0001F447 \U0001D40F\U0001D425\U0001D41E\U0001D41A\U0001D42C\U0001D41E \U0001D42C\U0001D41E\U0001D425\U0001D41E\U0001D41C\U0001D42D \U0001D432\U0001D428\U0001D42E\U0001D42B \U0001D429\U0001D42B\U0001D41E\U0001D41F\U0001D41E\U0001D42B\U0001D42B\U0001D41E\U0001D41D \U0001D426\U0001D41E\U0001D42D\U0001D421\U0001D428\U0001D41D:</i></blockquote>")
+
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass
     else: await event.respond(msg, buttons=btns)
+
+
+def _bep20_qr_bytes(address: str):
+    """Generate a USDT (BEP-20) QR code image in memory."""
+    try:
+        import qrcode
+        qr = qrcode.QRCode(version=None, box_size=10, border=4)
+        qr.add_data(address)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = io.BytesIO()
+        buf.name = "usdt_bep20_qr.png"
+        img.save(buf, "PNG")
+        buf.seek(0)
+        return buf
+    except Exception as exc:
+        logger.error(f"BEP20 QR generation failed: {exc}")
+        return None
+
+
+async def send_bep20_invoice(uid, amt, rate_text=None):
+    """Send the Trust Wallet USDT (BEP-20) address + QR to the user."""
+    address = (TRUST_WALLET_ADDRESS or BEP20_ADDRESS or "").strip()
+    if not address:
+        return await bot.send_message(
+            uid,
+            "<blockquote>\u26A0\uFE0F <b>Payment not configured</b>\n\n"
+            "Owner has not set the USDT (BEP-20) wallet address yet.\n"
+            "Please contact support.</blockquote>",
+            buttons=[[Button.inline("\u274C \U0001D402\U0001D41A\U0001D427\U0001D41C\U0001D41E\U0001D425", "cancel_action")]],
+        )
+
+    if rate_text is None:
+        try:
+            rate = get_usdt_rate()
+            usdt_amt = round(amt / rate, 2)
+            rate_text = (f"<blockquote>{P_MONEY} <b>\U0001D400\U0001D426\U0001D428\U0001D42E\U0001D427\U0001D42D \U0001D413\U0001D428 \U0001D40F\U0001D41A\U0001D432:</b> "
+                         f"{P_INR}{amt} (~{P_USDT}{usdt_amt} USDT)</blockquote>")
+        except Exception:
+            rate_text = f"<blockquote>{P_MONEY} <b>Amount:</b> {P_INR}{amt}</blockquote>"
+
+    msg = (f"<blockquote>{PE_LIGHTNING} <b>\U0001D414\U0001D412\U0001D403\U0001D413 (\U0001D401\U0001D404\U0001D40F-20) \U0001D40F\U0001D41A\U0001D432\U0001D426\U0001D41E\U0001D427\U0001D42D</b></blockquote>\n\n"
+           f"{rate_text}\n\n"
+           f"\U0001F4CD <b>\U0001D40D\U0001D41E\U0001D42D\U0001D430\U0001D428\U0001D42B\U0001D424:</b> BNB Smart Chain (BEP20)\n"
+           f"\U0001F4B0 <b>\U0001D402\U0001D428\U0001D422\U0001D427:</b> USDT\n"
+           f"\U0001F45B <b>\U0001D400\U0001D41D\U0001D41D\U0001D42B\U0001D41E\U0001D42C\U0001D42C:</b> <code>{address}</code>\n\n"
+           f"\u26A0\uFE0F <i>\U0001D40E\U0001D427\U0001D425\U0001D432 \U0001D42C\U0001D41E\U0001D427\U0001D41D \U0001D414\U0001D412\U0001D403\U0001D413 \U0001D428\U0001D427 \U0001D401\U0001D404\U0001D40F-20 (BNB Smart Chain). "
+           f"\U0001D412\U0001D41E\U0001D427\U0001D41D\U0001D422\U0001D427\U0001D420 \U0001D428\U0001D427 \U0001D41A\U0001D427\U0001D432 \U0001D428\U0001D42D\U0001D421\U0001D41E\U0001D42B \U0001D427\U0001D41E\U0001D42D\U0001D430\U0001D428\U0001D42B\U0001D424 \U0001D430\U0001D422\U0001D425\U0001D425 \U0001D425\U0001D428\U0001D42C\U0001D41E \U0001D432\U0001D428\U0001D42E\U0001D42B \U0001D426\U0001D428\U0001D427\U0001D41E\U0001D432.</i>\n\n"
+           f"<blockquote>{PE_GIFT} <b>\U0001D400\U0001D405\U0001D413\U0001D404\U0001D411 \U0001D40F\U0001D400\U0001D418\U0001D408\U0001D40D\U0001D406:</b> "
+           f"\U0001D412\U0001D41E\U0001D427\U0001D41D \U0001D41A \U0001D41C\U0001D425\U0001D41E\U0001D41A\U0001D42B \U0001D42C\U0001D41C\U0001D42B\U0001D41E\U0001D41E\U0001D427\U0001D42C\U0001D421\U0001D428\U0001D42D \U0001D428\U0001D42B \U0001D413\U0001D40D\U0001D413 \U0001D421\U0001D41A\U0001D42C\U0001D421 \U0001D421\U0001D41E\U0001D42B\U0001D41E.</blockquote>")
+
+    btns = [[Button.inline("\u274C \U0001D402\U0001D41A\U0001D427\U0001D41C\U0001D41E\U0001D425", "cancel_action")]]
+
+    # 1) custom QR (URL or Telegram file_id) if owner provided one
+    if TRUST_WALLET_QR:
+        try:
+            await bot.send_file(uid, TRUST_WALLET_QR, caption=msg, buttons=btns)
+            return
+        except Exception as exc:
+            logger.warning(f"Custom Trust Wallet QR failed, generating one: {exc}")
+
+    # 2) auto-generated QR from the address
+    qr_file = _bep20_qr_bytes(address)
+    if qr_file:
+        try:
+            await bot.send_file(uid, qr_file, caption=msg, buttons=btns)
+            return
+        except Exception as exc:
+            logger.error(f"Failed to send BEP20 QR: {exc}")
+
+    await bot.send_message(uid, msg, buttons=btns)
+
 
 async def manual_deposit_init(event, method):
     uid = event.sender_id
@@ -121,7 +187,9 @@ def register_deposit(bot):
             usdt_amt = round(amt / rate, 2)
             rate_text = f"<blockquote>{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ ᴛᴏ 𝐏ᴀʏ:</b> {P_INR}{amt} (~{P_USDT}{usdt_amt} USDT)\n💱 <i>𝐄xᴄʜᴀɴɢᴇ 𝐑ᴀᴛᴇ: {P_INR}{rate} = $1</i></blockquote>"
             
-            if method == "Cwallet":
+            if method in ("BEP20", "TrustWallet", "USDT"):
+                await send_bep20_invoice(uid, amt, rate_text)
+            elif method == "Cwallet":
                 msg = (f"<blockquote>{P_CARD} <b>𝐌ᴇᴛʜᴏᴅ:</b> {method}\n\n🚀 <b>𝐀ᴅᴅʀᴇss / 𝐈𝐃:</b>\n<code>{CWALLET_ID}</code></blockquote>\n"
                        f"{rate_text}\n"
                        f"<blockquote>👉 <b>𝐒ᴇɴᴅ 𝐏ʀᴏᴏғ:</b>\n𝐏ʟᴇᴀsᴇ sᴇɴᴅ ᴛʜᴇ 𝐓ʀᴀɴsᴀᴄᴛɪᴏɴ 𝐇ᴀsʜ (𝐋ɪɴᴋ) ᴏʀ ᴀ 𝐒ᴄʀᴇᴇɴsʜᴏᴛ ᴏғ ᴛʜᴇ ᴘᴀʏᴍᴇɴᴛ ɴᴏᴡ.</blockquote>")
@@ -481,25 +549,29 @@ def register_deposit(bot):
 
 @bot.on(events.CallbackQuery(pattern=r"^dep_choose_BEP20$"))
 async def cb_choose_bep20(e):
-    """BEP-20 Payment Selection Handler"""
+    """USDT (BEP-20) deposit - ask for the amount first, then send address + QR."""
     uid = e.sender_id
-    deposit_input[uid] = {"method": "BEP20"}
-    
-    # Premium Emojis & UI Formatting
+    deposit_input[uid] = {"step": "wait_amt", "method": "BEP20"}
+
+    address = (TRUST_WALLET_ADDRESS or BEP20_ADDRESS or "").strip()
+    addr_line = (f"\U0001F45B <b>\U0001D400\U0001D41D\U0001D41D\U0001D42B\U0001D41E\U0001D42C\U0001D42C:</b> <code>{address}</code>\n\n"
+                 if address else
+                 "\u26A0\uFE0F <b>Wallet address not set by owner yet.</b>\n\n")
+
     msg_text = (
-        f"<blockquote>{PE_LIGHTNING} <b>RECHARGE / ADD FUNDS (BEP-20)</b></blockquote>\n\n"
-        f"💳 <b>USDT (BEP-20) Payment Details:</b>\n\n"
-        f"📍 <b>Network:</b> BNB Smart Chain (BEP20)\n"
-        f"👛 <b>Address:</b> <code>{BEP20_ADDRESS}</code>\n\n"
-        f"⚠️ <i>Kripya sirf BEP-20 network par hi USDT bhejein.</i>\n\n"
-        f"{PE_GIFT} <b>Enter Deposit Amount in {P_INR}:</b>"
+        f"<blockquote>{PE_LIGHTNING} <b>\U0001D411\U0001D41E\U0001D41C\U0001D421\U0001D41A\U0001D42B\U0001D420\U0001D41E / \U0001D400\U0001D41D\U0001D41D \U0001D405\U0001D42E\U0001D427\U0001D41D\U0001D42C (\U0001D414\U0001D412\U0001D403\U0001D413 \U0001D401\U0001D404\U0001D40F-20)</b></blockquote>\n\n"
+        f"\U0001F4CD <b>\U0001D40D\U0001D41E\U0001D42D\U0001D430\U0001D428\U0001D42B\U0001D424:</b> BNB Smart Chain (BEP20)\n"
+        f"{addr_line}"
+        f"\u26A0\uFE0F <i>\U0001D40A\U0001D42B\U0001D422\U0001D429\U0001D432\U0001D41A \U0001D42C\U0001D422\U0001D42B\U0001D41F \U0001D401\U0001D404\U0001D40F-20 \U0001D427\U0001D41E\U0001D42D\U0001D430\U0001D428\U0001D42B\U0001D424 \U0001D429\U0001D41A\U0001D42B \U0001D421\U0001D422 \U0001D414\U0001D412\U0001D403\U0001D413 \U0001D41B\U0001D41E\U0001D423\U0001D41E\U0001D422\U0001D427.</i>\n\n"
+        f"{PE_GIFT} <b>\U0001D404\U0001D427\U0001D42D\U0001D41E\U0001D42B \U0001D403\U0001D41E\U0001D429\U0001D428\U0001D42C\U0001D422\U0001D42D \U0001D400\U0001D426\U0001D428\U0001D42E\U0001D427\U0001D42D \U0001D422\U0001D427 {P_INR}:</b>\n"
+        f"<i>\U0001D40C\U0001D422\U0001D427\U0001D422\U0001D426\U0001D42E\U0001D426 {P_INR}10</i>"
     )
-    
-    btns = [
-        [style_btn(f"{P_NO} Cancel", "cancel_action", "danger", icon=5409098988156629257)]
-    ]
-    
-    await e.edit(msg_text, buttons=btns, parse_mode="html")
+
+    btns = [[style_btn(f"{P_NO} \U0001D402\U0001D41A\U0001D427\U0001D41C\U0001D41E\U0001D425", "cancel_action", "danger", icon=5409098988156629257)]]
+    try:
+        await e.edit(msg_text, buttons=btns, parse_mode="html")
+    except MessageNotModifiedError:
+        pass
 
 
 def get_bep20_payment_text(amount_inr: float, usdt_amt: float) -> str:

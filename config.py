@@ -122,16 +122,30 @@ JOIN_URLS = env_list("JOIN_URLS", "") or ["https://t.me/RDXnetworkinghub"]
 # LINKS & MEDIA
 TERMS_URL = os.getenv("TERMS_URL", "").strip() or "https://github.com/dhruvkumarray3-eng/Numerology-/blob/main/TERMS_AND_CONDITIONS.md"
 
-# PAYMENT & API DETAILS
+# ---------------------------------------------------------
+# PAYMENT  ->  ONLY USDT (BEP-20 / BNB Smart Chain)
+# ---------------------------------------------------------
+# Owner uses Trust Wallet. Put the USDT BEP-20 receiving address here
+# (Trust Wallet -> USDT -> BNB Smart Chain -> Receive -> copy address).
+# The bot shows this address + an auto-generated QR code to the user.
+# No UPI / CWallet / bank details are needed anywhere.
+TRUST_WALLET_ADDRESS = os.getenv("TRUST_WALLET_ADDRESS", "").strip()
+# Optional: a custom QR image URL / file_id for the same address.
+# Leave blank and the bot generates the QR itself from TRUST_WALLET_ADDRESS.
+TRUST_WALLET_QR = os.getenv("TRUST_WALLET_QR", "").strip()
+
+# Backwards-compatible aliases (older code / old env names keep working)
+BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", "").strip() or TRUST_WALLET_ADDRESS
+BEP20_QR = os.getenv("BEP20_QR", "").strip() or TRUST_WALLET_QR
 CWALLET_QR = os.getenv("CWALLET_QR", "").strip()
 CWALLET_ID = os.getenv("CWALLET_ID", "").strip()
-BEP20_ADDRESS = os.getenv("BEP20_ADDRESS", CWALLET_ID).strip()
-BEP20_QR = os.getenv("BEP20_QR", CWALLET_QR).strip()
 
+# Legacy UPI vars - kept only so old imports never crash. Not used in the UI.
 UPI_MID = os.getenv("UPI_MID", "").strip()
 UPI_ID = os.getenv("UPI_ID", "").strip()
 
 # LZT MARKET & PRICING
+# LZT_API_KEY powers "Buy TG Account" -> Good Quality + Cheap accounts.
 LZT_API_KEY = os.getenv("LZT_API_KEY", "").strip()
 USDT_TO_INR = float(os.getenv("USDT_TO_INR", "88.0"))
 ADMIN_PROFIT_INR = float(os.getenv("ADMIN_PROFIT_INR", "50.0"))
@@ -148,15 +162,38 @@ AUTO_CANCEL_SECONDS = 600
 # or in a local .env file. Leaving them blank keeps the bot running;
 # the related feature simply reports that the provider is not configured.
 
-# --- OTP / SMS providers for "All Apps Accounts" ---
+# =========================================================
+#  WHICH API KEY POWERS WHICH FEATURE  (owner reference)
+# =========================================================
+#  TEMPORASMS_API_KEY  ->  ALL THREE OTP PRODUCT PANELS:
+#                          1) "All Apps OTP Accounts"  (51 apps, app + country search)
+#                          2) "TG Number Change"
+#                          3) "WhatsApp Accounts"
+#                          -> This is the MAIN key. Buy it from temporasms.com
+#                             and paste it in your host's Variables.
+#
+#  LZT_API_KEY         ->  "Buy TG Account" panel:
+#                          1) Good Quality accounts
+#                          2) Cheap accounts
+#                          -> LZT Market (lolz.guru / lzt.market) API token.
+#
+#  TRUST_WALLET_ADDRESS->  USDT (BEP-20) deposits - address + auto QR.
+#
+#  MONGO_URI           ->  full user history (optional, SQLite works without it).
+#
+#  FIVESIM / SMSACTIVATE / SMSPVA / SMSMAN / TEMPMAIL
+#                      ->  optional extra OTP fallbacks. If TEMPORASMS is set
+#                          these are NOT required.
+# =========================================================
+
+# --- OTP / SMS providers for "All Apps Accounts" (optional fallbacks) ---
 FIVESIM_API_KEY = os.getenv("FIVESIM_API_KEY", "").strip()          # https://5sim.net
 SMSACTIVATE_API_KEY = os.getenv("SMSACTIVATE_API_KEY", "").strip()  # https://sms-activate.org
 SMSPVA_API_KEY = os.getenv("SMSPVA_API_KEY", "").strip()            # https://smspva.com
 SMSMAN_API_KEY = os.getenv("SMSMAN_API_KEY", "").strip()            # https://sms-man.com
 TEMPMAIL_API_KEY = os.getenv("TEMPMAIL_API_KEY", "").strip()        # temp-mail style inbox API
 
-# --- TG Number Change (TemporaSMS / temporary number service) ---
-# Used by the "Server-3 (TG NUM change)" flow.
+# --- TEMPORASMS: powers All Apps OTP + TG Number Change + WhatsApp Accounts ---
 TEMPORASMS_API_KEY = os.getenv("TEMPORASMS_API_KEY", "").strip()
 TEMPORASMS_BASE_URL = os.getenv("TEMPORASMS_BASE_URL", "https://api.temporasms.com").strip()
 
