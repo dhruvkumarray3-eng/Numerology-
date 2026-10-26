@@ -104,6 +104,7 @@ async def send_main_menu(bot, event, uid):
         [style_btn("📦 𝓜𝓸𝓻𝓮 𝓒𝓸𝓷𝓽𝓮𝓷𝓽", b"more_content", "primary", icon=5409320020058584473)],
         [style_btn("💳 𝓡𝓮𝓬𝓱𝓪𝓻𝓰𝓮", b"open_deposit_menu", "primary", icon=5409271925014801629), style_btn("🧙 𝓟𝓻𝓸𝓯𝓲𝓵𝓮", b"profile_stats", "primary", icon=6203982793379154737)],
         [style_btn("⚙️ 𝓢𝓮𝓽𝓽𝓲𝓷𝓰𝓼", b"settings_menu", "primary", icon=5408995930416362034), style_url("📑 𝓕𝓮𝓮𝓭𝓫𝓪𝓬𝓴 ↗️", feedback_link, "primary", icon=6129732880529628243)]
+        [style_btn("🆘 𝐇𝐞𝐥𝐩 𝐂𝐨𝐦𝐦𝐚𝐧𝐝𝐬", b"help_main", "success", icon=6129732880529628243)],
     ]
     
     edit_id = event.message_id if isinstance(event, events.CallbackQuery.Event) else None

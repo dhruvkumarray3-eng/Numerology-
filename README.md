@@ -233,6 +233,29 @@ nothing breaks.
 **QC ID** on the welcome card is built from the bot's own Telegram ID
 (`QC_ID_PREFIX` + last 8 digits of the bot id), so it always matches the bot.
 
+## 🆘 `/help` — one card, two audiences
+
+`/help` (aliases `/commands`, `/cmds`) is **role-aware**:
+
+| Who | What they see |
+|---|---|
+| Normal user | Only **5** commands — `/start`, `/rates`, `/myhistory`, `/myid`, `/support` |
+| Admin / owner | **Every command** in the bot, grouped into 8 blocks |
+
+The admin card groups commands as: User commands · Product panels · Profit engine ·
+User management · Panel & monitoring · Settings · Support, and ships with
+quick buttons: **🛠 Admin Panel**, **👤 User view**, **🔄 Refresh**, **🔙 Back**.
+
+The same card is reachable from three places:
+
+* `/help` command
+* **🆘 Help** button on the main menu
+* **🆘 Help & All Commands** button inside the admin panel
+* **🆘 Help** reply-keyboard button
+
+Admin detection uses `is_super_admin()` first, then `is_admin()`, so owners and
+delegated admins both get the full reference — regular users can never see it.
+
 ## 🔑 Where each API key goes
 
 Add these in **Railway → Variables**, **Render → Environment**, or

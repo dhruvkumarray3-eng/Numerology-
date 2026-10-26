@@ -34,6 +34,7 @@ def get_persistent_menu(uid):
         [Button.text("🎁 𝐑ᴇғᴇʀ", style="success", icon=5354889508674360491), Button.text("📩 𝐒ᴜᴘᴘᴏʀᴛ", style="primary", icon=6129732880529628243)],
         [Button.text("🏠 𝐒ᴛᴀʀᴛ", style="success", icon=6129399728506412489), Button.text("🔻 𝐂ʟᴏsᴇ", style="danger", icon=6129812419028982717)]
     ]
+    buttons.append([Button.text("🆘 Help", style="primary", icon=6129732880529628243)])
     if is_admin(uid):
         buttons.append([Button.text("🔐 𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ", style="danger", icon=5409166771330494453)])
     return buttons
