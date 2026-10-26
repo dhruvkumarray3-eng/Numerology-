@@ -209,26 +209,7 @@ check("retry without country filter happened", any("country[]" not in c for c in
 
 
 # ---------------------------------------------------------------------------
-# [5] country[] must be ISO-2 UPPERCASE (live API returns 0 for ISO-3)
-# ---------------------------------------------------------------------------
-print("\n[5] country code conversion (ISO-2 for the API)")
-for name, want in [
-    ("India", "IN"), ("USA", "US"), ("United States", "US"), ("Iran", "IR"),
-    ("Indonesia", "ID"), ("Morocco", "MA"), ("Turkey", "TR"), ("in", "IN"),
-    ("IND", "IN"), ("us", "US"),
-]:
-    got = L.get_lzt_code2(name)
-    check(f"get_lzt_code2({name!r}) == {want}", got == want, got)
-
-check("IN is a supported ISO-2 code", "IN" in L.LZT_SUPPORTED_ISO2)
-check("US is a supported ISO-2 code", "US" in L.LZT_SUPPORTED_ISO2)
-check("ISO-3 USA is NOT sent to the API", "USA" not in L.LZT_SUPPORTED_ISO2)
-
-print(f"\nALL {PASS} CHECKS PASSED")
-
-
-# ---------------------------------------------------------------------------
-# 4. token format validation (Client ID / Secret vs real Access Token)
+# [4] token format validation (Client ID / Secret vs real Access Token)
 # ---------------------------------------------------------------------------
 print("\n[4] token format validation")
 
@@ -255,6 +236,7 @@ fp = L.token_fingerprint("eyJhbGciOiJSUzUxMiJ9.eyJzdWIiOiIxIn0.sig")
 check("fingerprint hides middle", "eyJhbGci" in fp and "len=" in fp, fp)
 check("fingerprint of empty", L.token_fingerprint("") == "not set")
 
+
 # ---------------------------------------------------------------------------
 # [5] country[] must be ISO-2 UPPERCASE (live API returns 0 for ISO-3)
 # ---------------------------------------------------------------------------
@@ -262,13 +244,34 @@ print("\n[5] country code conversion (ISO-2 for the API)")
 for name, want in [
     ("India", "IN"), ("USA", "US"), ("United States", "US"), ("Iran", "IR"),
     ("Indonesia", "ID"), ("Morocco", "MA"), ("Turkey", "TR"), ("in", "IN"),
-    ("IND", "IN"), ("us", "US"),
+    ("IND", "IN"), ("us", "US"), ("South Korea", "KR"), ("Uzbekistan", "UZ"),
+    ("Yemen", "YE"), ("Afghanistan", "AF"), ("Papua New Guinea", "PG"),
 ]:
     got = L.get_lzt_code2(name)
     check(f"get_lzt_code2({name!r}) == {want}", got == want, got)
 
-check("IN is a supported ISO-2 code", "IN" in L.LZT_SUPPORTED_ISO2)
-check("US is a supported ISO-2 code", "US" in L.LZT_SUPPORTED_ISO2)
-check("ISO-3 USA is NOT sent to the API", "USA" not in L.LZT_SUPPORTED_ISO2)
+check("ISO-3 is never sent to the API", L.get_lzt_code2("USA") == "US")
+
+
+# ---------------------------------------------------------------------------
+# [6] EVERY country in the picker must resolve to an ISO-2 code, because the
+#     filter is now sent unconditionally (LZT accepts any valid alpha-2).
+# ---------------------------------------------------------------------------
+print("\n[6] all countries resolve to ISO-2")
+from utils.country_search import all_countries
+
+countries = all_countries()
+check("picker has the full ISO-3166 set", len(countries) >= 249, len(countries))
+
+unresolved = [c["name"] for c in countries if not L.get_lzt_code2(c["name"])]
+check("no country is left without an ISO-2 code", not unresolved, unresolved[:10])
+
+bad = [c["name"] for c in countries
+       if not (L.get_lzt_code2(c["name"]) or "").isalpha()
+       or len(L.get_lzt_code2(c["name"]) or "") != 2]
+check("every code is exactly 2 letters", not bad, bad[:10])
+
+check("ISO2_TO_ISO3 covers every country",
+      len(L.ISO2_TO_ISO3) >= 249, len(L.ISO2_TO_ISO3))
 
 print(f"\nALL {PASS} CHECKS PASSED")
