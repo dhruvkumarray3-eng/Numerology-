@@ -3,6 +3,7 @@ from plugins.profile import register_profile
 from plugins.deposit import register_deposit
 from plugins.admin import register_admin
 from plugins.admin_actions import register_admin_actions
+from plugins.admin_cleanup import register_admin_cleanup
 from plugins.callbacks import register_callbacks
 from plugins.smm import register_smm
 from plugins.source_codes import register_source_codes
@@ -24,6 +25,7 @@ def register_all_handlers(bot):
     register_deposit(bot)
     register_admin(bot)
     register_admin_actions(bot)
+    register_admin_cleanup(bot)
     register_callbacks(bot)
     register_smm(bot)
     register_source_codes(bot)

@@ -18,7 +18,29 @@ from config import (
     logger,
 )
 from database import cur, db, get_user_currency, update_balance
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, pe
+
+# Per-app premium icon (custom emoji id).  Falls back to a generic phone icon.
+APP_ICONS = {
+    "telegram": 5408995930416362034,
+    "whatsapp": 5440627033111557670,
+    "instagram": 5409271925014801629,
+    "facebook": 6154249597532248059,
+    "tiktok": 6203982793379154737,
+    "twitter": 6129732880529628243,
+    "youtube": 5409320020058584473,
+    "google": 5409320020058584473,
+    "gmail": 5409320020058584473,
+    "discord": 6129732880529628243,
+    "snapchat": 5409320020058584473,
+    "uber": 5409320020058584473,
+    "amazon": 5440627033111557670,
+}
+_DEFAULT_APP_ICON = 5409119256107297715  # phone
+
+
+def _app_icon(slug):
+    return APP_ICONS.get((slug or "").lower(), _DEFAULT_APP_ICON)
 from utils import stickers as sticker_engine
 from utils.otp_providers import (
     APP_CATALOG,
@@ -76,7 +98,7 @@ async def show_all_apps(event):
     btns = []
     row = []
     for slug, label in APP_CATALOG:
-        row.append(style_btn(_ensure_emoji(label), f"aa_app|{slug}", "primary"))
+        row.append(style_btn(_ensure_emoji(label), f"aa_app|{slug}", "primary", icon=_app_icon(slug)))
         if len(row) == 2:
             btns.append(row)
             row = []
@@ -85,7 +107,7 @@ async def show_all_apps(event):
     btns.append([style_btn("🔙 Back", b"buy_menu_main", "danger", icon=6129812419028982717)])
 
     msg = (
-        f"<blockquote expandable>{PE_GIFT} <b>📱 All Apps Accounts (OTP)</b>\n\n"
+        f"<blockquote expandable>{PE_GIFT} <b>{pe('apps', '📱')} All Apps Accounts (OTP)</b>\n\n"
         f"Buy a verified OTP number for any app — Telegram, WhatsApp, Instagram, "
         f"Facebook, TikTok and more.\n\n"
         f"{_providers_line()}\n\n"
@@ -106,7 +128,7 @@ async def show_countries_for_app(event, app_slug):
     btns = []
     row = []
     for iso, label in COUNTRIES:
-        row.append(style_btn(label, f"aa_c|{app_slug}|{iso}", "primary"))
+        row.append(style_btn(label, f"aa_c|{app_slug}|{iso}", "primary", icon=_app_icon(app_slug)))
         if len(row) == 2:
             btns.append(row)
             row = []
@@ -115,7 +137,7 @@ async def show_countries_for_app(event, app_slug):
     btns.append([style_btn("🔙 Back", b"all_apps_menu", "danger", icon=6129812419028982717)])
 
     msg = (
-        f"<blockquote expandable>{PE_LOCATION} <b>{html.escape(app_label)} — Select Country</b>\n\n"
+        f"<blockquote expandable>{PE_LOCATION} <b>{pe('globe', '🌍')} {html.escape(app_label)} — Select Country</b>\n\n"
         f"{_providers_line()}\n\n"
         f"<i>Pick the country for the number you want.</i></blockquote>"
     )

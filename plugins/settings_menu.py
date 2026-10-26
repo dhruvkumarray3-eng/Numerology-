@@ -19,7 +19,7 @@ from database import (
     get_user_language,
     set_user_language,
 )
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, pe
 
 CURRENCY_OPTIONS = [
     ("INR", "🇮🇳 INR ₹"),
@@ -50,8 +50,8 @@ async def show_settings(event, uid=None):
 
     msg = (
         f"<blockquote expandable>{PE_FLOWER} <b>⚙️ Settings</b>\n\n"
-        f"💱 <b>Currency:</b> <code>{cur_code} {_currency_label(cur_code)}</code>\n"
-        f"🌐 <b>Language:</b> <code>{html.escape(lang_label)}</code>\n\n"
+        f"{pe('money', '💱')} <b>Currency:</b> <code>{cur_code} {_currency_label(cur_code)}</code>\n"
+        f"{pe('globe', '🌐')} <b>Language:</b> <code>{html.escape(lang_label)}</code>\n\n"
         f"<i>Prices and balances are shown in your chosen currency. "
         f"Payment screens (UPI / crypto) may still show the amount you actually pay.</i></blockquote>"
     )
