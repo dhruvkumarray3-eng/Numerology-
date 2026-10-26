@@ -26,7 +26,9 @@ from utils.otp_providers import (
     provider_configured,
     buy_number,
     get_otp,
+    get_stock,
 )
+from utils import stock_details as stock_card
 
 # uid -> {"app": slug, "country": iso, "order_id":..., "provider":...}
 otp_state = {}
@@ -132,6 +134,49 @@ async def show_countries_for_app(event, app_slug):
         logger.debug(f"premium app emoji skipped: {_sk_ex}")
 
 
+async def show_details(event, app_slug, country_iso):
+    """Country tapped -> LIVE stock details (stock + rate + quality), not a buy."""
+    app_label = dict(APP_CATALOG).get(app_slug, app_slug)
+    country_label = dict(COUNTRIES).get(country_iso, country_iso.upper())
+    await event.answer("\u23f3 Fetching live stock\u2026")
+
+    count, price, provider = await get_stock(app_slug, country_iso)
+    if price is not None:
+        rate_text = f"\u20b9{price * 100:.2f} (panel cost) \u00b7 {provider.upper()}"
+    else:
+        rate_text = "\U0001F7E1 Live rate unavailable \u2014 tap Refresh"
+
+    extra_block = f"{_ensure_emoji(app_label)} <b>App:</b> {html.escape(app_label)}"
+    if not provider_configured():
+        extra_block += "\n\u26a0\ufe0f <i>No OTP provider configured on the host.</i>"
+
+    msg = stock_card.details_message(
+        title=f"{app_label} \u2014 Stock Details",
+        country_label=f"{country_label}",
+        stock_text=stock_card.stock_text(count, "numbers"),
+        rate_text=rate_text,
+        kind=stock_card.KIND_OTP,
+        extra_block=extra_block,
+    )
+    btns = [
+        [style_btn("\u2705 Buy Now", f"aa_confirm|{app_slug}|{country_iso}", "success",
+                   icon=5409320020058584473)],
+        [style_btn("\U0001F504 Refresh Stock", f"aa_c|{app_slug}|{country_iso}", "primary",
+                   icon=5409320020058584473),
+         style_btn("\U0001F519 Back", b"all_apps_menu", "danger",
+                   icon=6129812419028982717)],
+    ]
+    try:
+        await event.edit(msg, buttons=btns)
+    except MessageNotModifiedError:
+        pass
+
+    try:
+        await sticker_engine.send_for_event(event, app_label, role="apps")
+    except Exception as _sk_ex:
+        logger.debug(f"premium app emoji skipped: {_sk_ex}")
+
+
 async def do_buy(event, app_slug, country_iso):
     uid = event.sender_id
     if not provider_configured():
@@ -185,6 +230,14 @@ def register_all_apps(bot):
 
     @bot.on(events.CallbackQuery(pattern=r"^aa_c\|(\w+)\|(\w+)$"))
     async def cb_aa_country(e):
+        a = e.pattern_match.group(1)
+        c = e.pattern_match.group(2)
+        app_slug = a.decode() if isinstance(a, bytes) else a
+        country = c.decode() if isinstance(c, bytes) else c
+        await show_details(e, app_slug, country)
+
+    @bot.on(events.CallbackQuery(pattern=r"^aa_confirm\|(\w+)\|(\w+)$"))
+    async def cb_aa_confirm(e):
         a = e.pattern_match.group(1)
         c = e.pattern_match.group(2)
         app_slug = a.decode() if isinstance(a, bytes) else a
