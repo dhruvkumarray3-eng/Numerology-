@@ -22,7 +22,7 @@ from database import (
 from config import *
 from utils.keyboards import style_btn
 from utils.states import admin_state
-from utils.lzt import lzt_client
+from utils.lzt import lzt_client, validate_token_format, token_fingerprint
 from plugins.admin import admin_panel_handler
 
 try:
@@ -427,7 +427,7 @@ async def admin_actions(event):
 
     elif action_data == "lzt_settings" and has_perm(uid, 'p_settings'):
         key = get_lzt_key()
-        masked_key = (key[:6] + "..." + key[-4:]) if key and len(key) > 10 else ("Set" if key else "Not Set ❌")
+        masked_key = token_fingerprint(key) if key else "Not Set ❌"
         rub = get_rub_rate()
         margin = get_lzt_margin()
         mode = get_bot_mode()
@@ -1032,11 +1032,34 @@ async def admin_actions(event):
 
             elif action_data == "setlztkey" and has_perm(uid, 'p_settings'):
                 resp = await get_reply(
-                    "🔑 <b>Enter LZT API Token / Key:</b>\n\n"
-                    "<i>lolz.live → Account → API → Get Access Token "
-                    "(tick the <b>market</b> scope).</i>"
+                    "🔑 <b>Enter LZT Access Token:</b>\n\n"
+                    "<i>lolz.live → Account → API → open your "
+                    "client → <b>Get Access Token</b> → tick the "
+                    "<b>market</b> scope → copy the long token "
+                    "(it starts with <code>eyJ</code> and has two dots).</i>\n\n"
+                    "⚠️ Do <b>not</b> send the Client ID or Client "
+                    "Secret — those never work."
                 )
                 k = resp.text.strip()
+                if k.lower().startswith("bearer "):
+                    k = k[7:].strip()
+
+                fmt_ok, fmt_reason = validate_token_format(k)
+                if not fmt_ok:
+                    return await conv.send_message(
+                        f"{P_NO} <b>That is not an Access Token.</b>\n\n"
+                        f"{fmt_reason}\n\n"
+                        "<b>Where to get it:</b>\n"
+                        "1. Open <b>lolz.live/account/api</b>\n"
+                        "2. Click your client (e.g. <i>Mystic</i>)\n"
+                        "3. Press <b>Get Access Token</b>\n"
+                        "4. Tick <b>Market: search, view, purchase, put up for "
+                        "sale</b>\n"
+                        "5. Copy the token → send it here\n\n"
+                        "<i>The token is shown only once — copy it right "
+                        "away. If you lost it, press Get Access Token again.</i>"
+                    )
+
                 set_lzt_key(k)
 
                 # Validate immediately so a bad/expired token is caught here

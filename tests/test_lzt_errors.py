@@ -175,3 +175,34 @@ check("retry without country filter happened", any("country[]" not in c for c in
 
 
 print(f"\nALL {PASS} CHECKS PASSED")
+
+
+# ---------------------------------------------------------------------------
+# 4. token format validation (Client ID / Secret vs real Access Token)
+# ---------------------------------------------------------------------------
+print("\n[4] token format validation")
+
+ok, why = L.validate_token_format(
+    "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJl"
+)
+check("real JWT accepted", ok is True, why)
+
+ok, why = L.validate_token_format("1234")
+check("client id rejected", ok is False and "Client ID" in why, why)
+
+ok, why = L.validate_token_format("a" * 64)
+check("client secret rejected", ok is False and "Client Secret" in why, why)
+
+ok, why = L.validate_token_format("")
+check("empty rejected", ok is False, why)
+
+ok, why = L.validate_token_format(
+    "Bearer eyJhbGciOiJSUzUxMiJ9.eyJzdWIiOiIxIn0.sig"
+)
+check("Bearer prefix tolerated", ok is True, why)
+
+fp = L.token_fingerprint("eyJhbGciOiJSUzUxMiJ9.eyJzdWIiOiIxIn0.sig")
+check("fingerprint hides middle", "eyJhbGci" in fp and "len=" in fp, fp)
+check("fingerprint of empty", L.token_fingerprint("") == "not set")
+
+print(f"\nALL {PASS} CHECKS PASSED")
