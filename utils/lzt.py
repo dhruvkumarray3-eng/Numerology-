@@ -316,24 +316,31 @@ def get_country_from_lzt(code):
 # country as alpha-2 in `telegram_country`, so alpha-2 is the native format.
 # The alpha-3 map below is kept only for display / tolerant client-side checks.
 ISO2_TO_ISO3 = {
-    'ad': 'AND', 'ae': 'ARE', 'af': 'AFG', 'ag': 'ATG', 'al': 'ALB', 'am': 'ARM', 'ao': 'AGO', 'ar': 'ARG', 'at': 'AUT', 'au': 'AUS',
-    'az': 'AZE', 'ba': 'BIH', 'bb': 'BRB', 'bd': 'BGD', 'be': 'BEL', 'bg': 'BGR', 'bh': 'BHR', 'bi': 'BDI', 'bj': 'BEN', 'bn': 'BRN',
-    'bo': 'BOL', 'br': 'BRA', 'bs': 'BHS', 'bt': 'BTN', 'bw': 'BWA', 'by': 'BLR', 'bz': 'BLZ', 'ca': 'CAN', 'cg': 'COG', 'ch': 'CHE',
-    'ci': 'CIV', 'cl': 'CHL', 'cm': 'CMR', 'co': 'COL', 'cr': 'CRI', 'cu': 'CUB', 'cv': 'CPV', 'cy': 'CYP', 'cz': 'CZE', 'de': 'DEU',
-    'dj': 'DJI', 'dk': 'DNK', 'dm': 'DMA', 'do': 'DOM', 'dz': 'DZA', 'ec': 'ECU', 'ee': 'EST', 'eg': 'EGY', 'er': 'ERI', 'es': 'ESP',
-    'fi': 'FIN', 'fj': 'FJI', 'fm': 'FSM', 'fr': 'FRA', 'ga': 'GAB', 'gb': 'GBR', 'gd': 'GRD', 'ge': 'GEO', 'gh': 'GHA', 'gm': 'GMB',
-    'gr': 'GRC', 'gt': 'GTM', 'gy': 'GUY', 'hk': 'HKG', 'hn': 'HND', 'hr': 'HRV', 'ht': 'HTI', 'hu': 'HUN', 'id': 'IDN', 'ie': 'IRL',
-    'il': 'ISR', 'in': 'IND', 'iq': 'IRQ', 'ir': 'IRN', 'is': 'ISL', 'it': 'ITA', 'jm': 'JAM', 'jo': 'JOR', 'jp': 'JPN', 'kg': 'KGZ',
-    'kh': 'KHM', 'ki': 'KIR', 'km': 'COM', 'kn': 'KNA', 'kp': 'PRK', 'kr': 'KOR', 'kw': 'KWT', 'kz': 'KAZ', 'la': 'LAO', 'lb': 'LBN',
-    'lc': 'LCA', 'li': 'LIE', 'lk': 'LKA', 'lr': 'LBR', 'ls': 'LSO', 'lt': 'LTU', 'lu': 'LUX', 'lv': 'LVA', 'ly': 'LBY', 'ma': 'MAR',
-    'mc': 'MCO', 'me': 'MNE', 'mg': 'MDG', 'mk': 'MKD', 'mm': 'MMR', 'mn': 'MNG', 'mt': 'MLT', 'mu': 'MUS', 'mv': 'MDV', 'my': 'MYS',
-    'mz': 'MOZ', 'na': 'NAM', 'ng': 'NGA', 'ni': 'NIC', 'nl': 'NLD', 'no': 'NOR', 'np': 'NPL', 'nr': 'NRU', 'nz': 'NZL', 'om': 'OMN',
-    'pa': 'PAN', 'pe': 'PER', 'pg': 'PNG', 'ph': 'PHL', 'pk': 'PAK', 'pl': 'POL', 'pr': 'PRI', 'ps': 'PSE', 'pt': 'PRT', 'pw': 'PLW',
-    'py': 'PRY', 'qa': 'QAT', 'ro': 'ROU', 'rs': 'SRB', 'ru': 'RUS', 'rw': 'RWA', 'sa': 'SAU', 'sb': 'SLB', 'sc': 'SYC', 'se': 'SWE',
-    'sg': 'SGP', 'si': 'SVN', 'sk': 'SVK', 'sl': 'SLE', 'sm': 'SMR', 'sn': 'SEN', 'so': 'SOM', 'sr': 'SUR', 'ss': 'SSD', 'st': 'STP',
-    'sv': 'SLV', 'sz': 'SWZ', 'td': 'TCD', 'tg': 'TGO', 'th': 'THA', 'tj': 'TJK', 'tm': 'TKM', 'tn': 'TUN', 'to': 'TON', 'tr': 'TUR',
-    'tt': 'TTO', 'tv': 'TUV', 'tw': 'TWN', 'ua': 'UKR', 'us': 'USA', 'uy': 'URY', 'uz': 'UZB', 'vc': 'VCT', 've': 'VEN', 'vn': 'VNM',
-    'vu': 'VUT', 'ws': 'WSM', 'ye': 'YEM', 'za': 'ZAF', 'zm': 'ZMB', 'zw': 'ZWE',
+    'af': 'AFG', 'ax': 'ALA', 'al': 'ALB', 'dz': 'DZA', 'as': 'ASM', 'ad': 'AND', 'ao': 'AGO', 'ai': 'AIA', 'aq': 'ATA', 'ag': 'ATG',
+    'ar': 'ARG', 'am': 'ARM', 'aw': 'ABW', 'au': 'AUS', 'at': 'AUT', 'az': 'AZE', 'bs': 'BHS', 'bh': 'BHR', 'bd': 'BGD', 'bb': 'BRB',
+    'by': 'BLR', 'be': 'BEL', 'bz': 'BLZ', 'bj': 'BEN', 'bm': 'BMU', 'bt': 'BTN', 'bo': 'BOL', 'bq': 'BES', 'ba': 'BIH', 'bw': 'BWA',
+    'bv': 'BVT', 'br': 'BRA', 'io': 'IOT', 'bn': 'BRN', 'bg': 'BGR', 'bf': 'BFA', 'bi': 'BDI', 'cv': 'CPV', 'kh': 'KHM', 'cm': 'CMR',
+    'ca': 'CAN', 'ky': 'CYM', 'cf': 'CAF', 'td': 'TCD', 'cl': 'CHL', 'cn': 'CHN', 'cx': 'CXR', 'cc': 'CCK', 'co': 'COL', 'km': 'COM',
+    'cg': 'COG', 'cd': 'COD', 'ck': 'COK', 'cr': 'CRI', 'ci': 'CIV', 'hr': 'HRV', 'cu': 'CUB', 'cw': 'CUW', 'cy': 'CYP', 'cz': 'CZE',
+    'dk': 'DNK', 'dj': 'DJI', 'dm': 'DMA', 'do': 'DOM', 'ec': 'ECU', 'eg': 'EGY', 'sv': 'SLV', 'gq': 'GNQ', 'er': 'ERI', 'ee': 'EST',
+    'sz': 'SWZ', 'et': 'ETH', 'fk': 'FLK', 'fo': 'FRO', 'fj': 'FJI', 'fi': 'FIN', 'fr': 'FRA', 'gf': 'GUF', 'pf': 'PYF', 'tf': 'ATF',
+    'ga': 'GAB', 'gm': 'GMB', 'ge': 'GEO', 'de': 'DEU', 'gh': 'GHA', 'gi': 'GIB', 'gr': 'GRC', 'gl': 'GRL', 'gd': 'GRD', 'gp': 'GLP',
+    'gu': 'GUM', 'gt': 'GTM', 'gg': 'GGY', 'gn': 'GIN', 'gw': 'GNB', 'gy': 'GUY', 'ht': 'HTI', 'hm': 'HMD', 'va': 'VAT', 'hn': 'HND',
+    'hk': 'HKG', 'hu': 'HUN', 'is': 'ISL', 'in': 'IND', 'id': 'IDN', 'ir': 'IRN', 'iq': 'IRQ', 'ie': 'IRL', 'im': 'IMN', 'il': 'ISR',
+    'it': 'ITA', 'jm': 'JAM', 'jp': 'JPN', 'je': 'JEY', 'jo': 'JOR', 'kz': 'KAZ', 'ke': 'KEN', 'ki': 'KIR', 'kp': 'PRK', 'kr': 'KOR',
+    'kw': 'KWT', 'kg': 'KGZ', 'la': 'LAO', 'lv': 'LVA', 'lb': 'LBN', 'ls': 'LSO', 'lr': 'LBR', 'ly': 'LBY', 'li': 'LIE', 'lt': 'LTU',
+    'lu': 'LUX', 'mo': 'MAC', 'mg': 'MDG', 'mw': 'MWI', 'my': 'MYS', 'mv': 'MDV', 'ml': 'MLI', 'mt': 'MLT', 'mh': 'MHL', 'mq': 'MTQ',
+    'mr': 'MRT', 'mu': 'MUS', 'yt': 'MYT', 'mx': 'MEX', 'fm': 'FSM', 'md': 'MDA', 'mc': 'MCO', 'mn': 'MNG', 'me': 'MNE', 'ms': 'MSR',
+    'ma': 'MAR', 'mz': 'MOZ', 'mm': 'MMR', 'na': 'NAM', 'nr': 'NRU', 'np': 'NPL', 'nl': 'NLD', 'nc': 'NCL', 'nz': 'NZL', 'ni': 'NIC',
+    'ne': 'NER', 'ng': 'NGA', 'nu': 'NIU', 'nf': 'NFK', 'mk': 'MKD', 'mp': 'MNP', 'no': 'NOR', 'om': 'OMN', 'pk': 'PAK', 'pw': 'PLW',
+    'ps': 'PSE', 'pa': 'PAN', 'pg': 'PNG', 'py': 'PRY', 'pe': 'PER', 'ph': 'PHL', 'pn': 'PCN', 'pl': 'POL', 'pt': 'PRT', 'pr': 'PRI',
+    'qa': 'QAT', 're': 'REU', 'ro': 'ROU', 'ru': 'RUS', 'rw': 'RWA', 'bl': 'BLM', 'sh': 'SHN', 'kn': 'KNA', 'lc': 'LCA', 'mf': 'MAF',
+    'pm': 'SPM', 'vc': 'VCT', 'ws': 'WSM', 'sm': 'SMR', 'st': 'STP', 'sa': 'SAU', 'sn': 'SEN', 'rs': 'SRB', 'sc': 'SYC', 'sl': 'SLE',
+    'sg': 'SGP', 'sx': 'SXM', 'sk': 'SVK', 'si': 'SVN', 'sb': 'SLB', 'so': 'SOM', 'za': 'ZAF', 'gs': 'SGS', 'ss': 'SSD', 'es': 'ESP',
+    'lk': 'LKA', 'sd': 'SDN', 'sr': 'SUR', 'sj': 'SJM', 'se': 'SWE', 'ch': 'CHE', 'sy': 'SYR', 'tw': 'TWN', 'tj': 'TJK', 'tz': 'TZA',
+    'th': 'THA', 'tl': 'TLS', 'tg': 'TGO', 'tk': 'TKL', 'to': 'TON', 'tt': 'TTO', 'tn': 'TUN', 'tr': 'TUR', 'tm': 'TKM', 'tc': 'TCA',
+    'tv': 'TUV', 'ug': 'UGA', 'ua': 'UKR', 'ae': 'ARE', 'gb': 'GBR', 'us': 'USA', 'um': 'UMI', 'uy': 'URY', 'uz': 'UZB', 'vu': 'VUT',
+    've': 'VEN', 'vn': 'VNM', 'vg': 'VGB', 'vi': 'VIR', 'wf': 'WLF', 'eh': 'ESH', 'ye': 'YEM', 'zm': 'ZMB', 'zw': 'ZWE',
 }
 ISO3_TO_ISO2 = {v: k for k, v in ISO2_TO_ISO3.items()}
 
@@ -410,11 +417,12 @@ def get_lzt_code2(country_name):
     return None
 
 
-# ISO-2 codes LZT accepts for the ``country[]`` filter, derived from the
-# official enum (documented as alpha-3 but consumed as alpha-2 live).
-LZT_SUPPORTED_ISO2 = {
-    ISO3_TO_ISO2[c].upper() for c in LZT_SUPPORTED_ISO3 if c in ISO3_TO_ISO2
-}
+# ISO-2 codes accepted by the ``country[]`` filter.  Live testing showed LZT
+# accepts **every** valid ISO-3166 alpha-2 code (KR / UZ / YE / AF / PG all
+# return real stock; a bogus code such as ZZ just returns 0), so this is the
+# full alpha-2 set rather than a hand-maintained subset.  The filter is sent
+# unconditionally whenever a country resolves, so this set is informational.
+LZT_SUPPORTED_ISO2 = {k.upper() for k in ISO2_TO_ISO3}
 
 DC_IPS = {
     1: '149.154.175.50',
@@ -1044,14 +1052,18 @@ class LZTClient:
 
         # The API's `country[]` filter wants ISO-2 UPPERCASE (US / IR / ID).
         # Sending ISO-3 (USA / IRN / IDN) silently returns 0 items, which is
-        # exactly what made every country look empty.  Only send the filter
-        # when we resolved a code LZT knows about; otherwise omit it and rely
-        # on the tolerant client-side country check.
-        send_country_filter = bool(c2_api and c2_api in LZT_SUPPORTED_ISO2)
-        if c2_api and not send_country_filter:
-            logger.info(
-                f"LZT search: '{country_name}' -> {c2_api} is not in LZT's country "
-                "enum; omitting country[] and filtering client-side"
+        # exactly what made every country look empty.
+        #
+        # Live-verified: LZT accepts **any** valid ISO-3166 alpha-2 code --
+        # KR, UZ, YE, AF, PG all return real stock, while a bogus code (ZZ)
+        # simply returns 0.  So there is no whitelist to maintain: whenever we
+        # can resolve the country to an ISO-2 code we send it.  Only a country
+        # we cannot resolve at all falls back to client-side filtering.
+        send_country_filter = bool(c2_api)
+        if not send_country_filter:
+            logger.warning(
+                f"LZT search: could not resolve '{country_name}' to an ISO-2 "
+                "code; omitting country[] and filtering client-side"
             )
 
         # ------------------------------------------------------------------
