@@ -26,4 +26,4 @@
 ## 6. Verify & push
 - [x] Run existing tests + new tests
 - [x] Syntax check all changed files
-- [ ] Commit on new branch, push, open PR
+- [x] Commit on new branch, push, open PR (merged #16)
