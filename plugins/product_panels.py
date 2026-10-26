@@ -35,7 +35,10 @@ from config import (
 from database import cur, db, ensure_user, get_user_currency
 from utils.keyboards import style_btn, matches_menu
 from utils import temporasms
-from utils.markup import apply_markup, get_markup_config, describe_markup
+from utils.markup import (
+    apply_markup, get_markup_config, describe_markup,
+    format_dual_price, format_dual_from_inr, price_breakdown,
+)
 from utils import mongo_store
 
 PAGE_SIZE = 12
@@ -233,11 +236,15 @@ def _user_currency(uid):
 
 
 def _price_label(real_price, uid, cfg=None):
-    """Real cost -> what the customer sees. Never leaks the real value."""
+    """Real panel cost -> what the customer sees, in INR **and** USDT.
+
+    The panel's real (cost) price is never leaked: the value shown is always
+    ``real_price + owner_margin`` where the margin is either a percentage or a
+    fixed amount in INR/USD (see /setmarkup and /setprofit).
+    """
     if real_price is None:
         return "—"
-    display_inr = apply_markup(real_price, cfg)
-    return format_price(display_inr, _user_currency(uid))
+    return format_dual_price(real_price, cfg)
 
 
 def _display_inr(real_price, cfg=None):
@@ -681,8 +688,9 @@ async def buy(event, key, code):
     bal = _balance(uid)
     if bal < display_inr:
         return await event.answer(
-            f"❌ Insufficient balance.\nNeed {format_price(display_inr, _user_currency(uid))}, "
-            f"you have {format_price(bal, _user_currency(uid))}.",
+            f"❌ Insufficient balance.\n"
+            f"Need {format_dual_from_inr(display_inr)}\n"
+            f"You have {format_dual_from_inr(bal)}",
             alert=True,
         )
 
@@ -714,7 +722,7 @@ async def buy(event, key, code):
         f"<blockquote expandable>✅ <b>Number reserved — {PANELS[key]['title']}</b>\n\n"
         f"📞 <b>Number:</b> <code>{html.escape(phone)}</code>\n"
         f"{_flag(code)} <b>Country:</b> {html.escape(_clean_name(match['name']))}\n"
-        f"💳 <b>Paid:</b> {format_price(display_inr, _user_currency(uid))}\n"
+        f"💳 <b>Paid:</b> {format_dual_from_inr(display_inr)}\n"
         f"🆔 <b>Order:</b> <code>{html.escape(order_id)}</code>\n\n"
         "Use this number on the platform, then tap <b>Get OTP</b>.</blockquote>"
     )
@@ -803,7 +811,7 @@ async def refund(event):
     msg = (
         "<blockquote expandable>💸 <b>Order cancelled &amp; refunded</b>\n\n"
         f"🆔 <b>Order:</b> <code>{html.escape(order_id)}</code>\n"
-        f"💰 <b>Refunded:</b> {format_price(price, _user_currency(uid))}\n\n"
+        f"💰 <b>Refunded:</b> {format_dual_from_inr(price)}\n\n"
         "<i>The amount is back in your balance instantly.</i></blockquote>"
     )
     btns = [
@@ -946,8 +954,10 @@ def register_product_panels(bot):
             "<blockquote expandable>📈 <b>Live Panel Rates</b>\n\n"
             "💬 WhatsApp · 🔁 Number Change · 🧩 All Apps OTP\n"
             "🌍 All countries, cheapest first\n"
-            f"⚙️ {describe_markup(cfg)}\n\n"
-            "<i>Open a panel to see the current price for your country.</i></blockquote>"
+            f"⚙️ {describe_markup(cfg)}\n"
+            f"💱 <b>Rate:</b> ₹{price_breakdown(100, cfg)['rate']:g} = 1 USDT\n\n"
+            "<i>Every price is shown in <b>₹INR</b> and <b>USDT</b>. "
+            "Open a panel to see the live price for your country.</i></blockquote>"
         )
         btns = [[style_btn("🧩 Open Panels", b"pp_hub", "success", icon=5409320020058584473)]]
         await e.respond(msg, buttons=btns)

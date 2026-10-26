@@ -31,7 +31,8 @@ from config import (
 )
 from database import cur, db, ensure_user, is_admin, get_user_currency
 from utils.keyboards import style_btn
-from utils.markup import get_markup_config, set_markup, describe_markup
+from utils.markup import (get_markup_config, set_markup, describe_markup,
+                          price_breakdown, format_inr, format_usdt)
 from utils import mongo_store
 from utils import temporasms
 
@@ -122,7 +123,14 @@ async def cmd_markup(e):
         f"📈 Percent: <b>{cfg['percent']:g}%</b>\n"
         f"💵 Fixed: <b>{cfg['currency']} {cfg['fixed']:g}</b>\n\n"
         f"➡️ {describe_markup(cfg)}\n\n"
-        "<i>Change with /setmarkup 25 or /setprofit 2 USD</i></blockquote>"
+        f"💱 <b>USDT rate:</b> ₹{price_breakdown(100, cfg)['rate']:g} = 1 USDT\n"
+        f"🧾 <b>Example</b> (panel cost ₹100):\n"
+        f"   • Cost: ₹100 (hidden from users)\n"
+        f"   • Your profit: ₹{price_breakdown(100, cfg)['profit_inr']:,.0f}\n"
+        f"   • User pays: {format_inr(price_breakdown(100, cfg)['inr'])} · "
+        f"{format_usdt(price_breakdown(100, cfg)['usdt'])}\n\n"
+        "<i>Users always see BOTH ₹INR and USDT.\n"
+        "Change with /setmarkup 25 or /setprofit 2 USD</i></blockquote>"
     )
 
 
@@ -326,11 +334,20 @@ async def cmd_support(e):
 
 
 def register_admin_extras(bot):
-    @bot.on(events.NewMessage(pattern=r"(?i)^/setmarkup(?:@\w+)?(?:\s+(.+))?$"))
+    @bot.on(events.NewMessage(pattern=r"(?i)^/(?:setmarkup|setmargin)(?:@\w+)?(?:\s+(.+))?$"))
     async def h_setmarkup(e):
         if not _is_admin(e.sender_id):
             return
-        await cmd_setmarkup(e, (e.pattern_match.group(1) or "").strip())
+        arg = (e.pattern_match.group(1) or "").strip()
+        # /setmargin 25%  -> percent ;  /setmargin 50  -> fixed INR ;  /setmargin 2 USD -> fixed USD
+        if arg.endswith("%"):
+            await cmd_setmarkup(e, arg[:-1].strip())
+        elif len(arg.split()) > 1:
+            await cmd_setprofit(e, arg)
+        elif arg:
+            await cmd_setmarkup(e, arg)
+        else:
+            await cmd_setmarkup(e, "")
 
     @bot.on(events.NewMessage(pattern=r"(?i)^/setprofit(?:@\w+)?(?:\s+(.+))?$"))
     async def h_setprofit(e):

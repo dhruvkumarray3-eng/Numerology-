@@ -26,6 +26,7 @@ from config import (
     OTP_REGEX, bot, logger, API_ID, API_HASH, LZT_API_KEY, USDT_TO_INR
 )
 from utils.keyboards import style_btn, matches_menu
+from utils.markup import format_dual_from_inr, format_dual_price
 from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code
 
@@ -317,7 +318,7 @@ async def show_countries_for_year(event, year, page):
     for c_name, count in countries:
         flag = get_flag_by_country_name(c_name)
         price = get_panel_price(c_name, year)
-        btns.append(style_btn(f"{flag} {c_name} — ₹{price}", f"by|bulk|{c_name}|{year}|{price}", "primary", icon=6154249597532248059))
+        btns.append(style_btn(f"{flag} {c_name} — {format_dual_from_inr(price)}", f"by|bulk|{c_name}|{year}|{price}", "primary", icon=6154249597532248059))
         
     f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
     
@@ -434,7 +435,7 @@ async def show_years(event, mode, country):
         y, count, price = opt['year'], opt['count'], opt['price']
         badge = YEAR_BADGES.get(int(y) if str(y).isdigit() else y, f"📅 {y}")
         cnt_text = f"({count} left)" if isinstance(count, int) else f"({count})"
-        btns.append([style_btn(f"{badge} — ₹{price} {cnt_text}", f"by|{mode}|{country}|{y}|{price}", "primary", icon=5408995930416362034)])
+        btns.append([style_btn(f"{badge} — {format_dual_from_inr(price)} {cnt_text}", f"by|{mode}|{country}|{y}|{price}", "primary", icon=5408995930416362034)])
     
     if mode != 'bulk':
         btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬", f"pg_c|{mode}|1", "danger", icon=6129812419028982717)])
@@ -466,7 +467,7 @@ async def confirm_purchase(event, mode, country, year, price):
            f"🏳 <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {flag} {country}\n"
            f"🏷️ <b>𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲:</b> {cat_badge}\n"
            f"📆 <b>𝐘𝐞𝐚𝐫:</b> {badge}\n"
-           f"💵 <b>𝐏𝐫𝐢𝐜𝐞:</b> ₹{price}\n\n"
+           f"💵 <b>𝐏𝐫𝐢𝐜𝐞:</b> {format_dual_from_inr(price)}\n\n"
            f"<b><tg-emoji emoji-id=\"5409320020058584473\">✨</tg-emoji> 𝐀𝐫𝐞 𝐲𝐨𝐮 𝐬𝐮𝐫𝐞 𝐲𝐨𝐮 𝐰𝐚𝐧𝐭 𝐭𝐨 𝐛𝐮𝐲?</b></blockquote>")
     btns = [
         [style_btn("✅ 𝐂𝐨𝐧𝐟𝐢𝐫𝐦 𝐁𝐮𝐲", f"buy_cf|{mode}|{country}|{year}|{price}", "success", icon=5409320020058584473)],
@@ -564,7 +565,7 @@ async def process_purchase(event, mode, country, year, price_str):
                 async with get_user_lock(uid):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
-                return await event.edit(f"<blockquote expandable>❌ <b>𝐎𝐮𝐭 𝐨𝐟 𝐒𝐭𝐨𝐜𝐤!</b>\n\n𝐍𝐨 𝐚𝐜𝐜𝐨𝐮𝐧𝐭s 𝐚𝐫𝐞 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 <b>{c_icon} {country}</b>.\n𝐘𝐨𝐮𝐫 𝐦𝐨𝐧𝐞𝐲 (<b>₹{final_price}</b>) 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 <b>𝐢𝐧𝐬𝐭𝐚𝐧𝐭𝐥𝐲 𝐫𝐞𝐟𝐮𝐧𝐝𝐞𝐝</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁𝐮𝐲 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "buy_menu_main", "primary", icon=5408995930416362034)]])
+                return await event.edit(f"<blockquote expandable>❌ <b>𝐎𝐮𝐭 𝐨𝐟 𝐒𝐭𝐨𝐜𝐤!</b>\n\n𝐍𝐨 𝐚𝐜𝐜𝐨𝐮𝐧𝐭s 𝐚𝐫𝐞 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 <b>{c_icon} {country}</b>.\n𝐘𝐨𝐮𝐫 𝐦𝐨𝐧𝐞𝐲 (<b>{format_dual_from_inr(final_price)}</b>) 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 <b>𝐢𝐧𝐬𝐭𝐚𝐧𝐭𝐥𝐲 𝐫𝐞𝐟𝐮𝐧𝐝𝐞𝐝</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁𝐮𝐲 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "buy_menu_main", "primary", icon=5408995930416362034)]])
 
             buy_success = False
             bought_info = None
@@ -710,7 +711,7 @@ async def auto_otp_task(phone):
                         
                         for log_ch in get_log_channels_db():
                             try:
-                                await bot.send_message(log_ch, f"✅ <b>ACCOUNT SOLD</b>\n\n👤 <b>User:</b> <code>{uid}</code>\n📱 <b>Phone:</b> <code>+{phone}</code>\n💰 <b>Price:</b> ₹{order['price']}\n🌍 <b>Country:</b> {order['country']}")
+                                await bot.send_message(log_ch, f"✅ <b>ACCOUNT SOLD</b>\n\n👤 <b>User:</b> <code>{uid}</code>\n📱 <b>Phone:</b> <code>+{phone}</code>\n💰 <b>Price:</b> {format_dual_from_inr(order['price'])}\n🌍 <b>Country:</b> {order['country']}")
                             except Exception as log_ex:
                                 logger.error(f"Failed to log sale: {log_ex}")
                 
@@ -760,7 +761,7 @@ async def auto_otp_task(phone):
         
         del active_orders[phone]
         
-        msg_text = f"<blockquote expandable>❌ <b>𝐎𝐫𝐝𝐞𝐫 𝐓𝐢𝐦𝐞𝐨𝐮𝐭 / 𝐂𝐚𝐧𝐜𝐞𝐥𝐥𝐞𝐝</b>\n\nNo OTP was received in time. <b>₹{ord_info['price']}</b> has been refunded to your wallet!</blockquote>"
+        msg_text = f"<blockquote expandable>❌ <b>𝐎𝐫𝐝𝐞𝐫 𝐓𝐢𝐦𝐞𝐨𝐮𝐭 / 𝐂𝐚𝐧𝐜𝐞𝐥𝐥𝐞𝐝</b>\n\nNo OTP was received in time. <b>{format_dual_from_inr(ord_info['price'])}</b> has been refunded to your wallet!</blockquote>"
         try: await bot.edit_message(uid, msg_id, msg_text)
         except Exception as e: logger.error(f"Error sending timeout msg: {e}")
 

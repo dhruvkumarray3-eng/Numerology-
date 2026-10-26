@@ -351,6 +351,29 @@ def adjust_price_by_mode(base_val, mode):
         return base_val + 150
     return base_val
 
+def _apply_owner_margin(real_cost_inr):
+    """Panel real cost (INR) -> owner's selling price (INR).
+
+    Honours the unified profit engine:
+      * percent mode  -> cost + N%
+      * fixed mode    -> cost + fixed INR/USD amount
+    Falls back to the legacy per-item LZT margin if the engine is unavailable,
+    so pricing can never break.
+    """
+    try:
+        from utils.markup import apply_markup, get_markup_config
+        cfg = get_markup_config()
+        if cfg.get("mode") == "percent" or cfg.get("fixed"):
+            return apply_markup(real_cost_inr, cfg)
+    except Exception:
+        pass
+    try:
+        margin = get_lzt_margin()
+    except Exception:
+        margin = 0
+    return max(int(round(float(real_cost_inr) + float(margin))), 25)
+
+
 def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
     # Aged year price additions (if no explicit year price is set)
     YEAR_ADDITIONS = {
@@ -392,10 +415,8 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
         
         # Dynamic fallback if no auto_price row
         rub_rate = get_rub_rate()
-        margin = get_lzt_margin()
         inr_cost = lzt_price_rub * rub_rate
-        calculated = round(inr_cost + margin)
-        final_p = max(int(calculated), 25)
+        final_p = _apply_owner_margin(inr_cost)
         return max(int(final_p * 0.55), 15)
 
     # 3. Check if admin has set explicit custom price in auto_prices table for this specific (country, year)
@@ -414,10 +435,8 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
         
     # 5. Dynamic calculation from LZT RUB price if no base price is found
     rub_rate = get_rub_rate()
-    margin = get_lzt_margin()
     inr_cost = lzt_price_rub * rub_rate
-    calculated = round(inr_cost + margin)
-    final_p = max(int(calculated), 25)
+    final_p = _apply_owner_margin(inr_cost)
     return adjust_price_by_mode(final_p, mode)
 
 def get_change_number_fee():
