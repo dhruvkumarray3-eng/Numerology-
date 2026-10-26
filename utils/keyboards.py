@@ -1,16 +1,126 @@
 from telethon import Button
 from telethon.tl.types import ReplyKeyboardMarkup, KeyboardButtonRow, KeyboardButton, KeyboardButtonStyle
-from config import TERMS_URL, JOIN_URLS
+from config import TERMS_URL, JOIN_URLS, USE_PREMIUM_EMOJIS
 from database import is_admin, get_support_url, get_fsub_urls
 
+# ---------------------------------------------------------------------------
+# Premium (custom) emoji support
+#
+# Two different mechanisms exist in Telegram and they are NOT interchangeable:
+#
+#   * Message text  -> ``<tg-emoji emoji-id="123">⚡</tg-emoji>`` inside HTML.
+#                      Telethon parses this into ``MessageEntityCustomEmoji``.
+#   * Button label  -> the ``icon`` field of ``KeyboardButtonStyle``.  You must
+#                      pass the numeric emoji id; HTML tags are *not* parsed in
+#                      button text.
+#
+# Telegram only renders custom emoji sent by a bot when the bot's owner has an
+# active Telegram Premium subscription, or when the bot owns an additional
+# username purchased on Fragment.  When that is not the case Telegram silently
+# falls back to the plain emoji, so passing an icon is always safe.
+# ---------------------------------------------------------------------------
+
+# Semantic name -> verified custom emoji id.  Reused across the whole bot so
+# every panel can simply say ``icon="buy"`` instead of memorising raw ids.
+PREMIUM_ICONS = {
+    "buy": 5440627033111557670,
+    "cart": 5440627033111557670,
+    "deposit": 5409271925014801629,
+    "money": 5409320020058584473,
+    "balance": 5409320020058584473,
+    "profile": 6203982793379154737,
+    "user": 6203982793379154737,
+    "users": 6203982793379154737,
+    "orders": 5409098988156629257,
+    "order": 5409098988156629257,
+    "check": 5409098988156629257,
+    "stock": 6129627894349045589,
+    "chart": 6129627894349045589,
+    "stats": 6129627894349045589,
+    "refer": 5354889508674360491,
+    "gift": 5440627033111557670,
+    "support": 6129732880529628243,
+    "help": 6129732880529628243,
+    "doc": 6129732880529628243,
+    "code": 6129732880529628243,
+    "home": 6129399728506412489,
+    "close": 6129812419028982717,
+    "back": 6129812419028982717,
+    "crown": 5409166771330494453,
+    "admin": 5409166771330494453,
+    "panel": 5409166771330494453,
+    "lock": 5409166771330494453,
+    "lightning": 5409271925014801629,
+    "star": 5409320020058584473,
+    "refresh": 5409320020058584473,
+    "fire": 5409320020058584473,
+    "settings": 5409098988156629257,
+    "key": 5409098988156629257,
+    "delete": 5408832111773757273,
+    "warning": 5408832111773757273,
+    "cleanup": 5408832111773757273,
+    "phone": 5409119256107297715,
+    "globe": 5409119256107297715,
+    "apps": 5409119256107297715,
+    "zip": 5355292788923593967,
+    "telegram": 5408995930416362034,
+    "instagram": 5409271925014801629,
+    "whatsapp": 5440627033111557670,
+    "youtube": 5409320020058584473,
+    "facebook": 6154249597532248059,
+    "tiktok": 6203982793379154737,
+    "twitter": 6129732880529628243,
+}
+
+
+def resolve_icon(icon):
+    """Turn a semantic name / numeric string / int into a custom emoji id.
+
+    Returns ``None`` when premium emojis are disabled or the value is unknown,
+    which makes Telegram render the button exactly like a normal one.
+    """
+    if icon is None or not USE_PREMIUM_EMOJIS:
+        return None
+    if isinstance(icon, bool):
+        return None
+    if isinstance(icon, int):
+        return icon
+    if isinstance(icon, str):
+        value = icon.strip()
+        if value.isdigit():
+            return int(value)
+        return PREMIUM_ICONS.get(value.lower())
+    return None
+
+
+def pe(name, fallback="✨"):
+    """Return an HTML ``<tg-emoji>`` snippet for message text.
+
+    ``name`` may be a semantic key (``"crown"``) or a raw emoji id.
+    Falls back to the plain emoji when premium emojis are disabled.
+    """
+    if not USE_PREMIUM_EMOJIS:
+        return fallback
+    if isinstance(name, int):
+        eid = name
+    elif isinstance(name, str):
+        value = name.strip()
+        eid = int(value) if value.isdigit() else PREMIUM_ICONS.get(value.lower())
+    else:
+        eid = None
+    if not eid:
+        return fallback
+    return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
+
+
 # We use bg_primary (blue), bg_success (green), bg_danger (red)
-# For icon, we pass the custom emoji ID (int)
+# For icon, we pass the custom emoji ID (int) or a semantic name.
 
 def style_btn(text, data, style_type=None, icon=None):
-    return Button.inline(text, data, style=style_type, icon=icon)
+    return Button.inline(text, data, style=style_type, icon=resolve_icon(icon))
 
 def style_url(text, url, style_type=None, icon=None):
-    return Button.url(text, url, style=style_type, icon=icon)
+    return Button.url(text, url, style=style_type, icon=resolve_icon(icon))
 
 
 def get_terms_buttons():

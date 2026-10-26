@@ -154,6 +154,27 @@ def _admin_help_text():
         "</blockquote>\n"
 
         "<blockquote expandable>"
+        "\U0001F9F9 <b>\u1d04\u029f\u1d07\u1d00\u0274\u1d1c\u1d18 & \u1d05\u1d07\u029f\u1d07\u1d1b\u1d07 \u1d04\u1d07\u0274\u1d1b\u1d07\u0280</b>\n"
+        "/admin \u2192 \U0001F5D1 Cleanup & Delete \u2014 open the delete center\n"
+        "\u2022 Delete OLD account stock (7 / 30 / 90 / 365 days)\n"
+        "\u2022 Delete SOLD / unavailable stock only\n"
+        "\u2022 Delete ALL stock (fresh start)\n"
+        "\u2022 Delete a single panel or ALL panels\n"
+        "\u2022 Delete a single source code or ALL source codes\n"
+        "Every delete asks for confirmation first \u2014 nothing is removed by accident"
+        "</blockquote>\n"
+
+        "<blockquote expandable>"
+        "\u2728 <b>\u1d18\u0280\u1d07\u1d0d\u026a\u1d1c\u1d0d \u1d07\u1d0d\u1d0f\u1d0a\u026a & \u0282\u1d0d\u1d0d</b>\n"
+        "/premiumcheck \u2014 diagnose why premium emojis do/don't render\n"
+        "/markup \u2014 show the current profit engine (mode, %, fixed)\n"
+        "/setprofit <n> \u2014 add a flat \u20b9 profit on top of panel price\n"
+        "/setmarkup <pct> \u2014 add a % profit on top of panel price\n"
+        "/resetmarkup \u2014 back to default profit\n"
+        "/smm \u2014 SMM services (FathersMM). User price = panel rate + your profit"
+        "</blockquote>\n"
+
+        "<blockquote expandable>"
         "📩 <b>ʂᴜᴘᴘᴏʀᴛ</b>\n"
         f"👥 ʂᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ: <a href='{support_url}'>{html.escape(support_handle)}</a>\n"
         f"👑 ᴏᴡɴᴇʀ: <a href='{owner_url}'>{html.escape(owner_handle)}</a>"
@@ -174,6 +195,7 @@ def _user_buttons():
 def _admin_buttons():
     return [
         [style_btn("\U0001F6E0 \u1d00\u1d05\u1d0d\u026a\u0274 \u1d18\u1d00\u0274\u1d07\u029f", b"help_open_admin", "success", icon=ADMIN_ICON)],
+        [style_btn("\U0001F5D1 \u1d04\u029f\u1d07\u1d00\u0274\u1d1c\u1d18 & \u1d05\u1d07\u029f\u1d07\u1d1b\u1d07", b"ac_menu", "danger", icon=5408832111773757273)],
         [style_btn("\U0001F464 \u1d1c\u1d07\u0280 \u1d20\u026a\u1d07\u1d21", b"help_user", "primary", icon=USER_ICON),
          style_btn("\U0001F504 \u0280\u1d07\u0493\u0280\u1d07\u0282\u029c", b"help_main", "primary", icon=5409098988156629257)],
         [style_btn("\U0001F519 \u1d05\u1d00\u1d04\u1d0b", b"dashboard_main", "danger", icon=BACK_ICON)],
@@ -256,3 +278,47 @@ def register_help(bot):
         await e.answer()
         from plugins.admin import admin_panel_handler
         await admin_panel_handler(e)
+
+
+    @bot.on(events.NewMessage(pattern=r"(?i)^/premiumcheck(?:@\w+)?$"))
+    async def cmd_premiumcheck(e):
+        """Diagnose why custom (premium) emojis may not render."""
+        uid = getattr(e, "sender_id", None)
+        if not (uid and _is_staff(uid)):
+            return await e.respond("\u26d4 Admin only.")
+        try:
+            from config import USE_PREMIUM_EMOJIS
+            from utils.keyboards import PREMIUM_ICONS, resolve_icon, pe
+            import telethon
+            from telethon.extensions import html as _thtml
+            from telethon.tl.types import MessageEntityCustomEmoji
+
+            sample_id = PREMIUM_ICONS.get("crown") or next(iter(PREMIUM_ICONS.values()))
+            parsed_text, entities = _thtml.parse(
+                f'x <tg-emoji emoji-id="{sample_id}">\u2b50</tg-emoji> y'
+            )
+            html_ok = any(isinstance(en, MessageEntityCustomEmoji) for en in entities)
+            icon_ok = resolve_icon("crown") == sample_id
+
+            lines = [
+                "\U0001F50D <b>Premium Emoji Diagnostic</b>",
+                "",
+                f"\u2022 USE_PREMIUM_EMOJIS: <b>{'ON' if USE_PREMIUM_EMOJIS else 'OFF'}</b>",
+                f"\u2022 Telethon version: <code>{telethon.__version__}</code>",
+                f"\u2022 Button icon resolve: <b>{'OK' if icon_ok else 'FAIL'}</b>",
+                f"\u2022 Message <tg-emoji> parse: <b>{'OK' if html_ok else 'FAIL'}</b>",
+                f"\u2022 Registry size: <b>{len(PREMIUM_ICONS)}</b> icons",
+                "",
+                "<b>Why emojis may still not show:</b>",
+                "Telegram only renders <b>custom emoji</b> (in buttons and messages) for bots whose "
+                "<b>owner has an active Telegram Premium</b> subscription, or whose bot owns a "
+                "<b>username bought on Fragment</b>. If your owner account has no Premium, the same "
+                "code will show normal emojis \u2014 that is a Telegram rule, not a bot bug.",
+                "",
+                "<i>Fix: enable Telegram Premium on the account that created this bot (or buy a "
+                "Fragment username for the bot), then restart the bot.</i>",
+            ]
+            await e.respond("\n".join(lines))
+        except Exception as exc:
+            logger.error(f"/premiumcheck error: {exc}", exc_info=True)
+            await e.respond(f"\u274c premiumcheck failed: <code>{exc}</code>")

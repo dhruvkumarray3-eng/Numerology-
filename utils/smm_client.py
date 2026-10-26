@@ -1,22 +1,50 @@
 import aiohttp
 import asyncio
 import logging
+import os
 import time
 from config import logger
 from database import to_usd
 
+
+def _env(name, default=""):
+    value = os.getenv(name)
+    return value.strip() if value is not None and value.strip() else default
+
+
+# ---------------------------------------------------------------------------
+# SMM providers
+#
+# Primary provider is fathersmm.com.  Both the API URL and the API key are
+# read from environment variables so the owner can rotate them without
+# touching the code:
+#
+#     FATHERSMM_API_URL   (default: https://fathersmm.com/api/v2)
+#     FATHERSMM_API_KEY   (required for live data)
+#     FATHERSMM_CURRENCY  (default: INR)
+#
+# A secondary provider is kept as a fallback and is likewise env-driven.
+# ---------------------------------------------------------------------------
+FATHERSMM_API_URL = _env("FATHERSMM_API_URL", "https://fathersmm.com/api/v2")
+FATHERSMM_API_KEY = _env("FATHERSMM_API_KEY", "7693898241322ddfeea23dca2e59fc88")
+FATHERSMM_CURRENCY = _env("FATHERSMM_CURRENCY", "INR").upper()
+
+SMM_SERVER2_URL = _env("SMM_SERVER2_API_URL", "https://best-smm.com/api/v2")
+SMM_SERVER2_KEY = _env("SMM_SERVER2_API_KEY", "cc77a5fe7218f0bc0c38e2a7f768c77f")
+SMM_SERVER2_CURRENCY = _env("SMM_SERVER2_CURRENCY", "USD").upper()
+
 SMM_SERVERS = {
     1: {
-        'name': '𝐕𝐈𝐏 𝐒ᴇʀᴠᴇʀ 1 (𝐅ᴀsᴛ & 𝐈ɴsᴛᴀɴᴛ)',
-        'url': 'https://fathersmm.com/api/v2',
-        'key': '7693898241322ddfeea23dca2e59fc88',
-        'currency': 'INR'
+        'name': '\U0001d5e9\U0001d5dc\U0001d5df \U0001d5e6\U0001d5f2\U0001d5ff\U0001d5ff\U0001d5f2\U0001d5ff 1 (\U0001d5d5\U0001d5ee\U0001d5fc\U0001d601 & \U0001d5dc\U0001d5fb\U0001d600\U0001d601\U0001d5ee\U0001d5fb\U0001d601)',
+        'url': FATHERSMM_API_URL,
+        'key': FATHERSMM_API_KEY,
+        'currency': FATHERSMM_CURRENCY
     },
     2: {
-        'name': '𝐁ᴜᴅɢᴇᴛ 𝐒ᴇʀᴠᴇʀ 2 (𝐂ʜᴇᴀᴘᴇsᴛ 𝐑ᴀᴛᴇ)',
-        'url': 'https://best-smm.com/api/v2',
-        'key': 'cc77a5fe7218f0bc0c38e2a7f768c77f',
-        'currency': 'USD'
+        'name': '\U0001d5d5\U0001d602\U0001d5f1\U0001d5f4\U0001d5f2\U0001d601 \U0001d5e6\U0001d5f2\U0001d5ff\U0001d5ff\U0001d5f2\U0001d5ff 2 (\U0001d5d6\U0001d5f1\U0001d5f2\U0001d5ee\U0001d5f9\U0001d5f2\U0001d600\U0001d601 \U0001d5e5\U0001d5ee\U0001d601\U0001d5f2)',
+        'url': SMM_SERVER2_URL,
+        'key': SMM_SERVER2_KEY,
+        'currency': SMM_SERVER2_CURRENCY
     }
 }
 
@@ -129,7 +157,8 @@ async def get_smm_service_details(service_id, server=1):
             return s
     return None
 
-def get_service_inr_rate(service, server=1):
+def get_service_panel_rate(service, server=1):
+    """Raw provider (panel) rate per 1000, converted to INR. No owner markup."""
     rate_raw = float(service.get('rate', 0) or 0)
     srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
     if srv['currency'] == 'USD':
@@ -138,6 +167,39 @@ def get_service_inr_rate(service, server=1):
         usd_inr = get_usdt_rate() or 90.0
         return round(rate_raw * usd_inr, 2)
     return round(rate_raw, 2)
+
+
+def get_service_profit_per_1k(service, server=1):
+    """Owner profit added on top of the panel rate, per 1000 units."""
+    try:
+        from utils.markup import get_markup_config, profit_in_inr
+        cfg = get_markup_config()
+        panel = get_service_panel_rate(service, server)
+        return round(float(profit_in_inr(panel, cfg) or 0), 2)
+    except Exception:
+        return 0.0
+
+
+def get_service_inr_rate(service, server=1):
+    """Final user-facing rate per 1000 = panel rate + owner profit.
+
+    This is what the buyer sees and what is charged, so the owner's markup
+    configured via /setprofit or /setmarkup is always included.
+    """
+    panel = get_service_panel_rate(service, server)
+    try:
+        from utils.markup import apply_markup, get_markup_config
+        final = float(apply_markup(panel, get_markup_config(), minimum=0.0))
+        return round(final, 2)
+    except Exception:
+        return panel
+
+
+def get_service_breakdown(service, server=1):
+    """Return (panel_rate, profit, user_rate) per 1000 for display."""
+    panel = get_service_panel_rate(service, server)
+    user = get_service_inr_rate(service, server)
+    return panel, round(max(0.0, user - panel), 2), user
 
 async def create_smm_order(service_id, link, quantity, server=1):
     srv = SMM_SERVERS.get(server, SMM_SERVERS[1])

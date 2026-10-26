@@ -1,4 +1,7 @@
 import html
+import io
+import re
+import zipfile
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
 from database import cur, db, get_source_codes, is_admin
@@ -6,11 +9,43 @@ from utils.states import get_user_lock
 from config import P_INR, P_NO, PE_CHECK, PE_GIFT, logger
 from utils.keyboards import style_btn
 
+
+def _slugify(text):
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", (text or "source-code")).strip("-").lower()
+    return slug or "source-code"
+
+
+def _build_source_zip(title, file_content):
+    """Package a source-code entry into an in-memory .zip archive.
+
+    ``file_content`` may be a raw code/text blob or a download URL. Either way
+    the buyer gets a real .zip document they can save and open.
+    """
+    content = (file_content or "").strip()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        if content.lower().startswith(("http://", "https://")):
+            readme = (
+                f"{title}\n"
+                f"{'=' * len(title)}\n\n"
+                "Download / access link:\n"
+                f"{content}\n\n"
+                "Open the link above to fetch the source code archive.\n"
+            )
+            zf.writestr("README.txt", readme)
+            zf.writestr("download-link.txt", content + "\n")
+        else:
+            safe = _slugify(title)
+            zf.writestr(f"{safe}.txt", content if content else "// empty source code\n")
+    buf.seek(0)
+    return buf
+
+
 async def show_source_codes_menu(event):
     codes = get_source_codes()
     btns = []
     for c_id, title, desc, price, file_link, avail in codes:
-        btns.append([style_btn(f"{title} - {P_INR}{price}", f"src_info|{c_id}", "primary")])
+        btns.append([style_btn(f"{title} - {P_INR}{price}", f"src_info|{c_id}", "primary", icon="code")])
         
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)])
     
@@ -39,7 +74,7 @@ async def show_source_code_info(event, code_id):
            f"<b>𝐀ʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ?</b></blockquote>")
            
     btns = [
-        [style_btn("✅ 𝐂ᴏɴғɪʀᴍ 𝐁ᴜʏ", f"src_cf|{c_id}", "success", icon=5409320020058584473)],
+        [style_btn("✅ 𝐂ᴏɴғɪʀᴍ 𝐁ᴜʏ", f"src_cf|{c_id}", "success", icon="buy")],
         [style_btn("🔙 𝐁ᴀᴄᴋ", b"src_code_menu", "danger", icon=6129812419028982717)]
     ]
     try: await event.edit(msg, buttons=btns)
@@ -84,19 +119,46 @@ def register_source_codes(bot):
                 await bot.send_message(ch, admin_log)
             except: pass
             
-        msg = (f"<blockquote>{PE_CHECK} <b>🎉 𝐏ᴜʀᴄʜᴀsᴇ 𝐒ᴜᴄᴄᴇssғᴜʟ!</b>\n\n"
-               f"💻 <b>𝐈ᴛᴇᴍ:</b> <b>{html.escape(title)}</b>\n"
-               f"💰 <b>𝐀ᴍᴏᴜɴᴛ 𝐏ᴀɪᴅ:</b> <code>{P_INR}{price}</code>\n\n"
-               f"🔗 <b>𝐃ᴏᴡɴʟᴏᴀᴅ / 𝐀ᴄᴄᴇss 𝐋ɪɴᴋ:</b>\n"
-               f"<code>{html.escape(file_link)}</code>\n\n"
-               f"<i>𝐓ʜᴀɴᴋ ʏᴏᴜ ғᴏʀ ʏᴏᴜʀ ᴘᴜʀᴄʜᴀsᴇ!</i></blockquote>")
-               
+        safe_name = _slugify(title)
+        zip_buf = _build_source_zip(title, file_link)
+
+        msg = (
+            f"<blockquote>{PE_CHECK} <b>\U0001F389 Purchase Successful!</b>\n\n"
+            f"\U0001F4BB <b>Item:</b> <b>{html.escape(title)}</b>\n"
+            f"\U0001F4B0 <b>Amount Paid:</b> <code>{P_INR}{price}</code>\n\n"
+            f"\U0001F4E6 <b>Delivery:</b> ZIP file is sent below \u2b07\ufe0f\n"
+            f"<i>Thank you for your purchase \u2014 extract the ZIP to get your files.</i>"
+            f"</blockquote>"
+        )
+
         btns = [
-            [Button.url("📥 𝐎ᴘᴇɴ 𝐆ɪᴛ𝐇ᴜʙ 𝐑ᴇᴘᴏ ↗️", file_link)],
-            [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐒ᴛᴏʀᴇ", b"src_code_menu", "primary")]
+            [style_btn("\U0001F519 Back to Store", b"src_code_menu", "primary", icon=6129812419028982717)]
         ]
-        try: await e.edit(msg, buttons=btns)
-        except MessageNotModifiedError: pass
+        try:
+            await e.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            pass
+
+        # Deliver the real ZIP document to the buyer
+        try:
+            await bot.send_file(
+                e.chat_id,
+                zip_buf,
+                filename=f"{safe_name}.zip",
+                caption=(
+                    f"\U0001F4E6 <b>{html.escape(title)}</b>\n"
+                    f"<i>Your source code ZIP \u2014 extract and open.</i>"
+                ),
+                force_document=True,
+            )
+        except Exception as _zip_ex:
+            logger.warning(f"source zip send failed: {_zip_ex}")
+            try:
+                await e.respond(
+                    f"\U0001F517 <b>Download link:</b> <code>{html.escape(file_link)}</code>"
+                )
+            except Exception:
+                pass
         try:
             from utils import stickers as _sticker_engine
             await _sticker_engine.send_purchase_for_event(e)
