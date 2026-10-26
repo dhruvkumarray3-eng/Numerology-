@@ -60,6 +60,69 @@ _LZT_MIN_INTERVAL = 3.0
 # UI then rendered as "No live accounts found".
 _LZT_REQUEST_TIMEOUT = 75
 
+def validate_token_format(token):
+    """Check that ``token`` looks like an LZT *Access Token*, not a Client ID.
+
+    lolz.live shows three different strings on the API pages and it is very
+    easy to copy the wrong one:
+
+      * **Client ID**      - short number, e.g. ``1234``
+      * **Client Secret**  - long random hex/alnum string
+      * **Access Token**   - a JWT: three dot-separated parts, always starting
+        with ``eyJ`` (base64 of ``{"`` )
+
+    Only the Access Token works with ``Authorization: Bearer ...``.
+
+    Returns ``(ok, reason)`` where ``reason`` explains what was pasted.
+    """
+    t = str(token or "").strip()
+    if not t:
+        return False, "empty"
+
+    # Strip an accidental "Bearer " prefix the user may have copied.
+    if t.lower().startswith("bearer "):
+        t = t[7:].strip()
+
+    parts = t.split(".")
+    if len(parts) == 3 and t.startswith("eyJ") and all(parts):
+        return True, "jwt"
+
+    if t.isdigit():
+        return False, (
+            "This looks like a **Client ID** (a short number). That is not the "
+            "token - it will always be rejected."
+        )
+
+    if len(parts) == 3:
+        return False, (
+            "This looks like a JWT but not an LZT one (it does not start with "
+            "`eyJ`). Make sure you copied the **Access Token** and not a token "
+            "from another service."
+        )
+
+    if len(t) >= 20 and "." not in t:
+        return False, (
+            "This looks like a **Client Secret** (one long string, no dots). "
+            "The bot needs the **Access Token**, which is a long string with "
+            "two dots in it."
+        )
+
+    return False, (
+        "This does not look like an LZT Access Token. A real token is a long "
+        "string with two dots (like `eyJhbGciOi....eyJzdWIi....signature`)."
+    )
+
+
+def token_fingerprint(token):
+    """Short, non-reversible-ish fingerprint so admins can tell tokens apart."""
+    t = str(token or "").strip()
+    if not t:
+        return "not set"
+    if len(t) <= 14:
+        return f"len={len(t)}"
+    return f"{t[:8]}…{t[-6:]} (len={len(t)})"
+
+
 def classify_lzt_error(status, body):
     """Turn an LZT HTTP error into ``(kind, human_message)``.
 
