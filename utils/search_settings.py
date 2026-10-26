@@ -38,7 +38,7 @@ DEFAULTS = {
     "cheap_order": "price_to_up",
     "bulk_order": "price_to_up",
     "max_results": "50",
-    "max_pages": "4",
+    "max_pages": "2",
     "min_price": "",
     "max_price": "",
     # Drop items whose spam flag is known and does not match the requested

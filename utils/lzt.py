@@ -60,6 +60,66 @@ _LZT_MIN_INTERVAL = 3.0
 # UI then rendered as "No live accounts found".
 _LZT_REQUEST_TIMEOUT = 75
 
+def classify_lzt_error(status, body):
+    """Turn an LZT HTTP error into ``(kind, human_message)``.
+
+    This matters a lot: LZT returns **403 for two completely different
+    problems** --
+
+      * the token is bad / lacks the ``market`` scope, and
+      * the account is not allowed to use the Market API at all
+        ("To use the Market API, you need to have 200 sympathies, or you can
+        purchase a monthly subscription").
+
+    The old code reported both as "API key invalid", so a perfectly good key
+    on an account without market access looked like a broken key (and the
+    search looked like an empty market).  We now read the body to tell them
+    apart.
+    """
+    body = str(body or "")
+    low = body.lower()
+
+    if status == 401:
+        return "auth", (
+            "LZT rejected the API key (HTTP 401). The token is invalid, "
+            "expired or revoked. Regenerate it at lolz.live > Account > API > "
+            "Get Access Token and set it in Admin > LZT Panel Settings."
+        )
+
+    if status in (402, 403):
+        access_markers = (
+            "sympath", "subscription", "upgrade", "not have access",
+            "access to the market", "buy access", "payment",
+        )
+        if status == 402 or any(m in low for m in access_markers):
+            return "access", (
+                "LZT Market API access is not enabled for this account "
+                f"(HTTP {status}). LZT requires 200 sympathies or an active "
+                "paid monthly subscription to use Market search."
+            )
+        return "auth", (
+            f"LZT says HTTP {status} Forbidden. The token is valid but lacks "
+            "the 'market' scope. Regenerate it with the market scope enabled."
+        )
+
+    if status == 429:
+        return "rate", (
+            "LZT rate limit hit (429). Category search allows 20 requests per "
+            "minute with a 3s gap. Try again in a minute or lower Max Pages."
+        )
+
+    if status == 400:
+        return "bad", f"LZT rejected the search parameters (HTTP 400): {body[:200]}"
+
+    if status and 500 <= int(status) < 600:
+        return "server", (
+            f"LZT is having server trouble (HTTP {status}). Please retry in a "
+            "few seconds."
+        )
+
+    return "unknown", f"LZT /telegram returned {status}: {body[:180]}"
+
+
 # Comprehensive Country Name to ISO 3166-1 alpha-2 mapping with all aliases
 COUNTRY_TO_LZT = {
     'USA/Canada': 'us', 'USA': 'us', 'United States': 'us', 'United States of America': 'us',
@@ -342,6 +402,11 @@ class LZTClient:
         # showing an empty list.
         self.last_error = None
         self.last_status = None
+        # Coarse reason for the last failure: auth | access | rate | bad |
+        # server | unknown.  The UI uses this to show the *right* fix card
+        # (e.g. "buy market access" instead of "your key is invalid").
+        self.last_error_kind = None
+        self.last_body = ""
         # Server-side total for the last search + per-country totals, used by
         # the country picker to display real live stock counts.
         self.last_total = 0
@@ -465,10 +530,21 @@ class LZTClient:
                         )
 
                     if resp.status == 403:
+                        kind, message = classify_lzt_error(resp.status, body)
+                        if kind == "access":
+                            return False, (
+                                "\U0001F6A7 <b>Market Access Required.</b>\n\n"
+                                "Your key is valid, but LZT refuses Market "
+                                "search for this account. LZT requires "
+                                "<b>200 sympathies</b> or an active <b>paid "
+                                "monthly subscription</b>.\n\n"
+                                "<i>" + html_escape(body[:200]) + "</i>"
+                            )
                         return False, (
                             "\u26d4 <b>LZT says 403 Forbidden.</b>\n\n"
-                            "The token is valid but lacks the <b>market</b> scope. "
-                            "Regenerate it with the market scope enabled."
+                            "The token is valid but lacks the <b>market</b> "
+                            "scope. Regenerate it with the market scope "
+                            "enabled.\n\n<i>" + html_escape(body[:200]) + "</i>"
                         )
 
                     return False, (
@@ -676,28 +752,42 @@ class LZTClient:
                             continue
                         if resp.status == 200:
                             self.last_error = None
+                            self.last_error_kind = None
                             self.last_status = 200
-                            return await resp.json(content_type=None)
+                            data = await resp.json(content_type=None)
+                            # Prove in the Railway logs what LZT actually
+                            # returned.  Without this a silent client-side
+                            # filter looked identical to an empty market.
+                            try:
+                                items = (data or {}).get("items") or []
+                                sample = ""
+                                if items and isinstance(items[0], dict):
+                                    first = items[0]
+                                    sample = (
+                                        f" first(item_id={first.get('item_id')}, "
+                                        f"country={first.get('telegram_country')!r}, "
+                                        f"spam={first.get('telegram_spam_block')!r}, "
+                                        f"price={first.get('price')!r})"
+                                    )
+                                logger.info(
+                                    f"LZT /telegram 200: totalItems="
+                                    f"{(data or {}).get('totalItems')} "
+                                    f"items={len(items)} params="
+                                    f"{ {k: v for k, v in (params or {}).items() if k != 'after'} }"
+                                    f"{sample}"
+                                )
+                            except Exception:
+                                pass
+                            return data
                         body = await resp.text()
                         self.last_status = resp.status
-                        if resp.status in (401, 403):
-                            self.last_error = (
-                                "LZT rejected the API key (HTTP "
-                                f"{resp.status}). The token is invalid, expired "
-                                "or lacks the 'market' scope. Regenerate it at "
-                                "lolz.live > Account > API > Get Access Token "
-                                "and set it in Admin > LZT Panel Settings."
-                            )
-                        elif resp.status == 402:
-                            self.last_error = (
-                                "LZT says your account needs 200 sympathies or a "
-                                "paid subscription to use Market search."
-                            )
-                        elif resp.status == 429:
-                            self.last_error = "LZT rate limit hit (429). Try again in a minute."
-                        else:
-                            self.last_error = f"LZT /telegram returned {resp.status}: {body[:160]}"
-                        logger.error(f"LZT /telegram {resp.status}: {body[:200]}")
+                        self.last_body = body[:500]
+                        kind, message = classify_lzt_error(resp.status, body)
+                        self.last_error_kind = kind
+                        self.last_error = message
+                        logger.error(
+                            f"LZT /telegram {resp.status} [{kind}]: {body[:300]}"
+                        )
                         if 400 <= resp.status < 500:
                             return None
             except asyncio.TimeoutError:
@@ -824,8 +914,11 @@ class LZTClient:
         c2 = get_lzt_code(country_name)
 
         self.last_error = None
+        self.last_error_kind = None
+        self.last_body = ""
         self.last_status = None
         self.last_total = 0
+        self.last_fallback = False
 
         if not self.get_token():
             self.last_error = (
@@ -991,20 +1084,18 @@ class LZTClient:
                         continue
 
                     # Client-side safety for filters the API may not have
-                    # applied.  When "strict spam" is ON we additionally drop
-                    # items whose spam state is unknown, so the Good Quality
-                    # list can never contain a spam-blocked account.
-                    strict = is_strict_spam()
+                    # applied.  IMPORTANT: only drop an item when we *know* its
+                    # spam state is wrong.  LZT reports ``telegram_spam_block``
+                    # as -1 / null for a large share of listings (meaning "not
+                    # checked"), and the old "strict" rule dropped every one of
+                    # those -- which emptied whole countries even though the
+                    # API had already applied spam=no/spam=yes server-side.
                     if not relax:
                         if effective_mode == 'nonspam':
                             if parsed["spam_known"] and parsed["is_spam"]:
                                 continue
-                            if strict and not parsed["spam_known"]:
-                                continue
                         if effective_mode == 'spam':
                             if parsed["spam_known"] and not parsed["is_spam"]:
-                                continue
-                            if strict and not parsed["spam_known"]:
                                 continue
                     if effective_mode == 'no_email' and parsed["has_email"]:
                         continue
@@ -1037,7 +1128,7 @@ class LZTClient:
         # searches off mid-flight (returning [] -> "no live accounts").
         # Budget must exceed the per-request timeout, otherwise a single slow
         # page can trip the outer wait_for before aiohttp gives up.
-        budget = max(60, 20 + 15 * int(max_pages or 1))
+        budget = max(70, 30 + 50 * int(max_pages or 1))
         try:
             results = await asyncio.wait_for(_run(base_params), timeout=budget)
         except asyncio.TimeoutError:
@@ -1047,6 +1138,34 @@ class LZTClient:
             )
             logger.warning(f"LZT search_items hard timeout ({budget}s)")
             return []
+
+        # ------------------------------------------------------------------
+        # Country-filter fallback.  LZT's ``country[]`` enum is not always in
+        # sync with what sellers pick, and a stale/unsupported value makes the
+        # API return an empty page for a country that clearly has stock.  When
+        # the country-filtered search comes back empty (but the request itself
+        # succeeded) retry once *without* ``country[]`` and keep only items
+        # whose country really matches, client-side.
+        # ------------------------------------------------------------------
+        if not results and send_country_filter and self.last_status == 200:
+            logger.info(
+                f"LZT search: 0 items for country[]={c3} ('{country_name}'); "
+                "retrying without the country filter"
+            )
+            no_country = {k: v for k, v in base_params.items() if k != "country[]"}
+            try:
+                results = await asyncio.wait_for(
+                    _run(no_country, relax=False, page_cap=2), timeout=60
+                )
+                if results:
+                    self.last_fallback = True
+                    logger.info(
+                        f"LZT search: country filter bypass recovered "
+                        f"{len(results)} item(s) for '{country_name}'"
+                    )
+            except asyncio.TimeoutError:
+                logger.warning("LZT country-filter fallback timeout")
+                results = []
 
         # ------------------------------------------------------------------
         # Auto-fallback: a filtered search that comes back empty is usually a

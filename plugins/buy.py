@@ -482,6 +482,46 @@ async def _lzt_key_invalid_card(event, country=None, mode=None, detail=None):
     return await event.respond(msg, buttons=btns)
 
 
+async def _lzt_access_card(event, country=None, mode=None, detail=None):
+    """Shown when the key is valid but the account cannot use Market search.
+
+    LZT requires **200 sympathies or a paid monthly subscription** for the
+    Market API.  Until now this 403 was reported as "API key invalid", which
+    sent the admin chasing a perfectly good token while every search came back
+    empty.
+    """
+    detail_line = ""
+    if detail:
+        detail_line = "\n\n<i>" + html.escape(str(detail)[:300]) + "</i>"
+    msg = (
+        "<blockquote expandable>\U0001F6A7 <b>Market Access Required</b>\n\n"
+        "\u2705 Your <b>API key is valid</b> \u2014 the bot connected and read "
+        "your balance fine.\n\n"
+        "\u26a0\ufe0f But LZT is refusing <b>market search</b> for this account. "
+        "LZT requires either:\n"
+        "\u2022 <b>200 sympathies</b> on lolz.live, or\n"
+        "\u2022 an active <b>paid monthly subscription</b>\n\n"
+        "<b>Fix:</b>\n"
+        "1. Open lolz.live \u2192 buy the Market API subscription "
+        "(or collect 200 sympathies)\n"
+        "2. Come back and press <b>Try Again</b>\n\n"
+        "<i>Search starts working the moment access is active \u2014 no code "
+        "change needed.</i>"
+        f"{detail_line}</blockquote>"
+    )
+    btns = [
+        [style_btn("\U0001F4B3 Buy Market Access", "https://lolz.live/payment/method?service_id=8&service_type=user_upgrade", "success", icon=5409320020058584473)],
+        [style_btn("\U0001F504 Try Again", f"pg_c|{mode or 'bulk'}|1", "primary", icon=5409320020058584473)],
+        [style_btn("\U0001F519 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)],
+    ]
+    if isinstance(event, events.CallbackQuery.Event):
+        try:
+            return await event.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            return
+    return await event.respond(msg, buttons=btns)
+
+
 async def show_countries_for_year(event, year, page):
     limit = 10
     offset = (page - 1) * limit
@@ -622,9 +662,13 @@ async def show_years(event, mode, country):
         if not _lzt_live():
             return await _lzt_not_configured_card(event, country, mode)
         reason = getattr(lzt_client, "last_error", None)
-        # An expired / wrong-scope token must never look like an empty market.
+        kind = getattr(lzt_client, "last_error_kind", None)
+        # An expired / wrong-scope token must never look like an empty market,
+        # and a valid key without Market access must not look like a bad key.
         status = getattr(lzt_client, "last_status", None)
-        if status in (401, 403) or (
+        if kind == "access":
+            return await _lzt_access_card(event, country, mode, reason)
+        if kind == "auth" or status == 401 or (
             reason and "rejected the API key" in str(reason)
         ):
             return await _lzt_key_invalid_card(event, country, mode, reason)

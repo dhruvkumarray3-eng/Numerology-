@@ -147,7 +147,7 @@ try:
     rejected_pages = False
 except ValueError:
     rejected_pages = True
-check("invalid page count rejected", rejected_pages and S.get_search_setting("max_pages") == "4",
+check("invalid page count rejected", rejected_pages and S.get_search_setting("max_pages") == S.DEFAULTS["max_pages"],
       S.get_search_setting("max_pages"))
 
 # ---------------------------------------------------------------------------
