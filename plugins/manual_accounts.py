@@ -239,6 +239,11 @@ async def deliver_account(event, account_id):
         [style_btn("🏠 Main Menu", b"dashboard_main", "danger", icon=6129812419028982717)],
     ]
     await _safe_edit(event, msg, btns)
+    try:
+        from utils import stickers as _sticker_engine
+        await _sticker_engine.send_purchase_for_event(event)
+    except Exception as _sk_ex:
+        logger.debug(f"purchase emoji skipped: {_sk_ex}")
 
     # Deliver the session string as a text file too (if present).
     if session:

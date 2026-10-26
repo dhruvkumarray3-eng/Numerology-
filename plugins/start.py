@@ -109,7 +109,7 @@ async def send_main_menu(bot, event, uid):
         [style_btn("📱 𝓐𝓵𝓵 𝓪𝓹𝓹𝓼 𝓪𝓬𝓬", b"all_apps_menu", "success", icon=5409320020058584473)],
         [style_btn("📱 𝓑𝓪𝓼𝓲𝓬 𝓣𝓮𝓵𝓮𝓰𝓻𝓪𝓶 𝓐𝓬𝓬𝓸𝓾𝓷𝓽𝓼", b"mtg_home", "success", icon=5409320020058584473)],
         [style_btn("💬 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩 𝐏𝐚𝐧𝐞𝐥", b"pp_open|whatsapp", "success", icon=5408995930416362034)],
-        [style_btn("🧩 𝐀𝐥𝐥 𝐀𝐩𝐩𝐬 𝐎𝐏𝐏", b"pp_open|allotp", "success", icon=5409320020058584473)],
+        [style_btn("🧩 𝐀𝐥𝐥 𝐀𝐩𝐩𝐬 𝐎𝐓𝐏", b"pp_open|allotp", "success", icon=5409320020058584473)],
         [style_btn("🚀 𝓢𝓸𝓬𝓲𝓪𝓵 𝓶𝓮𝓭𝓲𝓪 𝓼𝓮𝓻𝓿𝓲𝓬𝓮𝓼", b"smm_menu_main", "success", icon=5408995930416362034)],
         [style_btn("🛒 𝓑𝓾𝔂 𝓢𝓸𝓾𝓻𝓬𝓮 𝓒𝓸𝓭𝓮𝓼", b"src_code_menu", "success", icon=5409320020058584473)],
         [style_btn("🛒 𝓑𝓾𝔂 𝓟𝓪𝓷𝓮𝓵𝓼", b"panels_menu", "success", icon=5409098988156629257)],

@@ -356,6 +356,11 @@ def register_smm(bot):
                 [style_btn("🔙 𝐌ᴀɪɴ 𝐌ᴇɴᴜ", b"dashboard_main", "danger", icon=6129812419028982717)]
             ]
             await loading.edit(msg, buttons=btns)
+            try:
+                from utils import stickers as _sticker_engine
+                await _sticker_engine.send_purchase_for_event(e)
+            except Exception as _sk_ex:
+                logger.debug(f"purchase emoji skipped: {_sk_ex}")
         else:
             # SMM Order failed -> refund user
             err_msg = api_res.get('error', 'API submission failed')

@@ -740,6 +740,11 @@ async def auto_otp_task(phone):
                 
                 try: await bot.edit_message(uid, msg_id, msg_text, buttons=btns)
                 except Exception as ex: logger.error(f"Error updating message: {ex}")
+                try:
+                    from utils import stickers as _sticker_engine
+                    await _sticker_engine.send_purchase(bot, uid, reply_to=msg_id)
+                except Exception as _sk_ex:
+                    logger.debug(f"purchase emoji skipped: {_sk_ex}")
                 return
         except Exception as e:
             logger.error(f"Error in auto_otp_task loop: {e}")

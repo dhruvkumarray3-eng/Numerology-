@@ -97,3 +97,8 @@ def register_source_codes(bot):
         ]
         try: await e.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass
+        try:
+            from utils import stickers as _sticker_engine
+            await _sticker_engine.send_purchase_for_event(e)
+        except Exception as _sk_ex:
+            logger.debug(f"purchase emoji skipped: {_sk_ex}")
