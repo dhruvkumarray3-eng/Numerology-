@@ -1,7 +1,8 @@
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
 from database import cur, to_usd
-from config import PE_KISS, PE_CROWN, PE_FLOWER, P_ID, P_MONEY, P_CARD, P_USERS, P_CAL, P_GIFT, P_CART, P_USDT, P_PHONE
+from config import (PE_KISS, PE_CROWN, PE_FLOWER, P_ID, P_MONEY, P_CARD, P_USERS, P_CAL,
+                     P_GIFT, P_CART, P_USDT, P_PHONE, PE_ID, PE_CARD, PE_TROPHY, PE_STAR)
 from datetime import datetime
 
 async def profile_handler(bot, event):
@@ -21,8 +22,8 @@ async def profile_handler(bot, event):
                  f"{P_USERS} <b>Referral Link:</b>\n<i>𝐒ᴇᴛ ᴀ ᴘᴜʙʟɪᴄ ʙᴏᴛ ᴜsᴇʀɴᴀᴍᴇ ᴛᴏ ᴇɴᴀʙʟᴇ ʀᴇғᴇʀʀᴀʟs.</i>\n\n")
     
     msg = (f"<blockquote expandable>{PE_KISS} <b>𝐔sᴇʀ 𝐏ʀᴏғɪʟᴇ</b></blockquote>\n\n"
-           f"<blockquote>{P_ID} 𝐔sᴇʀ 𝐈𝐃: <tg-spoiler><code>{uid}</code></tg-spoiler>\n"
-           f"{P_MONEY} 𝐁ᴀʟᴀɴᴄᴇ: <tg-spoiler><code>${to_usd(bal):.2f} (₹{bal})</code></tg-spoiler>\n"
+           f"<blockquote>{PE_ID} 𝐔sᴇʀ 𝐈𝐃: <tg-spoiler><code>{uid}</code></tg-spoiler>\n"
+           f"{PE_CARD} 𝐁ᴀʟᴀɴᴄᴇ: <tg-spoiler><code>${to_usd(bal):.2f} (₹{bal})</code></tg-spoiler>\n"
            f"{P_CARD} 𝐃ᴇᴘᴏsɪᴛᴇᴅ: <code>${to_usd(dep):.2f} (₹{dep})</code>{disc_msg}\n"
            f"{P_USERS} 𝐑ᴇғᴇʀʀᴇᴅ 𝐔sᴇʀs: <b>{ref_count}</b>\n"
            f"{P_CAL} 𝐉ᴏɪɴᴇᴅ: {date[:10]}</blockquote>\n\n"
