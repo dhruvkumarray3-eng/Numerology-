@@ -27,8 +27,9 @@ def get_terms_message():
         return None
 
     rendered_terms = "\n".join(_render_markdown_line(line) for line in terms.splitlines())
+    # Wrap the full Terms & Conditions inside a collapsible quote box.
     return (
         "📜 <b>Please read and accept these Terms &amp; Conditions before using the bot.</b>\n\n"
-        f"{rendered_terms}\n\n"
+        f"<blockquote expandable>{rendered_terms}</blockquote>\n\n"
         "<i>Tap Accept to continue or Reject to stop.</i>"
     )

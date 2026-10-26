@@ -88,7 +88,7 @@ def register_deposit(bot):
     async def cb_deposit_menu_main(e):
         await deposit_menu(e)
 
-    @bot.on(events.CallbackQuery(pattern=r"^dep_choose_(.+)$"))
+    @bot.on(events.CallbackQuery(pattern=r"^dep_choose_(?!BEP20$)(.+)$"))
     async def cb_choose_dep_method(e):
         method = e.pattern_match.group(1).decode()
         await manual_deposit_init(e, method)

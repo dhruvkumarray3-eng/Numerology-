@@ -42,6 +42,73 @@ COUNTRY_MAP = {
     "canada": "Canada", "+1ca": "Canada",
 }
 
+# ---------------------------------------------------------
+# 🌍 COUNTRY SEARCH HELPERS
+# ---------------------------------------------------------
+def _normalize_country_text(value):
+    """Lowercase and strip everything except letters/digits for fuzzy matching."""
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+# Build a normalized country-name -> dial-code map from COUNTRY_CODES.
+# Handles compound names such as "USA/Canada" by registering each part.
+COUNTRY_NAME_TO_DIAL = {}
+for _dial, (_cname, _flag) in COUNTRY_CODES.items():
+    COUNTRY_NAME_TO_DIAL.setdefault(_normalize_country_text(_cname), _dial)
+    for _part in re.split(r"[/,&]", _cname):
+        _part_key = _normalize_country_text(_part)
+        if _part_key:
+            COUNTRY_NAME_TO_DIAL.setdefault(_part_key, _dial)
+
+
+def country_matches_query(query, country_name):
+    """
+    Return True if a free-text query (country name, alias, or dial code)
+    matches the given country name. Robust against +91 / 91 / India / IND etc.
+    """
+    raw_query = str(query or "").strip()
+    q = _normalize_country_text(raw_query)
+    n = _normalize_country_text(country_name)
+    if not q or not n:
+        return False
+
+    # 1. Direct name substring match (both directions)
+    if q in n or n in q:
+        return True
+
+    # 2. Alias resolution (e.g. "us" -> "USA", "uk" -> "UK")
+    alias = COUNTRY_MAP.get(raw_query.lower())
+    if alias and _normalize_country_text(alias) == n:
+        return True
+
+    # 3. Dial-code match (e.g. "+91", "91", "1")
+    q_digits = re.sub(r"\D", "", raw_query)
+    if q_digits:
+        dial = COUNTRY_NAME_TO_DIAL.get(n)
+        if dial and (dial == q_digits or dial.startswith(q_digits) or q_digits.startswith(dial)):
+            return True
+
+    return False
+
+
+def search_countries(countries_all, query):
+    """Filter and de-duplicate a list of (country, count) tuples by query."""
+    matches = []
+    seen = set()
+    for entry in countries_all or []:
+        if isinstance(entry, (tuple, list)):
+            c_name, count = entry[0], entry[1]
+        else:
+            c_name, count = str(entry), 0
+
+        if country_matches_query(query, c_name):
+            key = _normalize_country_text(c_name)
+            if key not in seen:
+                seen.add(key)
+                matches.append((c_name, count))
+    return matches
+
+
 async def safe_edit_message(event, text, buttons=None):
     """Safely edit message to handle MessageIdInvalidError gracefully."""
     try:
@@ -465,9 +532,8 @@ async def process_purchase(event, mode, country, year, price_str):
         await event.edit(f"⚡ <b>𝐏𝐫𝐨𝐜𝐞𝐬𝐬𝐢𝐧𝐠 𝐲𝐨𝐮𝐫 𝐨𝐫𝐝𝐞𝐫...</b>\n𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭 𝐰𝐡𝐢𝐥𝐞 𝐰𝐞 𝐢𝐧𝐢𝐭𝐢𝐚𝐥𝐢𝐳𝐞 𝐭𝐡𝐞 𝐬𝐞𝐬𝐬𝐢𝐨𝐧.")
         try:
             items = await lzt_client.search_items(country, actual_year, mode=mode)
-
-if not items:
-    items = await lzt_client.search_items(country, mode=mode)
+            if not items:
+                items = await lzt_client.search_items(country, mode=mode)
             
             if not items:
                 async with get_user_lock(uid):
@@ -713,16 +779,9 @@ async def buy_account_handler(event):
     )
     buttons = [[style_btn("❌ ⬅️ Back to Menu", "back_to_menu", "danger")]]
     await event.respond(msg_text, buttons=buttons)
-
-@bot.on(events.CallbackQuery(pattern=b"tc_accept"))
-async def cb_tc_accept_bytes(event):
-    try:
-        logger.info(f"CALLBACK RECEIVED: b'tc_accept' from {event.sender_id}")
-        await safe_edit_message(event, "✅ Terms accepted! Select an option below.", buttons=[
-            [style_btn("🛒 Buy Account", "buy_account_cb", "primary")]
-        ])
-    except Exception as e:
-        logger.error(f"Unhandled exception in cb_tc_accept: {e}")
+    # Stop other NewMessage handlers (e.g. the country search processor)
+    # from also consuming this same "Buy Account" trigger message.
+    raise events.StopPropagation
 
 @bot.on(events.CallbackQuery(pattern=b"back_to_menu"))
 async def cb_back_to_menu_bytes(event):
@@ -748,31 +807,34 @@ async def cb_search_country_btn(event):
 
 @bot.on(events.NewMessage)
 async def process_combined_text_input(event):
-    if event.text.startswith("/"):
+    if not event.text or event.text.startswith("/"):
         return
-        
+
     uid = event.sender_id
-    
+
+    # Ignore menu triggers so they don't get treated as a country query.
+    lowered = event.text.strip().lower()
+    if "buy account" in lowered:
+        return
+
     if search_state.get(uid) or user_states.get(uid) == "AWAITING_COUNTRY":
         search_state[uid] = False
         user_states[uid] = None
-        
-        raw_query = event.text.strip().lower()
-        clean_query = raw_query.replace("+", "")
-        
-        # Resolve via mapping or direct match
-        query = COUNTRY_MAP.get(raw_query) or COUNTRY_MAP.get(clean_query) or raw_query
 
-                   countries_all = await get_countries_list()
-        
-        matches = [
-            (c, cnt) for c, cnt in countries_all 
-            if query in c.lower() or clean_query in str(COUNTRY_CODES.get(c, '')).lower()
-        ]
-             
+        raw_query = event.text.strip()
 
+        try:
+            countries_all = await get_countries_list()
+        except Exception as e:
+            logger.error(f"Error fetching country list: {e}")
+            countries_all = []
 
-        
+        # Fallback: if no dynamic list is available, search the built-in map.
+        if not countries_all:
+            countries_all = [(c_name, 0) for c_name, _flag in COUNTRY_CODES.values()]
+
+        matches = search_countries(countries_all, raw_query)
+
         if not matches:
             return await event.respond(f"❌ No country found matching '<code>{html.escape(event.text)}</code>'. Please try again with a valid country or code (e.g. India, +91, +1).", buttons=[[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]])
             
@@ -787,10 +849,6 @@ async def process_combined_text_input(event):
 
 @bot.on(events.CallbackQuery(pattern=r"^open_buy_categories$"))
 async def cb_open_buy_categories(event):
-    await show_buy_menu(event)
-
-@bot.on(events.CallbackQuery(pattern=r"^tc_accept$"))
-async def cb_tc_accept(event):
     await show_buy_menu(event)
 
 @bot.on(events.CallbackQuery(pattern=r"^buy_menu_main$"))
@@ -868,10 +926,6 @@ async def cb_get_otp_again(event):
     code = await fetch_order_otp(active_orders[phone])
     if code: await event.answer(f"🔑 Your OTP is: {code}", alert=True)
     else: await event.answer("⏳ Waiting for OTP...", alert=True)
-
-@bot.on(events.CallbackQuery(pattern=r"^cancel_action$"))
-async def cb_cancel_action(event):
-    await show_buy_menu(event)
 
 @bot.on(events.CallbackQuery(pattern=r"^dl_(telethon|tdata|pyrogram|json)_(.+)"))
 async def cb_download_format(event):

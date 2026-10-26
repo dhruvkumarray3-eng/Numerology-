@@ -1,7 +1,7 @@
 import sqlite3
 import os
 import math
-from config import ADMIN_ID, SUPER_ADMINS, SUPPORT_URL, is_super_admin
+from config import ADMIN_ID, SUPER_ADMINS, SUPPORT_URL, is_super_admin, logger
 
 # Initialize DB
 db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "otp_bot_final.db")
