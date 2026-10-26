@@ -102,4 +102,4 @@
 - [x] Verified with mocked transport: balance 413.0, countries ru/jp, buy by ISO + by name, OTP, cancel
 - [x] Verified OTP provider layer: providers=['temporasms'], stock/price/buy/otp all OK
 - [x] `python3 -m compileall` clean; no `parse_sticky_items` / invented REST paths remain
-- [ ] Commit on new branch + push + PR
+- [x] Commit on new branch + push + PR + merge (PR #11)
