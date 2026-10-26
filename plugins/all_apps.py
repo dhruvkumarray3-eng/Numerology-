@@ -43,6 +43,25 @@ COUNTRIES = [
 ]
 
 
+_EMOJI_FALLBACK = "📱"
+
+
+def _has_emoji(text):
+    if not text:
+        return False
+    code = ord(text.strip()[0])
+    return (0x1F000 <= code <= 0x1FAFF or 0x2600 <= code <= 0x27BF
+            or 0x2190 <= code <= 0x21FF or 0x2B00 <= code <= 0x2BFF
+            or code in (0x00A9, 0x00AE, 0x203C, 0x2049, 0x2122, 0x2139))
+
+
+def _ensure_emoji(label):
+    label = (label or "").strip()
+    if not label:
+        return _EMOJI_FALLBACK
+    return label if _has_emoji(label) else f"{_EMOJI_FALLBACK} {label}"
+
+
 def _providers_line():
     provs = available_providers()
     if not provs:
@@ -55,7 +74,7 @@ async def show_all_apps(event):
     btns = []
     row = []
     for slug, label in APP_CATALOG:
-        row.append(style_btn(label, f"aa_app|{slug}", "primary"))
+        row.append(style_btn(_ensure_emoji(label), f"aa_app|{slug}", "primary"))
         if len(row) == 2:
             btns.append(row)
             row = []
@@ -105,6 +124,12 @@ async def show_countries_for_app(event, app_slug):
             pass
     else:
         await event.respond(msg, buttons=btns)
+
+    # Premium custom-emoji logic: send the app logo from the apps pack.
+    try:
+        await sticker_engine.send_for_event(event, app_label, role="apps")
+    except Exception as _sk_ex:
+        logger.debug(f"premium app emoji skipped: {_sk_ex}")
 
 
 async def do_buy(event, app_slug, country_iso):
