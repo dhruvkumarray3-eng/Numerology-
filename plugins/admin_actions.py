@@ -242,12 +242,17 @@ async def admin_actions(event):
         rub = get_rub_rate()
         margin = get_lzt_margin()
         mode = get_bot_mode()
+        try:
+            from utils.markup import get_markup_config, describe_markup
+            _mk_desc = describe_markup(get_markup_config())
+        except Exception:
+            _mk_desc = f"+₹{margin} per sale"
         
         msg = (f"<blockquote>🌐 <b>𝐋𝐙𝐓 𝐏ᴀɴᴇʟ 𝐒ᴇᴛᴛɪɴɢs</b>\n\n"
                f"⚡ <b>𝐁ᴏᴛ 𝐌ᴏᴅᴇ:</b> <code>{mode.upper()}</code>\n"
                f"🔑 <b>𝐋𝐙𝐓 𝐀𝐏𝐈 𝐊ᴇʏ:</b> <code>{masked_key}</code>\n"
                f"💹 <b>𝐑𝐔𝐁 𝐭𝐨 𝐈𝐍𝐑 𝐑ᴀᴛᴇ:</b> ₹{rub}\n"
-               f"💰 <b>𝐏ʀᴏғɪᴛ 𝐌ᴀʀɢɪɴ (𝐈𝐍𝐑):</b> +₹{margin}\n\n"
+               f"💰 <b>𝐏ʀᴏғɪᴛ 𝐌ᴀʀɢɪɴ (𝐈𝐍𝐑):</b> {_mk_desc}\n\n"
                f"<i>💡 In Panel/Hybrid mode, stock is fetched from LZT Market in real-time.</i></blockquote>")
                
         btns = [
@@ -807,7 +812,18 @@ async def admin_actions(event):
                 try:
                     m = float(resp.text.strip())
                     set_lzt_margin(m)
-                    await conv.send_message(f"{P_YES} <b>Profit Margin set to +₹{m}</b>")
+                    # Drive the unified profit engine too, so the user price is
+                    # exactly: panel_cost + ₹m  (e.g. ₹15 + ₹24 = ₹39).
+                    try:
+                        from utils.markup import set_markup
+                        set_markup(mode="fixed", fixed=m, currency="INR")
+                    except Exception:
+                        pass
+                    await conv.send_message(
+                        f"{P_YES} <b>Profit Margin set to +₹{m:g}</b>\n"
+                        f"<i>User price = panel cost + ₹{m:g} "
+                        f"(e.g. ₹15 + ₹{m:g} = ₹{15 + m:g})</i>"
+                    )
                 except:
                     await conv.send_message(f"{P_NO} Invalid margin value.")
 

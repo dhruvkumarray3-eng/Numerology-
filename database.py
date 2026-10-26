@@ -363,7 +363,8 @@ def _apply_owner_margin(real_cost_inr):
     try:
         from utils.markup import apply_markup, get_markup_config
         cfg = get_markup_config()
-        if cfg.get("mode") == "percent" or cfg.get("fixed"):
+        # Honour the configured mode even when the fixed amount is 0.
+        if cfg.get("mode") in ("percent", "fixed"):
             return apply_markup(real_cost_inr, cfg)
     except Exception:
         pass
@@ -413,11 +414,12 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
             total = base + add_amount
             return max(int(total * 0.55), 15)
         
-        # Dynamic fallback if no auto_price row
+        # Dynamic fallback if no auto_price row.
+        # Spam accounts are already the cheapest items on LZT, so we do NOT
+        # apply an extra discount on top of the owner markup.
         rub_rate = get_rub_rate()
         inr_cost = lzt_price_rub * rub_rate
-        final_p = _apply_owner_margin(inr_cost)
-        return max(int(final_p * 0.55), 15)
+        return max(int(round(_apply_owner_margin(inr_cost))), 15)
 
     # 3. Check if admin has set explicit custom price in auto_prices table for this specific (country, year)
     row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (country, str(year))).fetchone()
@@ -433,11 +435,14 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
         total = base_price + add_amount
         return adjust_price_by_mode(total, mode)
         
-    # 5. Dynamic calculation from LZT RUB price if no base price is found
+    # 5. Dynamic calculation from LZT RUB price if no base price is found.
+    # The owner markup is applied exactly ONCE here:
+    #     user_price = panel_cost_inr + owner_markup
+    # e.g. panel ₹15 + ₹24 markup = ₹39 shown to the user.
+    # No extra mode multipliers are applied so the maths stays predictable.
     rub_rate = get_rub_rate()
     inr_cost = lzt_price_rub * rub_rate
-    final_p = _apply_owner_margin(inr_cost)
-    return adjust_price_by_mode(final_p, mode)
+    return max(int(round(_apply_owner_margin(inr_cost))), 1)
 
 def get_change_number_fee():
     res = cur.execute("SELECT value FROM settings WHERE key='change_number_fee'").fetchone()
