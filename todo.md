@@ -131,4 +131,4 @@
 - [x] `show_years()` now sets `lzt_client.last_error` on exception so the empty-state card explains the real reason
 - [x] `aged` filter now sends `session_age=6` + `session_age_period=month` (period is required by the API)
 - [x] Verified: fresh client has balance attrs, returns 3-tuple, search survives balance failure, all 11 filters send the correct params, `telegram_spam_block=False` is not spam
-- [ ] Commit on new branch + push + PR + merge
+- [x] Commit on new branch + push + PR + merge (PR #13)
