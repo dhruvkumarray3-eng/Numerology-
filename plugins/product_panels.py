@@ -751,7 +751,7 @@ async def _auto_otp(uid, key, order_id, phone, price):
         bot = get_bot_instance()
         if bot is None:
             return
-        await bot.send_message(
+        sent = await bot.send_message(
             uid,
             f"<blockquote expandable>🔢 <b>OTP received — {PANELS[key]['title']}</b>\n\n"
             f"📞 <b>Number:</b> <code>{html.escape(phone)}</code>\n"
@@ -759,6 +759,10 @@ async def _auto_otp(uid, key, order_id, phone, price):
             "<i>Enter it on the platform now — it expires quickly.</i></blockquote>",
             buttons=[[style_btn("✅ Done", b"pp_hub", "success")]],
         )
+        try:
+            await sticker_engine.send_purchase(bot, uid, reply_to=getattr(sent, "id", None))
+        except Exception as _sk_ex:
+            logger.debug(f"purchase emoji skipped: {_sk_ex}")
     except Exception as exc:
         logger.warning(f"auto OTP task failed: {exc}")
 

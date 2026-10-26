@@ -457,3 +457,8 @@ DEFAULT_MARKUP_MODE = os.getenv("DEFAULT_MARKUP_MODE", "percent").strip().lower(
 DEFAULT_MARKUP_PERCENT = float(os.getenv("DEFAULT_MARKUP_PERCENT", "25") or 25)
 DEFAULT_MARKUP_FIXED = float(os.getenv("DEFAULT_MARKUP_FIXED", "0") or 0)
 DEFAULT_MARKUP_CURRENCY = os.getenv("DEFAULT_MARKUP_CURRENCY", "INR").strip().upper()
+
+# Premium custom-emoji packs (owner can override live with /setpack <role> <link>)
+STICKER_PACK_FLAGS = os.getenv("STICKER_PACK_FLAGS", "FlagsEmoji2024").strip()
+STICKER_PACK_APPS = os.getenv("STICKER_PACK_APPS", "ApplicationEmoji").strip()
+STICKER_PACK_MISC = os.getenv("STICKER_PACK_MISC", "exppwebs_by_fStikBot").strip()
