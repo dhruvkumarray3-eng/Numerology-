@@ -467,21 +467,36 @@ async def admin_actions(event):
                 timeout=35,
             )
             err = getattr(lzt_client, "last_error", None)
+            kind = getattr(lzt_client, "last_error_kind", None)
+            status = getattr(lzt_client, "last_status", None)
+            total = getattr(lzt_client, "last_total", 0)
+            kind_badge = {
+                "auth": "\U0001F511 key invalid",
+                "access": "\U0001F6A7 market access required",
+                "rate": "\u23F1\uFE0F rate limited",
+                "bad": "\u26A0\uFE0F bad parameters",
+                "server": "\U0001F6A7 LZT server error",
+            }.get(kind, "")
             if items:
                 cheapest = min(float(it.get("price_rub") or 0) for it in items)
                 extra = (f"\n\n\U0001F50E <b>Market Search Test (India):</b> "
                          f"\u2705 {len(items)} item(s) found \u2014 cheapest "
-                         f"{cheapest:.0f} RUB")
+                         f"{cheapest:.0f} RUB\n"
+                         f"<i>HTTP {status} \u00b7 totalItems={total}</i>")
             elif err:
-                # A real failure (rate limit / auth / timeout / 402) — show the
-                # honest reason instead of a misleading "0 items".
+                # A real failure (rate limit / auth / access / timeout) — show
+                # the honest reason instead of a misleading "0 items".
                 extra = ("\n\n\U0001F50E <b>Market Search Test (India):</b> "
-                         f"\u26a0\ufe0f could not complete\n<i>{html.escape(str(err))}</i>")
+                         f"\u26a0\ufe0f could not complete "
+                         f"({kind_badge or 'error'})\n"
+                         f"<i>{html.escape(str(err))}</i>\n"
+                         f"<i>HTTP {status} \u00b7 totalItems={total}</i>")
             else:
                 extra = ("\n\n\U0001F50E <b>Market Search Test (India):</b> "
                          "\u2139\ufe0f 0 non-spam items right now "
                          "(India may genuinely be out of stock \u2014 try "
-                         "another country or mode).")
+                         "another country or mode).\n"
+                         f"<i>HTTP {status} \u00B7 totalItems={total}</i>")
         except asyncio.TimeoutError:
             extra = ("\n\n\U0001F50E <b>Market Search Test:</b> "
                      "\u23f1\ufe0f timed out \u2014 LZT is slow right now, "
