@@ -1,4 +1,6 @@
 import os
+import time
+import datetime
 import aiohttp
 import asyncio
 import json
@@ -7,6 +9,11 @@ from config import logger
 from database import cur, db, get_flag_by_country_name
 
 LZT_BASE_URL = "https://api.lzt.market"
+
+# Category Search allows 20 requests/minute -> keep a global 3s gap.
+_LZT_SEARCH_LOCK = asyncio.Lock()
+_LZT_LAST_CALL = 0.0
+_LZT_MIN_INTERVAL = 3.0
 
 # Comprehensive Country Name to ISO 3166-1 alpha-2 mapping with all aliases
 COUNTRY_TO_LZT = {
@@ -102,6 +109,61 @@ def get_lzt_code(country_name):
 def get_country_from_lzt(code):
     if not code: return "Unknown"
     return LZT_TO_COUNTRY.get(code.lower(), code.upper())
+
+
+# ---------------------------------------------------------------------------
+# ISO 3166-1 alpha-2 -> alpha-3
+# ---------------------------------------------------------------------------
+# The LZT Market `country[]` filter ONLY accepts ISO-3166 alpha-3 codes in
+# UPPERCASE (e.g. IND, USA, GBR).  Sending alpha-2 codes (IN, US, GB) makes the
+# API silently return an empty result set, which is why "search country" showed
+# no cheap accounts.  We keep the human-friendly alpha-2 map above for display
+# and convert to alpha-3 here before talking to the API.
+ISO2_TO_ISO3 = {
+    'ad': 'AND', 'ae': 'ARE', 'af': 'AFG', 'ag': 'ATG', 'al': 'ALB', 'am': 'ARM', 'ao': 'AGO', 'ar': 'ARG', 'at': 'AUT', 'au': 'AUS',
+    'az': 'AZE', 'ba': 'BIH', 'bb': 'BRB', 'bd': 'BGD', 'be': 'BEL', 'bg': 'BGR', 'bh': 'BHR', 'bi': 'BDI', 'bj': 'BEN', 'bn': 'BRN',
+    'bo': 'BOL', 'br': 'BRA', 'bs': 'BHS', 'bt': 'BTN', 'bw': 'BWA', 'by': 'BLR', 'bz': 'BLZ', 'ca': 'CAN', 'cg': 'COG', 'ch': 'CHE',
+    'ci': 'CIV', 'cl': 'CHL', 'cm': 'CMR', 'co': 'COL', 'cr': 'CRI', 'cu': 'CUB', 'cv': 'CPV', 'cy': 'CYP', 'cz': 'CZE', 'de': 'DEU',
+    'dj': 'DJI', 'dk': 'DNK', 'dm': 'DMA', 'do': 'DOM', 'dz': 'DZA', 'ec': 'ECU', 'ee': 'EST', 'eg': 'EGY', 'er': 'ERI', 'es': 'ESP',
+    'fi': 'FIN', 'fj': 'FJI', 'fm': 'FSM', 'fr': 'FRA', 'ga': 'GAB', 'gb': 'GBR', 'gd': 'GRD', 'ge': 'GEO', 'gh': 'GHA', 'gm': 'GMB',
+    'gr': 'GRC', 'gt': 'GTM', 'gy': 'GUY', 'hk': 'HKG', 'hn': 'HND', 'hr': 'HRV', 'ht': 'HTI', 'hu': 'HUN', 'id': 'IDN', 'ie': 'IRL',
+    'il': 'ISR', 'in': 'IND', 'iq': 'IRQ', 'ir': 'IRN', 'is': 'ISL', 'it': 'ITA', 'jm': 'JAM', 'jo': 'JOR', 'jp': 'JPN', 'kg': 'KGZ',
+    'kh': 'KHM', 'ki': 'KIR', 'km': 'COM', 'kn': 'KNA', 'kp': 'PRK', 'kr': 'KOR', 'kw': 'KWT', 'kz': 'KAZ', 'la': 'LAO', 'lb': 'LBN',
+    'lc': 'LCA', 'li': 'LIE', 'lk': 'LKA', 'lr': 'LBR', 'ls': 'LSO', 'lt': 'LTU', 'lu': 'LUX', 'lv': 'LVA', 'ly': 'LBY', 'ma': 'MAR',
+    'mc': 'MCO', 'me': 'MNE', 'mg': 'MDG', 'mk': 'MKD', 'mm': 'MMR', 'mn': 'MNG', 'mt': 'MLT', 'mu': 'MUS', 'mv': 'MDV', 'my': 'MYS',
+    'mz': 'MOZ', 'na': 'NAM', 'ng': 'NGA', 'ni': 'NIC', 'nl': 'NLD', 'no': 'NOR', 'np': 'NPL', 'nr': 'NRU', 'nz': 'NZL', 'om': 'OMN',
+    'pa': 'PAN', 'pe': 'PER', 'pg': 'PNG', 'ph': 'PHL', 'pk': 'PAK', 'pl': 'POL', 'pr': 'PRI', 'ps': 'PSE', 'pt': 'PRT', 'pw': 'PLW',
+    'py': 'PRY', 'qa': 'QAT', 'ro': 'ROU', 'rs': 'SRB', 'ru': 'RUS', 'rw': 'RWA', 'sa': 'SAU', 'sb': 'SLB', 'sc': 'SYC', 'se': 'SWE',
+    'sg': 'SGP', 'si': 'SVN', 'sk': 'SVK', 'sl': 'SLE', 'sm': 'SMR', 'sn': 'SEN', 'so': 'SOM', 'sr': 'SUR', 'ss': 'SSD', 'st': 'STP',
+    'sv': 'SLV', 'sz': 'SWZ', 'td': 'TCD', 'tg': 'TGO', 'th': 'THA', 'tj': 'TJK', 'tm': 'TKM', 'tn': 'TUN', 'to': 'TON', 'tr': 'TUR',
+    'tt': 'TTO', 'tv': 'TUV', 'tw': 'TWN', 'ua': 'UKR', 'us': 'USA', 'uy': 'URY', 'uz': 'UZB', 'vc': 'VCT', 've': 'VEN', 'vn': 'VNM',
+    'vu': 'VUT', 'ws': 'WSM', 'ye': 'YEM', 'za': 'ZAF', 'zm': 'ZMB', 'zw': 'ZWE',
+}
+ISO3_TO_ISO2 = {v: k for k, v in ISO2_TO_ISO3.items()}
+
+
+def get_lzt_code3(country_name):
+    """Resolve any country name / dial code / ISO-2 / ISO-3 to an ISO-3 code.
+
+    Returns ``None`` when the country cannot be resolved (caller should then
+    omit the ``country[]`` filter rather than send a bogus value).
+    """
+    if not country_name:
+        return None
+
+    raw = str(country_name).strip()
+    upper = raw.upper()
+
+    # Already an ISO-3 code?
+    if len(upper) == 3 and upper.isalpha() and upper in ISO3_TO_ISO2:
+        return upper
+
+    code2 = get_lzt_code(country_name)
+    if code2:
+        code2 = str(code2).strip().lower()
+        if code2 in ISO2_TO_ISO3:
+            return ISO2_TO_ISO3[code2]
+    return None
 
 DC_IPS = {
     1: '149.154.175.50',
@@ -228,6 +290,36 @@ class LZTClient:
         except Exception as e:
             logger.error(f"LZT get countries error: {e}")
         return {}
+    async def get_country_counts(self, max_pages=2):
+        """Aggregate live item counts per country from the global cheap list.
+
+        Used to show honest stock numbers on the country picker instead of a
+        hard-coded '40+'.  Best-effort: returns {} on any failure.
+        """
+        counts = {}
+        after = None
+        for _ in range(max_pages):
+            params = {"order_by": "price_to_up", "parse_sticky_items": "0"}
+            if after:
+                params["after"] = after
+            data = await self._get_telegram_page(params)
+            if not data:
+                break
+            items = data.get("items") or []
+            for it in items:
+                raw = str(it.get("telegram_country") or it.get("country") or "").strip()
+                if not raw:
+                    continue
+                key = raw.lower()
+                if raw.upper() in ISO3_TO_ISO2:
+                    key = ISO3_TO_ISO2[raw.upper()]
+                # Keyed by ISO-2 code so the caller can match any country alias.
+                counts[key] = counts.get(key, 0) + 1
+            after = data.get("nextCursor") or data.get("after")
+            if not data.get("hasNextPage") or not after:
+                break
+        return counts
+
     async def get_balance_info(self):
         url = f"{LZT_BASE_URL}/user"
 
@@ -269,97 +361,232 @@ class LZTClient:
         _, bal_rub, _ = await self.get_balance_info()
         return bal_rub
 
-    async def search_items(self, country_name, year=None, limit=20, mode='bulk'):
-        c_code = get_lzt_code(country_name)
-        if not c_code:
-            c_code = str(country_name).strip().lower()
+    async def _throttle(self):
+        """Enforce a global 3s gap between Category Search calls (20 req/min)."""
+        global _LZT_LAST_CALL
+        async with _LZT_SEARCH_LOCK:
+            now = time.monotonic()
+            wait = _LZT_MIN_INTERVAL - (now - _LZT_LAST_CALL)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            _LZT_LAST_CALL = time.monotonic()
 
+    async def _get_telegram_page(self, params, retries=3):
+        """GET /telegram with 429 handling. Returns parsed JSON or None."""
         url = f"{LZT_BASE_URL}/telegram"
-        balance_id, balance_rub, balance_usd = await self.get_balance_info()
-        
-        params = {
-            "order_by": "price_to_up",
-            "parse_sticky_items": "0"
-        }
-        if c_code:
-            params["country[]"] = c_code.upper()
-        
-        if mode == 'spam':
-            params["spam"] = "yes"
-        
+        for attempt in range(retries):
+            await self._throttle()
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        url, headers=self.get_headers(), params=params, timeout=20
+                    ) as resp:
+                        if resp.status == 429:
+                            retry_after = resp.headers.get("Retry-After")
+                            try:
+                                delay = float(retry_after) if retry_after else 5.0 * (attempt + 1)
+                            except (TypeError, ValueError):
+                                delay = 5.0 * (attempt + 1)
+                            logger.warning(f"LZT rate limit (429), sleeping {delay:.0f}s")
+                            await asyncio.sleep(delay)
+                            continue
+                        if resp.status == 200:
+                            return await resp.json(content_type=None)
+                        body = await resp.text()
+                        logger.error(f"LZT /telegram {resp.status}: {body[:200]}")
+                        if 400 <= resp.status < 500:
+                            return None
+            except asyncio.TimeoutError:
+                logger.warning(f"LZT /telegram timeout (attempt {attempt + 1})")
+            except Exception as e:
+                logger.error(f"LZT /telegram error: {e}")
+            await asyncio.sleep(2)
+        return None
+
+    def _parse_item(self, item, balance_id=None):
+        """Normalise a raw LZT item into the dict the bot uses."""
+        if not isinstance(item, dict):
+            return None
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=self.get_headers(), params=params, timeout=15) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        items = data.get("items", [])
-                        results = []
-                        import datetime
-                        for item in items:
-                            price_rub = item.get("rub_price")
-                            if price_rub is None:
-                                price_rub = float(item.get("price", 0))
-                            else:
-                                price_rub = float(price_rub)
-                                
-                            pwd_val = item.get("telegram_password_value") or item.get("telegram_password") or item.get("password") or "None"
-                            has_pwd = bool(pwd_val and str(pwd_val) not in ("0", "None", "False"))
-                            
-                            has_mail = bool(item.get("mail") or item.get("email_type") in ("native", "domain", "temporary"))
-                            if mode == 'no_email' and has_mail:
-                                continue
-                            elif mode == 'with_email' and not has_mail:
-                                continue
+            price_rub = item.get("rub_price")
+            if price_rub is None:
+                price_rub = item.get("price", 0)
+            price_rub = float(price_rub or 0)
 
-                            is_prem = bool(item.get("telegram_premium") or item.get("premium"))
-                            if mode == 'premium' and not is_prem:
-                                continue
+            pwd_val = (
+                item.get("telegram_password_value")
+                or item.get("telegram_password")
+                or item.get("password")
+                or "None"
+            )
+            has_pwd = bool(pwd_val and str(pwd_val) not in ("0", "None", "False", "none"))
 
-                            stars_cnt = int(item.get("telegram_stars") or item.get("stars") or 0)
-                            if mode == 'stars' and stars_cnt <= 0:
-                                continue
+            has_mail = bool(
+                item.get("mail")
+                or item.get("email_type") in ("native", "domain", "temporary")
+            )
+            is_prem = bool(item.get("telegram_premium") or item.get("premium"))
 
-                            dc_val = item.get("telegram_dc") or item.get("dc")
-                            if mode == 'dc5' and str(dc_val) != '5':
-                                continue
+            try:
+                stars_cnt = int(
+                    item.get("telegram_stars")
+                    or item.get("telegram_stars_count")
+                    or item.get("stars")
+                    or 0
+                )
+            except (TypeError, ValueError):
+                stars_cnt = 0
 
-                            if mode == 'no_2fa' and has_pwd:
-                                continue
-                            elif mode == 'with_2fa' and not has_pwd:
-                                continue
+            dc_val = (
+                item.get("telegram_dc_id")
+                or item.get("telegram_dc")
+                or item.get("dc")
+            )
 
-                            created_ts = item.get("telegram_session_created_at") or item.get("telegram_register_date") or item.get("register_date") or 0
-                            if created_ts and created_ts > 1000000:
-                                try: 
-                                    item_year = datetime.datetime.fromtimestamp(created_ts).year
-                                except: 
-                                    item_year = 2026
-                            elif created_ts and 1900 < created_ts < 2100:
-                                item_year = int(created_ts)
-                            else:
-                                item_year = 2026
-                                
-                            if year is not None and int(year) != int(item_year):
-                                continue
+            spam_flag = item.get("telegram_spam_block")
+            spam_known = spam_flag is not None
+            is_spam = spam_known and spam_flag != -1
 
-                            results.append({
-                                "item_id": item.get("item_id"),
-                                "price_rub": price_rub,
-                                "price_usd": float(item.get("price", 0)),
-                                "price_str": str(item.get("price", "0.1")),
-                                "balance_id": balance_id,
-                                "phone": item.get("telegram_phone") or item.get("phone") or "Hidden",
-                                "year": item_year,
-                                "title": item.get("title", ""),
-                                "has_2fa": has_pwd,
-                                "twofa_pass": str(pwd_val) if has_pwd else "None"
-                            })
-                            if len(results) >= limit:
-                                break
-                        return results
+            created_ts = (
+                item.get("telegram_session_created_at")
+                or item.get("telegram_register_date")
+                or item.get("register_date")
+                or 0
+            )
+            item_year = 2026
+            if created_ts and created_ts > 1000000:
+                try:
+                    item_year = datetime.datetime.fromtimestamp(int(created_ts)).year
+                except Exception:
+                    item_year = 2026
+            elif created_ts and 1900 < created_ts < 2100:
+                item_year = int(created_ts)
+
+            return {
+                "item_id": item.get("item_id"),
+                "price_rub": price_rub,
+                "price_usd": float(item.get("price", 0) or 0),
+                "price_str": str(item.get("price", "0.1")),
+                "balance_id": balance_id,
+                "phone": item.get("telegram_phone") or item.get("phone") or "Hidden",
+                "year": item_year,
+                "title": item.get("title", ""),
+                "has_2fa": has_pwd,
+                "twofa_pass": str(pwd_val) if has_pwd else "None",
+                "has_email": has_mail,
+                "is_premium": is_prem,
+                "stars": stars_cnt,
+                "dc_id": dc_val,
+                "spam_known": spam_known,
+                "is_spam": is_spam,
+                "country": (item.get("telegram_country") or item.get("country") or ""),
+            }
         except Exception as e:
-            logger.error(f"LZT search items error for {country_name}: {e}")
-        return []
+            logger.debug(f"LZT parse item failed: {e}")
+            return None
+
+    async def search_items(self, country_name, year=None, limit=20, mode='bulk', max_pages=4):
+        """Search live LZT Telegram accounts with the correct server-side filters.
+
+        Fixes the "no cheap accounts" bug:
+          * country[]  -> ISO-3 UPPERCASE (IND / USA / GBR ...), not ISO-2
+          * spam=no    -> good quality / non-spam  (mode='nonspam')
+          * spam=yes   -> cheap spam-blocked       (mode='spam')
+          * password / premium / dc_id[] / min_stars for the matching filters
+        Pages through `after` cursors (respecting the 20 req/min limit) so year
+        filtering and stock counts see real data instead of only page 1.
+        """
+        c3 = get_lzt_code3(country_name)
+        c2 = get_lzt_code(country_name)
+
+        base_params = {"order_by": "price_to_up", "parse_sticky_items": "0"}
+        if c3:
+            base_params["country[]"] = c3
+
+        if mode == 'spam':
+            base_params["spam"] = "yes"
+        elif mode == 'nonspam':
+            base_params["spam"] = "no"
+
+        if mode == 'no_2fa':
+            base_params["password"] = "no"
+        elif mode == 'with_2fa':
+            base_params["password"] = "yes"
+
+        if mode == 'premium':
+            base_params["premium"] = "yes"
+
+        if mode == 'dc5':
+            base_params["dc_id[]"] = "5"
+
+        if mode == 'stars':
+            base_params["min_stars"] = "1"
+
+        balance_id, _, _ = await self.get_balance_info()
+
+        results = []
+        after = None
+        pages = 0
+        while pages < max_pages:
+            params = dict(base_params)
+            if after:
+                params["after"] = after
+
+            data = await self._get_telegram_page(params)
+            if not data:
+                break
+
+            items = data.get("items") or []
+            if not items:
+                break
+
+            for raw in items:
+                parsed = self._parse_item(raw, balance_id)
+                if not parsed:
+                    continue
+
+                # Country safety check (only when the item reports a country).
+                if c2 and parsed["country"]:
+                    item_c = str(parsed["country"]).lower()
+                    allowed = {c2}
+                    if c3:
+                        allowed.add(c3.lower())
+                    if item_c not in allowed:
+                        continue
+
+                if year is not None and str(parsed["year"]) != str(year):
+                    continue
+
+                # Client-side safety for filters the API may not have applied.
+                if mode == 'nonspam' and parsed["spam_known"] and parsed["is_spam"]:
+                    continue
+                if mode == 'spam' and parsed["spam_known"] and not parsed["is_spam"]:
+                    continue
+                if mode == 'no_email' and parsed["has_email"]:
+                    continue
+                if mode == 'with_email' and not parsed["has_email"]:
+                    continue
+                if mode == 'premium' and not parsed["is_premium"]:
+                    continue
+                if mode == 'stars' and parsed["stars"] <= 0:
+                    continue
+                if mode == 'dc5' and str(parsed["dc_id"]) != '5':
+                    continue
+                if mode == 'no_2fa' and parsed["has_2fa"]:
+                    continue
+                if mode == 'with_2fa' and not parsed["has_2fa"]:
+                    continue
+
+                results.append(parsed)
+                if len(results) >= limit:
+                    return results
+
+            pages += 1
+            after = data.get("nextCursor") or data.get("after")
+            if not data.get("hasNextPage") or not after:
+                break
+
+        return results
 
     async def fast_buy(self, item_id, price_str, balance_id=None):
         url = f"{LZT_BASE_URL}/{item_id}/fast-buy"

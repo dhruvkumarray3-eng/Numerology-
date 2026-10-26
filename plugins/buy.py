@@ -146,31 +146,58 @@ def get_active_order_card(order, phone, is_admin_user=False):
         btns.append([style_btn("❌ [Admin] Cancel & Refund", f"cancel_order|{phone}", "danger", icon=6129888444245089008)])
     return msg, btns
 
+_LIVE_COUNTRY_CACHE = {"ts": 0.0, "counts": {}}
+_LIVE_COUNTRY_TTL = 900  # 15 minutes
+
+
+async def _live_country_counts():
+    """Cached live per-country stock counts from the LZT panel (honest numbers)."""
+    now = time.time()
+    if _LIVE_COUNTRY_CACHE["counts"] and (now - _LIVE_COUNTRY_CACHE["ts"]) < _LIVE_COUNTRY_TTL:
+        return _LIVE_COUNTRY_CACHE["counts"]
+
+    counts = {}
+    try:
+        if get_lzt_key():
+            counts = await asyncio.wait_for(
+                lzt_client.get_country_counts(max_pages=2), timeout=9
+            )
+    except Exception as e:
+        logger.debug(f"live country counts failed: {e}")
+        counts = {}
+
+    if counts:
+        _LIVE_COUNTRY_CACHE["ts"] = now
+        _LIVE_COUNTRY_CACHE["counts"] = counts
+    return counts
+
+
 async def get_countries_list():
     bot_mode = get_bot_mode()
-    
+
     if bot_mode == 'manual':
         rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall()
         return sorted(rows, key=lambda x: x[0])
 
-    if bot_mode == 'panel':
-        all_c = set(COUNTRY_TO_LZT.keys())
-        try:
-            customs = cur.execute("SELECT name FROM custom_countries").fetchall()
-            for (c,) in customs: all_c.add(c)
-        except Exception: pass
-        return sorted([(c_name, '40+') for c_name in all_c], key=lambda x: x[0])
-
     all_c = set(COUNTRY_TO_LZT.keys())
     try:
         customs = cur.execute("SELECT name FROM custom_countries").fetchall()
-        for (c,) in customs: all_c.add(c)
-    except Exception: pass
-    
-    country_dict = {c_name: '40+' for c_name in all_c}
-    local_rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall()
-    for c_name, count in local_rows:
-        country_dict[c_name] = count
+        for (c,) in customs:
+            all_c.add(c)
+    except Exception:
+        pass
+
+    live = await _live_country_counts() if bot_mode in ('panel', 'hybrid') else {}
+
+    country_dict = {}
+    for c_name in all_c:
+        code = get_lzt_code(c_name)
+        country_dict[c_name] = live.get(code, 0) if code else 0
+
+    if bot_mode == 'hybrid':
+        local_rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall()
+        for c_name, count in local_rows:
+            country_dict[c_name] = max(country_dict.get(c_name, 0), count)
 
     return sorted(country_dict.items(), key=lambda x: x[0])
 
@@ -350,8 +377,8 @@ async def show_countries(event, mode, page):
     btns = []
     for c_name, count in countries:
         flag = get_flag_by_country_name(c_name)
-        cnt_str = f"({count})" if count else "(40+)"
-        btns.append(style_btn(f"{flag} {c_name} {cnt_str}", f"bc|{mode}|{c_name}", "primary", icon=6154249597532248059))
+        cnt_str = f"({count})" if count else ""
+        btns.append(style_btn(f"{flag} {c_name} {cnt_str}".strip(), f"bc|{mode}|{c_name}", "primary", icon=6154249597532248059))
         
     f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
     
@@ -406,9 +433,11 @@ async def show_years(event, mode, country):
                 'year': y, 'count': count, 'price': price, 'source': 'local'
             })
 
+    lzt_used = False
     if (bot_mode == 'panel' or (bot_mode == 'hybrid' and not year_options)) and get_lzt_key():
+        lzt_used = True
         try:
-            items = await lzt_client.search_items(country, mode=mode)
+            items = await lzt_client.search_items(country, mode=mode, limit=50)
             years_grouped = {}
             for itm in items:
                 y = itm['year']
@@ -416,7 +445,7 @@ async def show_years(event, mode, country):
                     price = get_panel_price(country, y, itm['price_rub'], mode=mode)
                     years_grouped[y] = {'count': 0, 'price': price}
                 years_grouped[y]['count'] += 1
-                
+
             for y, info in sorted(years_grouped.items(), key=lambda x: x[0], reverse=True):
                 year_options.append({
                     'year': y, 'count': info['count'], 'price': info['price'], 'source': 'lzt'
@@ -425,6 +454,10 @@ async def show_years(event, mode, country):
             logger.error(f"Error fetching LZT years for {country}: {e}")
 
     if not year_options:
+        # If the panel was queried and genuinely has nothing, be honest instead
+        # of showing fake "40+" stock.
+        if lzt_used:
+            return await _no_stock_card(event, mode)
         for y in [2026, 2025, 2024, 2023, 2022, 2021]:
             year_options.append({
                 'year': y, 'count': '40+', 'price': get_panel_price(country, y, mode=mode), 'source': 'lzt'
@@ -466,12 +499,8 @@ async def _live_stock_count(country, year, mode):
         bot_mode = get_bot_mode()
         if bot_mode in ("panel", "hybrid") and get_lzt_key():
             try:
-                items = await lzt_client.search_items(country, mode=mode)
-                if year:
-                    count = sum(1 for itm in items
-                                if str(itm.get("year")) == str(year))
-                else:
-                    count = len(items)
+                items = await lzt_client.search_items(country, year=year, mode=mode, limit=50)
+                count = len(items)
             except Exception as exc:
                 logger.debug(f"live stock lookup failed for {country}: {exc}")
     return count
@@ -864,7 +893,8 @@ async def cb_search_country_btn(event):
     btns = [[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]]
     await event.edit(msg, buttons=btns)
 
-@bot.on(events.NewMessage)
+@bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
+                          and bool(e.text) and not e.text.startswith("/")))
 async def process_combined_text_input(event):
     if not event.text or event.text.startswith("/"):
         return
@@ -889,6 +919,7 @@ async def process_combined_text_input(event):
         user_states[uid] = None
 
         raw_query = event.text.strip()
+        logger.info(f"Country search query from {uid}: {raw_query!r}")
 
         try:
             countries_all = await get_countries_list()
@@ -908,8 +939,8 @@ async def process_combined_text_input(event):
         btns = []
         for c_name, count in matches[:10]:
             flag = get_flag_by_country_name(c_name)
-            cnt_str = f"({count})" if count else "(40+)"
-            btns.append([style_btn(f"{flag} {c_name} {cnt_str}", f"bc|bulk|{c_name}", "primary", icon=6154249597532248059)])
+            cnt_str = f"({count})" if count else ""
+            btns.append([style_btn(f"{flag} {c_name} {cnt_str}".strip(), f"bc|bulk|{c_name}", "primary", icon=6154249597532248059)])
             
         btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)])
         await event.respond(
