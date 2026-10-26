@@ -31,6 +31,29 @@ from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code
 from utils import stock_details as stock_card
 
+try:
+    from utils.search_settings import (
+        int_setting as _ss_int,
+        is_live_search_enabled as _ss_live,
+        show_zero_counts as _ss_show_zero,
+        resolve_mode as _ss_mode,
+    )
+except Exception:  # pragma: no cover - defensive
+    def _ss_int(key, fallback):
+        try:
+            return int(fallback)
+        except Exception:
+            return fallback
+
+    def _ss_live():
+        return True
+
+    def _ss_show_zero():
+        return False
+
+    def _ss_mode(mode):
+        return mode
+
 search_state = {}
 change_number_state = {}
 user_states = {}
@@ -44,6 +67,8 @@ def _lzt_live():
     disable live search, otherwise a bot on the default 'manual' mode shows
     "No live accounts found" while the market is full of accounts.
     """
+    if not _ss_live():
+        return False
     try:
         return bool(get_lzt_key())
     except Exception:
@@ -182,6 +207,17 @@ async def _live_country_counts():
     except Exception as e:
         logger.debug(f"live country counts failed: {e}")
         counts = {}
+
+    # Merge in the exact server-side totals we learned from real searches
+    # (search_items records totalItems per country).  These are far more
+    # accurate than sampling a couple of pages of the global cheap list.
+    try:
+        for c_name, total in (getattr(lzt_client, "country_totals", {}) or {}).items():
+            code = get_lzt_code(c_name)
+            if code and total:
+                counts[code] = max(counts.get(code, 0), int(total))
+    except Exception:
+        pass
 
     if counts:
         _LIVE_COUNTRY_CACHE["ts"] = now
@@ -455,7 +491,7 @@ async def show_countries(event, mode, page):
     btns = []
     for c_name, count in countries:
         flag = get_flag_by_country_name(c_name)
-        cnt_str = f"({count})" if count else ""
+        cnt_str = f"({count})" if count else ("(0)" if _ss_show_zero() else "")
         btns.append(style_btn(f"{flag} {c_name} {cnt_str}".strip(), f"bc|{mode}|{c_name}", "primary", icon=6154249597532248059))
         
     f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
@@ -517,7 +553,9 @@ async def show_years(event, mode, country):
     if _lzt_live():
         lzt_used = True
         try:
-            items = await lzt_client.search_items(country, mode=mode, limit=50)
+            items = await lzt_client.search_items(
+                country, mode=mode, limit=_ss_int("max_results", 50)
+            )
             years_grouped = {}
             for itm in items:
                 y = itm['year']
@@ -582,7 +620,9 @@ async def _live_stock_count(country, year, mode):
 
     if count == 0 and _lzt_live():
         try:
-            items = await lzt_client.search_items(country, year=year, mode=mode, limit=50)
+            items = await lzt_client.search_items(
+                country, year=year, mode=mode, limit=_ss_int("max_results", 50)
+            )
             count = len(items)
         except Exception as exc:
             logger.debug(f"live stock lookup failed for {country}: {exc}")
@@ -1045,7 +1085,7 @@ async def process_combined_text_input(event):
         btns = []
         for c_name, count in matches[:10]:
             flag = get_flag_by_country_name(c_name)
-            cnt_str = f"({count})" if count else ""
+            cnt_str = f"({count})" if count else ("(0)" if _ss_show_zero() else "")
             btns.append([style_btn(f"{flag} {c_name} {cnt_str}".strip(), f"bc|bulk|{c_name}", "primary", icon=6154249597532248059)])
             
         btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)])
