@@ -148,4 +148,4 @@
 - [x] Verified all 11 filters send valid params against the 77-param `/telegram` spec (`spam`/`password`/`premium`/`email` = yes|no|nomatter, `dc_id[]` int array, `session_age_period` = day|month|year)
 - [x] Mocked regression suite passes: OTP `codes.code`, fast-buy retry loop + numeric price + phone/2FA + DC 4, year/email/spam/stars parsing, unknown-year item kept
 - [x] `python3 -m compileall` clean
-- [ ] Commit on new branch + push + PR + merge
+- [x] Commit on new branch + push + PR + merge (PR #14)
