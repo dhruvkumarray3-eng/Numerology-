@@ -268,8 +268,30 @@ async def admin_actions(event):
     elif action_data == "lzttest" and has_perm(uid, 'p_settings'):
         await event.answer("Connecting to LZT...", alert=False)
         ok, res_msg = await lzt_client.check_connection()
-        btns = [[style_btn("🔙 Back", "adm_lzt_settings", "danger", icon=6129888444245089008)]]
-        return await event.edit(f"<blockquote>{res_msg}</blockquote>", buttons=btns)
+
+        # Also run a real market search so the admin can see whether live
+        # accounts actually come back (and why not, if they don't).
+        extra = ""
+        try:
+            items = await lzt_client.search_items("India", mode="nonspam", limit=5)
+            err = getattr(lzt_client, "last_error", None)
+            if items:
+                cheapest = min(float(it.get("price_rub") or 0) for it in items)
+                extra = (f"\n\n\U0001F50E <b>Market Search Test (India):</b> "
+                         f"\u2705 {len(items)} item(s) found \u2014 cheapest "
+                         f"{cheapest:.0f} RUB")
+            else:
+                extra = ("\n\n\U0001F50E <b>Market Search Test (India):</b> "
+                         "\u26a0\ufe0f 0 items")
+                if err:
+                    extra += f"\n<i>{html.escape(str(err))}</i>"
+        except Exception as exc:
+            extra = (f"\n\n\U0001F50E <b>Market Search Test:</b> "
+                     f"\u274c {html.escape(str(exc))}")
+
+        btns = [[style_btn("\U0001F504 Test Again", "adm_lzttest", "success", icon=5409320020058584473)],
+                [style_btn("\U0001F519 Back", "adm_lzt_settings", "danger", icon=6129888444245089008)]]
+        return await event.edit(f"<blockquote>{res_msg}{extra}</blockquote>", buttons=btns)
 
     elif action_data == "autoupi" and has_perm(uid, 'p_settings'):
         dep_mode_res = cur.execute("SELECT value FROM settings WHERE key='deposit_mode'").fetchone()

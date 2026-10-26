@@ -62,6 +62,22 @@ COUNTRY_TO_LZT = {
     'Palestine': 'ps', 'Puerto Rico': 'pr'
 }
 
+# ---------------------------------------------------------------------------
+# Merge in EVERY ISO-3166 country from utils.flags.
+# ---------------------------------------------------------------------------
+# The hand-written map above was missing Japan, China, Mexico, Kenya, and many
+# others, so `get_countries_list()` never offered them and searching "Japan"
+# returned "No country found" even with a fully connected panel.  We now add
+# every country the flag resolver knows about (198 of them).
+try:
+    from utils.flags import _COUNTRIES as _FLAG_COUNTRIES
+
+    for _iso2, _names in _FLAG_COUNTRIES.items():
+        for _nm in _names:
+            COUNTRY_TO_LZT.setdefault(_nm, _iso2)
+except Exception as _merge_ex:  # pragma: no cover - defensive
+    logger.warning(f"country merge from utils.flags failed: {_merge_ex}")
+
 # Reverse mapping: code -> Country name
 LZT_TO_COUNTRY = {v: k for k, v in COUNTRY_TO_LZT.items()}
 
@@ -104,7 +120,18 @@ def get_lzt_code(country_name):
     }
 
     phone = lower.replace("+", "").replace(" ", "").replace("-", "")
-    return phone_codes.get(phone)
+    if phone in phone_codes:
+        return phone_codes[phone]
+
+    # Final fallback: the universal resolver (ISO-3, aliases, any dial code).
+    try:
+        from utils.country_search import resolve_country
+        resolved = resolve_country(clean)
+        if resolved:
+            return resolved["iso2"]
+    except Exception:
+        pass
+    return None
 
 def get_country_from_lzt(code):
     if not code: return "Unknown"
@@ -219,7 +246,11 @@ def lzt_raw_to_string_session(raw_str):
 
 class LZTClient:
     def __init__(self):
-        pass
+        # Human-readable reason for the last failed API call, so the UI can
+        # tell the admin *why* a search returned nothing instead of silently
+        # showing an empty list.
+        self.last_error = None
+        self.last_status = None
 
     def get_token(self):
         try:
@@ -391,8 +422,25 @@ class LZTClient:
                             await asyncio.sleep(delay)
                             continue
                         if resp.status == 200:
+                            self.last_error = None
+                            self.last_status = 200
                             return await resp.json(content_type=None)
                         body = await resp.text()
+                        self.last_status = resp.status
+                        if resp.status in (401, 403):
+                            self.last_error = (
+                                "LZT API key rejected (401/403). Add a valid "
+                                "market-scope key with /setlzt or LZT_API_KEY."
+                            )
+                        elif resp.status == 402:
+                            self.last_error = (
+                                "LZT says your account needs 200 sympathies or a "
+                                "paid subscription to use Market search."
+                            )
+                        elif resp.status == 429:
+                            self.last_error = "LZT rate limit hit (429). Try again in a minute."
+                        else:
+                            self.last_error = f"LZT /telegram returned {resp.status}: {body[:160]}"
                         logger.error(f"LZT /telegram {resp.status}: {body[:200]}")
                         if 400 <= resp.status < 500:
                             return None
@@ -499,6 +547,23 @@ class LZTClient:
         c3 = get_lzt_code3(country_name)
         c2 = get_lzt_code(country_name)
 
+        self.last_error = None
+        self.last_status = None
+
+        if not self.get_token():
+            self.last_error = (
+                "LZT API key is not configured. Set it in the admin panel "
+                "(LZT API Key) or as the LZT_API_KEY environment variable."
+            )
+            logger.error("LZT search aborted: no API key")
+            return []
+
+        if not c3:
+            logger.warning(
+                f"LZT search: could not resolve '{country_name}' to ISO-3, "
+                "sending request without a country filter"
+            )
+
         base_params = {"order_by": "price_to_up", "parse_sticky_items": "0"}
         if c3:
             base_params["country[]"] = c3
@@ -546,12 +611,21 @@ class LZTClient:
                     continue
 
                 # Country safety check (only when the item reports a country).
+                # LZT may report the country as an ISO-2 ("in"), ISO-3 ("IND")
+                # or a full name ("India"), so compare through the universal
+                # resolver instead of a strict string match.  The old strict
+                # check silently discarded every item and was a big reason
+                # "market search" appeared broken.
                 if c2 and parsed["country"]:
-                    item_c = str(parsed["country"]).lower()
-                    allowed = {c2}
-                    if c3:
-                        allowed.add(c3.lower())
-                    if item_c not in allowed:
+                    try:
+                        from utils.country_search import country_matches
+                        ok_country = country_matches(
+                            parsed["country"], c2, c3 or "", country_name
+                        )
+                    except Exception:
+                        item_c = str(parsed["country"]).lower()
+                        ok_country = item_c in {c2, (c3 or "").lower()}
+                    if not ok_country:
                         continue
 
                 if year is not None and str(parsed["year"]) != str(year):
