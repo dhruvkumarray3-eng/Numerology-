@@ -8,6 +8,36 @@ import logging
 from config import logger
 from database import cur, db, get_flag_by_country_name
 
+# Admin-tunable live-search behaviour (sort order, filters, price window,
+# page/result limits, strict spam verification).  Imported defensively so the
+# module still works if the settings table/module is unavailable.
+try:
+    from utils.search_settings import (
+        resolve_order,
+        resolve_mode,
+        price_bounds,
+        int_setting,
+        is_strict_spam,
+    )
+except Exception:  # pragma: no cover - defensive fallback
+    def resolve_order(mode, *a, **k):
+        return "price_to_up"
+
+    def resolve_mode(mode, *a, **k):
+        return mode
+
+    def price_bounds(*a, **k):
+        return None, None
+
+    def int_setting(key, fallback):
+        try:
+            return int(fallback)
+        except Exception:
+            return fallback
+
+    def is_strict_spam(*a, **k):
+        return False
+
 LZT_BASE_URL = "https://api.lzt.market"
 
 # Category Search allows 20 requests/minute -> keep a global 3s gap.
@@ -287,6 +317,8 @@ class LZTClient:
     _balance_rub = 0.0
     _balance_usd = 0.0
     _balance_cache_ts = 0.0
+    last_total = 0
+    country_totals = {}
 
     def __init__(self):
         # Human-readable reason for the last failed API call, so the UI can
@@ -294,6 +326,10 @@ class LZTClient:
         # showing an empty list.
         self.last_error = None
         self.last_status = None
+        # Server-side total for the last search + per-country totals, used by
+        # the country picker to display real live stock counts.
+        self.last_total = 0
+        self.country_totals = {}
 
         # Balance cache.  These MUST be initialised here: get_balance_info()
         # reads self._balance_id on its very first line, and a missing
@@ -659,7 +695,7 @@ class LZTClient:
             logger.debug(f"LZT parse item failed: {e}")
             return None
 
-    async def search_items(self, country_name, year=None, limit=20, mode='bulk', max_pages=4):
+    async def search_items(self, country_name, year=None, limit=None, mode='bulk', max_pages=None):
         """Search live LZT Telegram accounts with the correct server-side filters.
 
         Fixes the "no cheap accounts" bug:
@@ -679,6 +715,7 @@ class LZTClient:
 
         self.last_error = None
         self.last_status = None
+        self.last_total = 0
 
         if not self.get_token():
             self.last_error = (
@@ -699,51 +736,79 @@ class LZTClient:
                 "enum; omitting country[] and filtering client-side"
             )
 
-        base_params = {"order_by": "price_to_up"}
+        # ------------------------------------------------------------------
+        # Admin-controlled behaviour (see utils/search_settings.py)
+        # ------------------------------------------------------------------
+        # `mode` here is the *logical* mode coming from the UI ("nonspam" =
+        # Good Quality button, "spam" = Cheap button, "bulk" = everything).
+        # resolve_mode() lets the admin map those buttons onto any real filter
+        # (e.g. make BOTH buttons return cheap spam-blocked stock).
+        effective_mode = resolve_mode(mode) or mode
+        order_by = resolve_order(mode) or "price_to_up"
+        pmin, pmax = price_bounds()
+
+        if limit is None:
+            limit = int_setting("max_results", 50)
+        if max_pages is None:
+            max_pages = int_setting("max_pages", 4)
+
+        base_params = {"order_by": order_by}
         if send_country_filter:
             base_params["country[]"] = c3
 
-        if mode == 'spam':
+        def _num(v):
+            return str(int(v)) if float(v) == int(v) else str(v)
+
+        if pmin:
+            base_params["pmin"] = _num(pmin)
+        if pmax:
+            base_params["pmax"] = _num(pmax)
+
+        if effective_mode == 'spam':
             base_params["spam"] = "yes"
-        elif mode == 'nonspam':
+        elif effective_mode == 'nonspam':
             base_params["spam"] = "no"
 
-        if mode == 'no_2fa':
+        if effective_mode == 'no_2fa':
             base_params["password"] = "no"
-        elif mode == 'with_2fa':
+        elif effective_mode == 'with_2fa':
             base_params["password"] = "yes"
 
-        if mode == 'premium':
+        if effective_mode == 'premium':
             base_params["premium"] = "yes"
 
-        if mode == 'no_email':
+        if effective_mode == 'no_email':
             base_params["email"] = "no"
-        elif mode == 'with_email':
+        elif effective_mode == 'with_email':
             base_params["email"] = "yes"
 
-        if mode == 'dc5':
+        if effective_mode == 'dc5':
             base_params["dc_id[]"] = "5"
 
-        if mode == 'stars':
+        if effective_mode == 'stars':
             base_params["min_stars"] = "1"
 
-        if mode == 'aged':
+        if effective_mode == 'aged':
             # "Aged / old accounts": session created at least 6 months ago.
             # session_age_period must be sent too (day|month|year), otherwise
             # the API cannot interpret session_age.
             base_params["session_age"] = "6"
             base_params["session_age_period"] = "month"
 
-        # A balance lookup is only needed to tag items with the wallet id used
-        # by fast-buy.  It must never be able to abort the search: if /user is
-        # slow, rate-limited or misconfigured we simply search without it.
-        balance_id = None
-        try:
-            balance_id, _, _ = await asyncio.wait_for(
-                self.get_balance_info(), timeout=20
-            )
-        except Exception as exc:
-            logger.warning(f"LZT balance lookup failed, searching without it: {exc}")
+        # ------------------------------------------------------------------
+        # Balance: NEVER awaited on the search hot path.
+        # ------------------------------------------------------------------
+        # fast-buy only needs the wallet id as a tag; it is not required for
+        # *finding* stock.  The old code awaited /user with a 20s timeout
+        # before every single search, which is exactly why the bot kept
+        # timing out and showing "no live accounts".  We now use whatever is
+        # already cached and refresh it in the background instead.
+        balance_id = self._balance_id
+        if balance_id is None:
+            try:
+                asyncio.create_task(self.get_balance_info())
+            except Exception:
+                pass
 
         async def _run():
             results = []
@@ -759,6 +824,15 @@ class LZTClient:
                     break
 
                 items = data.get("items") or []
+                # Remember the server-side total so the country picker can
+                # show real live counts instead of a sampled guess.
+                try:
+                    total = int(data.get("totalItems") or 0)
+                    if total:
+                        self.last_total = total
+                        self.country_totals[country_name] = total
+                except Exception:
+                    pass
                 if not items:
                     break
 
@@ -800,24 +874,34 @@ class LZTClient:
                     ):
                         continue
 
-                    # Client-side safety for filters the API may not have applied.
-                    if mode == 'nonspam' and parsed["spam_known"] and parsed["is_spam"]:
+                    # Client-side safety for filters the API may not have
+                    # applied.  When "strict spam" is ON we additionally drop
+                    # items whose spam state is unknown, so the Good Quality
+                    # list can never contain a spam-blocked account.
+                    strict = is_strict_spam()
+                    if effective_mode == 'nonspam':
+                        if parsed["spam_known"] and parsed["is_spam"]:
+                            continue
+                        if strict and not parsed["spam_known"]:
+                            continue
+                    if effective_mode == 'spam':
+                        if parsed["spam_known"] and not parsed["is_spam"]:
+                            continue
+                        if strict and not parsed["spam_known"]:
+                            continue
+                    if effective_mode == 'no_email' and parsed["has_email"]:
                         continue
-                    if mode == 'spam' and parsed["spam_known"] and not parsed["is_spam"]:
+                    if effective_mode == 'with_email' and not parsed["has_email"]:
                         continue
-                    if mode == 'no_email' and parsed["has_email"]:
+                    if effective_mode == 'premium' and not parsed["is_premium"]:
                         continue
-                    if mode == 'with_email' and not parsed["has_email"]:
+                    if effective_mode == 'stars' and parsed["stars"] <= 0:
                         continue
-                    if mode == 'premium' and not parsed["is_premium"]:
+                    if effective_mode == 'dc5' and str(parsed["dc_id"]) != '5':
                         continue
-                    if mode == 'stars' and parsed["stars"] <= 0:
+                    if effective_mode == 'no_2fa' and parsed["has_2fa"]:
                         continue
-                    if mode == 'dc5' and str(parsed["dc_id"]) != '5':
-                        continue
-                    if mode == 'no_2fa' and parsed["has_2fa"]:
-                        continue
-                    if mode == 'with_2fa' and not parsed["has_2fa"]:
+                    if effective_mode == 'with_2fa' and not parsed["has_2fa"]:
                         continue
 
                     results.append(parsed)
@@ -831,11 +915,18 @@ class LZTClient:
 
             return results
 
+        # Generous hard timeout: 4 pages at the documented 3s spacing plus
+        # network latency needs well over 30s, and the old 30s cap was cutting
+        # searches off mid-flight (returning [] -> "no live accounts").
+        budget = max(25, 15 + 6 * int(max_pages or 1))
         try:
-            return await asyncio.wait_for(_run(), timeout=30)
+            return await asyncio.wait_for(_run(), timeout=budget)
         except asyncio.TimeoutError:
-            self.last_error = "LZT search timed out. Please try again in a moment."
-            logger.warning("LZT search_items hard timeout (30s)")
+            self.last_error = (
+                "LZT search timed out. Please try again, or lower the number "
+                "of pages in Admin > Search & Quality Settings."
+            )
+            logger.warning(f"LZT search_items hard timeout ({budget}s)")
             return []
 
     async def fast_buy(self, item_id, price_str, balance_id=None):

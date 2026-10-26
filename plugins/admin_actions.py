@@ -25,6 +25,101 @@ from utils.states import admin_state
 from utils.lzt import lzt_client
 from plugins.admin import admin_panel_handler
 
+try:
+    from utils import search_settings as ss
+except Exception:  # pragma: no cover - defensive
+    ss = None
+
+
+async def render_search_settings(event):
+    """Admin page: every knob that controls live search & Good/Cheap stock."""
+    if ss is None:
+        return await event.edit(
+            "<blockquote>⚠️ Search settings module is unavailable.</blockquote>",
+            buttons=[[style_btn("🔙 Back", "adm_adminmain", "danger",
+                                icon=6129888444245089008)]],
+        )
+
+    cfg = ss.get_search_settings()
+    on = "🟢 ON"
+    off = "🔴 OFF"
+
+    def flt(key):
+        val = cfg.get(key, "")
+        return ss.FILTER_LABELS.get(val, val or "—")
+
+    def ordr(key):
+        val = cfg.get(key, "")
+        return ss.ORDER_LABELS.get(val, val or "—")
+
+    live = on if cfg.get("live_search_enabled") == "1" else off
+    both = on if cfg.get("both_cheap") == "1" else off
+    strict = on if cfg.get("strict_spam") == "1" else off
+    zero = on if cfg.get("show_zero_counts") == "1" else off
+
+    minp = cfg.get("min_price") or "no limit"
+    maxp = cfg.get("max_price") or "no limit"
+
+    msg = (
+        "<blockquote>⚙️ <b>𝕊𝕖𝕒𝕣𝕔𝕙 & ℚ𝕦𝕒𝕝𝕚𝕥𝕪 𝕊𝕖𝕥𝕥𝕚𝕟𝕘𝕤</b>\n\n"
+        f"📡 <b>Live Market Search:</b> {live}\n"
+        f"🟢 <b>Good Quality Filter:</b> {flt('good_filter')}\n"
+        f"💰 <b>Cheap Filter:</b> {flt('cheap_filter')}\n"
+        f"🔁 <b>Both buttons show cheap:</b> {both}\n"
+        f"↕️ <b>Good Sort:</b> {ordr('good_order')}\n"
+        f"↕️ <b>Cheap Sort:</b> {ordr('cheap_order')}\n"
+        f"↕️ <b>All / Bulk Sort:</b> {ordr('bulk_order')}\n"
+        f"📦 <b>Max Results:</b> {cfg.get('max_results')}\n"
+        f"📄 <b>Max Pages:</b> {cfg.get('max_pages')}\n"
+        f"💵 <b>Min Price (RUB):</b> {minp}\n"
+        f"💵 <b>Max Price (RUB):</b> {maxp}\n"
+        f"🛡 <b>Strict Spam Check:</b> {strict}\n"
+        f"🔢 <b>Show (0) counts:</b> {zero}\n\n"
+        "<i>Tip: turn ON “Both buttons show cheap” to make Good Quality "
+        "and Cheap both return the cheapest spam-blocked stock.</i></blockquote>"
+    )
+
+    btns = [
+        [style_btn(f"📡 Live Search: {live}", "adm_ss_toggle|live_search_enabled",
+                   "success" if cfg.get("live_search_enabled") == "1" else "danger",
+                   icon=5409320020058584473),
+         style_btn(f"🔁 Both Cheap: {both}", "adm_ss_toggle|both_cheap",
+                   "success" if cfg.get("both_cheap") == "1" else "danger",
+                   icon=5409320020058584473)],
+        [style_btn(f"🟢 Good: {flt('good_filter')}", "adm_ss_cycle|good_filter",
+                   "primary", icon=5409098988156629257),
+         style_btn(f"💰 Cheap: {flt('cheap_filter')}", "adm_ss_cycle|cheap_filter",
+                   "primary", icon=5409098988156629257)],
+        [style_btn(f"↕️ Good Sort: {ordr('good_order')}", "adm_ss_cycle|good_order",
+                   "primary", icon=5409098988156629257),
+         style_btn(f"↕️ Cheap Sort: {ordr('cheap_order')}", "adm_ss_cycle|cheap_order",
+                   "primary", icon=5409098988156629257)],
+        [style_btn(f"↕️ Bulk Sort: {ordr('bulk_order')}", "adm_ss_cycle|bulk_order",
+                   "primary", icon=5409098988156629257),
+         style_btn(f"📦 Results: {cfg.get('max_results')}", "adm_ss_cycle|max_results",
+                   "primary", icon=5409098988156629257)],
+        [style_btn(f"📄 Pages: {cfg.get('max_pages')}", "adm_ss_cycle|max_pages",
+                   "primary", icon=5409098988156629257),
+         style_btn(f"🛡 Strict Spam: {strict}", "adm_ss_toggle|strict_spam",
+                   "success" if cfg.get("strict_spam") == "1" else "danger",
+                   icon=5409320020058584473)],
+        [style_btn(f"💵 Min: {minp}", "adm_ss_price|min_price", "primary",
+                   icon=5409098988156629257),
+         style_btn(f"💵 Max: {maxp}", "adm_ss_price|max_price", "primary",
+                   icon=5409098988156629257)],
+        [style_btn(f"🔢 Show (0): {zero}", "adm_ss_toggle|show_zero_counts",
+                   "success" if cfg.get("show_zero_counts") == "1" else "danger",
+                   icon=5409320020058584473),
+         style_btn("♻️ Reset Defaults", "adm_ss_reset", "danger",
+                   icon=6129888444245089008)],
+        [style_btn("🌐 LZT Panel Settings", "adm_lzt_settings", "primary",
+                   icon=5409166771330494453),
+         style_btn("🔙 Back to Admin", "adm_adminmain", "danger",
+                   icon=6129888444245089008)],
+    ]
+    return await event.edit(msg, buttons=btns)
+
+
 async def channels_manager_menu(event):
     fsub_status = get_fsub_status()
     fsub_btn_text = "🟢 FSub: ON" if fsub_status == 'on' else "🔴 FSub: OFF"
@@ -235,6 +330,90 @@ async def admin_actions(event):
         await admin_panel_handler(FakeEvent())
         await event.delete()
         return
+
+    elif action_data == "search_settings" and has_perm(uid, 'p_settings'):
+        return await render_search_settings(event)
+
+    elif action_data.startswith("ss_toggle|") and has_perm(uid, 'p_settings'):
+        key = action_data.split("|", 1)[1]
+        if ss and key in ss._BOOL_KEYS:
+            cur_val = ss.get_search_setting(key)
+            try:
+                ss.set_search_setting(key, "0" if cur_val == "1" else "1")
+                await event.answer("Updated ✅", alert=False)
+            except Exception as exc:
+                await event.answer(f"Failed: {exc}", alert=True)
+        return await render_search_settings(event)
+
+    elif action_data.startswith("ss_cycle|") and has_perm(uid, 'p_settings'):
+        key = action_data.split("|", 1)[1]
+        if ss:
+            choices = {
+                "good_filter": ss.VALID_FILTERS,
+                "cheap_filter": ss.VALID_FILTERS,
+                "good_order": ss.VALID_ORDERS,
+                "cheap_order": ss.VALID_ORDERS,
+                "bulk_order": ss.VALID_ORDERS,
+                "max_results": ss.VALID_LIMITS,
+                "max_pages": ss.VALID_PAGES,
+            }.get(key, [])
+            if choices:
+                cur_val = ss.get_search_setting(key)
+                try:
+                    idx = choices.index(cur_val)
+                except ValueError:
+                    idx = -1
+                try:
+                    ss.set_search_setting(key, choices[(idx + 1) % len(choices)])
+                    await event.answer("Updated ✅", alert=False)
+                except Exception as exc:
+                    await event.answer(f"Failed: {exc}", alert=True)
+        return await render_search_settings(event)
+
+    elif action_data.startswith("ss_price|") and has_perm(uid, 'p_settings'):
+        key = action_data.split("|", 1)[1]
+        if key not in ("min_price", "max_price"):
+            return await render_search_settings(event)
+        label = "Minimum" if key == "min_price" else "Maximum"
+        await event.answer()
+        try:
+            await event.edit(
+                f"<blockquote>💵 Send the <b>{label} price in RUB</b>.\n"
+                "Send <code>0</code> or <code>off</code> to remove the limit.</blockquote>",
+                buttons=[[style_btn("❌ Cancel", "adm_search_settings", "danger",
+                                    icon=6129888444245089008)]],
+            )
+        except Exception:
+            pass
+        chat = event.chat_id
+        try:
+            async with bot.conversation(chat, timeout=300) as conv:
+                reply = await conv.get_response()
+                txt = (reply.raw_text or "").strip().lower()
+                if txt in ("off", "0", "none", "clear", "no"):
+                    ss.set_search_setting(key, "")
+                else:
+                    try:
+                        val = float(txt.replace("₹", "").replace("rub", "").strip())
+                        if val < 0:
+                            raise ValueError
+                        ss.set_search_setting(key, str(int(val)) if val == int(val) else str(val))
+                    except Exception:
+                        await reply.reply("⚠️ Invalid number — price limit unchanged.")
+        except Exception as exc:
+            logger.warning(f"search settings price input failed: {exc}")
+        class FakeEvent: chat_id = chat; sender_id = uid
+        try:
+            await render_search_settings(FakeEvent())
+        except Exception:
+            pass
+        return
+
+    elif action_data == "ss_reset" and has_perm(uid, 'p_settings'):
+        if ss:
+            ss.reset_search_settings()
+        await event.answer("Reset to defaults ♻️", alert=True)
+        return await render_search_settings(event)
 
     elif action_data == "lzt_settings" and has_perm(uid, 'p_settings'):
         key = get_lzt_key()
