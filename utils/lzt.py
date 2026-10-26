@@ -5,6 +5,7 @@ import aiohttp
 import asyncio
 import json
 import logging
+from html import escape as html_escape
 from config import logger
 from database import cur, db, get_flag_by_country_name
 
@@ -375,33 +376,116 @@ class LZTClient:
         }
 
     async def check_connection(self):
+        """Ping LZT with the configured token and return (ok, html_message).
+
+        The old version only hit the undocumented ``/user`` alias with a 15s
+        timeout and printed a bare error string, so an invalid token looked
+        like a random failure.  This version:
+
+          * uses the documented ``GET /me`` first, falling back to ``/user``
+          * gives an actionable message for 401 / 402 / 429
+          * shows the account name + balance on success
+        """
         token = self.get_token()
         if not token:
-            return False, "❌ LZT API Key not configured."
-        
-        url = f"{LZT_BASE_URL}/user"
+            return False, (
+                "\u274c <b>LZT API Key not configured.</b>\n\n"
+                "Set it in Admin \u2192 LZT Panel Settings \u2192 Set API Key, "
+                "or as the <code>LZT_API_KEY</code> environment variable."
+            )
+
+        urls = [f"{LZT_BASE_URL}/me", f"{LZT_BASE_URL}/user"]
+        last_status = None
+        last_body = ""
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=self.get_headers(), timeout=15) as resp:
+                resp = None
+                for url in urls:
+                    resp = await session.get(
+                        url,
+                        headers=self.get_headers(),
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    )
+                    if resp.status != 404:
+                        break
+                    resp.release()
+                async with resp:
+                    last_status = resp.status
+                    body = await resp.text()
+                    last_body = body[:300]
+
                     if resp.status == 200:
-                        data = await resp.json()
-                        user = data.get("user", {})
-                        username = user.get("username", "Unknown")
-                        balance = user.get("balance", 0)
-                        currency = user.get("currency", "RUB")
-                        return True, f"✅ Connected to LZT!\n👤 User: <b>{username}</b>\n💰 Balance: <b>{balance} {currency}</b>"
-                    else:
                         try:
-                            err_data = await resp.json()
-                            errors = err_data.get("errors", [])
-                            err_str = ", ".join(errors) if isinstance(errors, list) else str(errors)
-                            return False, f"❌ LZT Error: {err_str}"
-                        except:
-                            text = await resp.text()
-                            return False, f"⚠️ LZT Error (Status {resp.status}): {text[:100]}"
+                            data = json.loads(body)
+                        except Exception:
+                            data = {}
+                        user = data.get("user", {}) or {}
+                        username = user.get("username") or "Unknown"
+                        balance = user.get("balance")
+                        currency = user.get("currency", "RUB")
+                        lines = [
+                            "\u2705 <b>Connected to LZT Market!</b>",
+                            f"\U0001F464 User: <b>{html_escape(username)}</b>",
+                        ]
+                        if balance is not None:
+                            lines.append(
+                                f"\U0001F4B0 Balance: <b>{html_escape(str(balance))} "
+                                f"{html_escape(str(currency))}</b>"
+                            )
+                        return True, "\n".join(lines)
+
+                    if resp.status == 401:
+                        return False, (
+                            "\u274c <b>LZT API key is invalid or expired.</b>\n\n"
+                            "LZT answered: <i>Invalid or expired access token</i>.\n\n"
+                            "<b>Fix:</b>\n"
+                            "1. Open lolz.live \u2192 Account \u2192 API \u2192 "
+                            "Get Access Token\n"
+                            "2. Make sure the <b>market</b> scope is ticked\n"
+                            "3. Copy the fresh token and set it here with "
+                            "<b>Set API Key</b>\n\n"
+                            "<i>Tokens are revoked the moment you regenerate "
+                            "them, so an old copy stops working.</i>"
+                        )
+
+                    if resp.status == 402:
+                        return False, (
+                            "\u26a0\ufe0f <b>LZT Market API access denied (402).</b>\n\n"
+                            "Your LZT account needs <b>200 sympathies</b> or an "
+                            "active paid subscription to use the Market API."
+                        )
+
+                    if resp.status == 429:
+                        retry = resp.headers.get("Retry-After", "60")
+                        return False, (
+                            "\u23f1\ufe0f <b>LZT rate limit hit (429).</b>\n\n"
+                            f"Retry after ~{html_escape(str(retry))} seconds. "
+                            "Lower <b>Max Pages</b> in Search & Quality Settings "
+                            "if this happens often."
+                        )
+
+                    if resp.status == 403:
+                        return False, (
+                            "\u26d4 <b>LZT says 403 Forbidden.</b>\n\n"
+                            "The token is valid but lacks the <b>market</b> scope. "
+                            "Regenerate it with the market scope enabled."
+                        )
+
+                    return False, (
+                        f"\u26a0\ufe0f <b>LZT error (HTTP {last_status}).</b>\n"
+                        f"<code>{html_escape(last_body[:200])}</code>"
+                    )
+        except asyncio.TimeoutError:
+            return False, (
+                "\u23f1\ufe0f <b>LZT did not respond in time.</b>\n\n"
+                "The API can be slow; please press Test again."
+            )
         except Exception as e:
             logger.error(f"LZT check connection error: {e}")
-            return False, f"❌ Network error connecting to LZT: {str(e)}"
+            return False, (
+                f"\u274c <b>Network error connecting to LZT:</b> "
+                f"{html_escape(str(e))}"
+            )
 
     async def get_available_countries(self):
         url = f"{LZT_BASE_URL}/telegram"
@@ -598,8 +682,11 @@ class LZTClient:
                         self.last_status = resp.status
                         if resp.status in (401, 403):
                             self.last_error = (
-                                "LZT API key rejected (401/403). Add a valid "
-                                "market-scope key with /setlzt or LZT_API_KEY."
+                                "LZT rejected the API key (HTTP "
+                                f"{resp.status}). The token is invalid, expired "
+                                "or lacks the 'market' scope. Regenerate it at "
+                                "lolz.live > Account > API > Get Access Token "
+                                "and set it in Admin > LZT Panel Settings."
                             )
                         elif resp.status == 402:
                             self.last_error = (

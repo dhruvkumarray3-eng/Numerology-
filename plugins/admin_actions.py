@@ -1016,10 +1016,28 @@ async def admin_actions(event):
                 await conv.send_message(f"{P_YES} Rate set to {r}.")
 
             elif action_data == "setlztkey" and has_perm(uid, 'p_settings'):
-                resp = await get_reply("🔑 <b>Enter LZT API Token / Key:</b>\n\n<i>Get your token from LZT.market Profile -> Settings -> API Keys</i>")
+                resp = await get_reply(
+                    "🔑 <b>Enter LZT API Token / Key:</b>\n\n"
+                    "<i>lolz.live → Account → API → Get Access Token "
+                    "(tick the <b>market</b> scope).</i>"
+                )
                 k = resp.text.strip()
                 set_lzt_key(k)
-                await conv.send_message(f"{P_YES} <b>LZT API Key updated successfully!</b>")
+
+                # Validate immediately so a bad/expired token is caught here
+                # instead of silently showing "no live accounts" in the shop.
+                verdict = ""
+                try:
+                    ok, check_msg = await asyncio.wait_for(
+                        lzt_client.check_connection(), timeout=45
+                    )
+                    verdict = "\n\n" + check_msg
+                except Exception as exc:
+                    verdict = f"\n\n⚠️ Could not verify the key: {html.escape(str(exc))}"
+
+                await conv.send_message(
+                    f"{P_YES} <b>LZT API Key saved.</b>{verdict}"
+                )
 
             elif action_data == "setrubrate" and has_perm(uid, 'p_settings'):
                 resp = await get_reply(f"💹 <b>Enter RUB to INR Exchange Rate:</b>\n<i>Current: {get_rub_rate()} (Example: 1.15)</i>")
