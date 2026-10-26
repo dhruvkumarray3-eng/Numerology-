@@ -56,6 +56,8 @@ async def render_search_settings(event):
     both = on if cfg.get("both_cheap") == "1" else off
     strict = on if cfg.get("strict_spam") == "1" else off
     zero = on if cfg.get("show_zero_counts") == "1" else off
+    geospam = on if cfg.get("allow_geo_spam") == "1" else off
+    fallback = on if cfg.get("auto_fallback") == "1" else off
 
     minp = cfg.get("min_price") or "no limit"
     maxp = cfg.get("max_price") or "no limit"
@@ -74,7 +76,9 @@ async def render_search_settings(event):
         f"💵 <b>Min Price (RUB):</b> {minp}\n"
         f"💵 <b>Max Price (RUB):</b> {maxp}\n"
         f"🛡 <b>Strict Spam Check:</b> {strict}\n"
-        f"🔢 <b>Show (0) counts:</b> {zero}\n\n"
+        f"🔢 <b>Show (0) counts:</b> {zero}\n"
+        f"🌐 <b>Allow Geo-Spam (spam=no):</b> {geospam}\n"
+        f"🔁 <b>Auto-Fallback on empty:</b> {fallback}\n\n"
         "<i>Tip: turn ON “Both buttons show cheap” to make Good Quality "
         "and Cheap both return the cheapest spam-blocked stock.</i></blockquote>"
     )
@@ -107,6 +111,12 @@ async def render_search_settings(event):
                    icon=5409098988156629257),
          style_btn(f"💵 Max: {maxp}", "adm_ss_price|max_price", "primary",
                    icon=5409098988156629257)],
+        [style_btn(f"🌐 Geo-Spam: {geospam}", "adm_ss_toggle|allow_geo_spam",
+                   "success" if cfg.get("allow_geo_spam") == "1" else "danger",
+                   icon=5409320020058584473),
+         style_btn(f"🔁 Auto-Fallback: {fallback}", "adm_ss_toggle|auto_fallback",
+                   "success" if cfg.get("auto_fallback") == "1" else "danger",
+                   icon=5409320020058584473)],
         [style_btn(f"🔢 Show (0): {zero}", "adm_ss_toggle|show_zero_counts",
                    "success" if cfg.get("show_zero_counts") == "1" else "danger",
                    icon=5409320020058584473),
