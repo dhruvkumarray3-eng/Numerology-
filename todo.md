@@ -23,5 +23,5 @@
 
 ## Git
 - [x] New branch `fix/lzt-market-access-and-filters`
-- [ ] Commit + push
-- [ ] Open PR + merge into main
+- [x] Commit + push
+- [x] Open PR #19 + merge into main
