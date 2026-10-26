@@ -168,10 +168,6 @@ def register_callbacks(bot):
         await e.answer("✅ Terms Accepted!", alert=True)
         try: await e.delete()
         except: pass
-        try:
-            from plugins.start import send_start_sticker_or_menu
-            await send_start_sticker_or_menu(bot, uid)
-        except Exception: pass
         await send_main_menu(bot, None, uid)
 
     @bot.on(events.CallbackQuery(pattern=b"^tc_reject$"))
@@ -215,10 +211,6 @@ def register_callbacks(bot):
             else:
                 try: await e.delete()
                 except: pass
-                try:
-                    from plugins.start import send_start_sticker_or_menu
-                    await send_start_sticker_or_menu(bot, uid)
-                except Exception: pass
                 await send_main_menu(bot, None, uid)
         else:
             # Show only unjoined channels

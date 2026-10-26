@@ -207,6 +207,51 @@ def _clean_name(name):
     return _cn(name)
 
 
+_EMOJI_FALLBACK = "\U0001F4F1"
+
+
+def _has_emoji(text):
+    """True when `text` starts with an emoji / pictograph."""
+    if not text:
+        return False
+    first = text.strip()[0]
+    code = ord(first)
+    return (
+        0x1F000 <= code <= 0x1FAFF
+        or 0x2600 <= code <= 0x27BF
+        or 0x2190 <= code <= 0x21FF
+        or 0x2B00 <= code <= 0x2BFF
+        or code in (0x00A9, 0x00AE, 0x203C, 0x2049, 0x2122, 0x2139)
+    )
+
+
+def _ensure_emoji(label, fallback=_EMOJI_FALLBACK):
+    """Guarantee every button label starts with an emoji.
+
+    Some app names coming from the catalogue (or from a provider) have no
+    leading icon.  Rather than showing a plain text button we prepend a
+    sensible default so the whole panel looks consistent.
+    """
+    label = (label or "").strip()
+    if not label:
+        return fallback
+    return label if _has_emoji(label) else f"{fallback} {label}"
+
+
+def _country_label(code, name, price, uid, cfg=None, limit=60):
+    """Country button label: flag + name + price (price omitted when unknown).
+
+    The old label always ended with ``· —`` when the provider had no live
+    price, which looked broken.  Now the dash is dropped completely and only
+    the flag + country name are shown.
+    """
+    label = f"{_flag(code)} {_clean_name(name)}"
+    price_txt = _price_label(price, uid, cfg)
+    if price_txt and price_txt not in ("\u2014", "-", ""):
+        label = f"{label} \u00b7 {price_txt}"
+    return label[:limit]
+
+
 def _filter_apps(query):
     if not query:
         return list(ALL_APPS)
@@ -406,8 +451,10 @@ async def show_terms(event, key, country=None):
         countries, _ = await _countries_for(key, uid)
         match = next((c for c in countries if c["code"] == country), None)
         if match:
-            header = (f"\n\n{_flag(match['code'])} <b>{html.escape(_clean_name(match['name']))}</b>"
-                      f" · {_price_label(match['price'], uid)}")
+            price_txt = _price_label(match["price"], uid)
+            header = (f"\n\n{_flag(match['code'])} <b>{html.escape(_clean_name(match['name']))}</b>")
+            if price_txt and price_txt not in ("—", "-", ""):
+                header += f" · {price_txt}"
     msg = (
         f"<blockquote expandable>{p['icon']} <b>{p['tc_title']}</b>{header}\n\n"
         f"{p['tc_body']}</blockquote>"
@@ -460,7 +507,7 @@ async def show_allotp_hub(event, page=1, query=None):
     btns = []
     row = []
     for slug, label in chunk:
-        row.append(style_btn(label[:60], f"pp_app|{slug}", "primary"))
+        row.append(style_btn(_ensure_emoji(label)[:60], f"pp_app|{slug}", "primary"))
         if len(row) == 2:
             btns.append(row)
             row = []
@@ -586,8 +633,8 @@ async def show_countries(event, key, page=1, query=None):
     btns = []
     row = []
     for c in chunk:
-        label = f"{_flag(c['code'])} {_clean_name(c['name'])} · {_price_label(c['price'], uid, cfg)}"
-        row.append(style_btn(label[:60], f"pp_buy|{key}|{c['code']}", p["style"]))
+        label = _country_label(c["code"], c["name"], c["price"], uid, cfg)
+        row.append(style_btn(label, f"pp_buy|{key}|{c['code']}", p["style"]))
         if len(row) == 2:
             btns.append(row)
             row = []
@@ -628,8 +675,15 @@ async def show_countries(event, key, page=1, query=None):
         f"{live_line}\n<i>Page {page}/{total_pages}</i></blockquote>"
     )
     await _safe_edit(event, msg, btns)
-    if dynamic and app:
-        await sticker_engine.send_for_event(event, _app_label(app), mode_required="all")
+
+    # Premium custom-emoji logic: show the app logo (All Apps) or the
+    # WhatsApp icon (WhatsApp panel) as a real premium emoji.  We force the
+    # `apps` role so it also works when the global mode is "country".
+    try:
+        premium_name = _app_label(app) if (dynamic and app) else p["title"]
+        await sticker_engine.send_for_event(event, premium_name, role="apps")
+    except Exception as _sk_ex:
+        logger.debug(f"premium app emoji skipped: {_sk_ex}")
 
 
 async def start_search(event, key):
@@ -735,6 +789,14 @@ async def buy(event, key, code):
         [style_btn("🔙 Back to countries", f"pp_open|{key}", "primary", icon=6129812419028982717)],
     ]
     await _safe_edit(event, msg, btns)
+
+    # Premium logic: country flag emoji + purchase celebration from the packs.
+    try:
+        await sticker_engine.send_for_event(event, code, role="flags")
+        await sticker_engine.send_purchase_for_event(event)
+    except Exception as _sk_ex:
+        logger.debug(f"premium purchase emoji skipped: {_sk_ex}")
+
     asyncio.create_task(_auto_otp(uid, key, order_id, phone, display_inr))
 
 

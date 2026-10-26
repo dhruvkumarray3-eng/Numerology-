@@ -11,40 +11,6 @@ from config import (PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL
                     ADMIN_ID, is_super_admin)
 from utils.states import session_buy_state, deposit_input
 
-async def send_start_sticker_or_menu(bot, uid):
-    import os
-    import json
-    from utils.keyboards import get_persistent_menu
-    
-    # 1. Check if custom sticker is saved in database
-    row = cur.execute("SELECT value FROM settings WHERE key='start_sticker'").fetchone()
-    if row and row[0]:
-        try:
-            d = json.loads(row[0])
-            doc = types.InputDocument(
-                id=int(d['id']),
-                access_hash=int(d['access_hash']),
-                file_reference=bytes.fromhex(d['file_reference'])
-            )
-            return await bot.send_file(uid, doc, buttons=get_persistent_menu(uid))
-        except Exception as ex:
-            logger.warning(f"Failed to send saved sticker doc: {ex}")
-
-    # 2. Check if local sticker asset exists
-    for ext in ['.webp', '.tgs', '.webm']:
-        local_p = f"assets/start_sticker{ext}"
-        if os.path.exists(local_p):
-            try:
-                return await bot.send_file(uid, local_p, buttons=get_persistent_menu(uid))
-            except Exception as ex:
-                logger.warning(f"Failed to send local sticker {local_p}: {ex}")
-
-    # 3. Fallback: send clean minimal emoji greeting with keyboard
-    try:
-        return await bot.send_message(uid, "👋", buttons=get_persistent_menu(uid))
-    except Exception as ex:
-        logger.warning(f"Fallback keyboard send failed: {ex}")
-
 async def send_main_menu(bot, event, uid):
     me = await bot.get_me()
     bot_name = me.first_name or "Store Bot"
@@ -190,11 +156,8 @@ def register_start(bot):
                     return await e.respond("⚠️ Terms & Conditions are temporarily unavailable. Please try /start again later.")
                 return await e.respond(terms_message, buttons=get_terms_buttons())
 
-            try:
-                await send_start_sticker_or_menu(bot, uid)
-            except Exception as k_err:
-                logger.warning(f"Could not send start sticker: {k_err}")
-
+            # The old welcome sticker/emoji face has been removed on purpose:
+            # /start now goes straight to the clean dashboard.
             await send_main_menu(bot, e, uid)
         except Exception as ex: 
             logger.error(f"Start Error: {ex}", exc_info=True)
