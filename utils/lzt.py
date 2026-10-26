@@ -263,12 +263,29 @@ def lzt_raw_to_string_session(raw_str):
     return extract_telethon_string_session({'raw': raw_str})
 
 class LZTClient:
+    # Class-level defaults: every attribute used by the client must exist even
+    # if __init__ is bypassed (e.g. an object restored from a cache/old pickle).
+    _balance_id = None
+    _balance_rub = 0.0
+    _balance_usd = 0.0
+    _balance_cache_ts = 0.0
+
     def __init__(self):
         # Human-readable reason for the last failed API call, so the UI can
         # tell the admin *why* a search returned nothing instead of silently
         # showing an empty list.
         self.last_error = None
         self.last_status = None
+
+        # Balance cache.  These MUST be initialised here: get_balance_info()
+        # reads self._balance_id on its very first line, and a missing
+        # attribute raised AttributeError -> the whole search_items() call
+        # aborted with "Error fetching LZT year for <country>" and the bot
+        # showed "No live accounts found" even when the market had stock.
+        self._balance_id = None
+        self._balance_rub = 0.0
+        self._balance_usd = 0.0
+        self._balance_cache_ts = 0.0
 
     def get_token(self):
         try:
@@ -419,6 +436,27 @@ class LZTClient:
                         self._balance_usd = balance_usd
                         self._balance_cache_ts = time.monotonic()
                         return balance_id, balance_rub, balance_usd
+
+                    # Any non-200 (401 bad key, 402 subscription, 429 rate
+                    # limit, 5xx) used to fall through the function and return
+                    # None, which then blew up the caller's tuple unpacking and
+                    # killed the search.  Always return a 3-tuple.
+                    body = ""
+                    try:
+                        body = await resp.text()
+                    except Exception:
+                        pass
+                    self.last_status = resp.status
+                    logger.error(
+                        f"LZT /user returned HTTP {resp.status}: {body[:200]}"
+                    )
+                    if self._balance_id is not None:
+                        return (
+                            self._balance_id,
+                            self._balance_rub,
+                            self._balance_usd,
+                        )
+                    return None, 0.0, 0.0
 
         except Exception as e:
             logger.error(f"LZT balance info error: {e}")
@@ -649,10 +687,22 @@ class LZTClient:
             base_params["min_stars"] = "1"
 
         if mode == 'aged':
-            # "Aged / old accounts": session created at least ~6 months ago.
-            base_params["session_age"] = "180"
+            # "Aged / old accounts": session created at least 6 months ago.
+            # session_age_period must be sent too (day|month|year), otherwise
+            # the API cannot interpret session_age.
+            base_params["session_age"] = "6"
+            base_params["session_age_period"] = "month"
 
-        balance_id, _, _ = await self.get_balance_info()
+        # A balance lookup is only needed to tag items with the wallet id used
+        # by fast-buy.  It must never be able to abort the search: if /user is
+        # slow, rate-limited or misconfigured we simply search without it.
+        balance_id = None
+        try:
+            balance_id, _, _ = await asyncio.wait_for(
+                self.get_balance_info(), timeout=20
+            )
+        except Exception as exc:
+            logger.warning(f"LZT balance lookup failed, searching without it: {exc}")
 
         async def _run():
             results = []
@@ -742,8 +792,15 @@ class LZTClient:
     async def fast_buy(self, item_id, price_str, balance_id=None):
         url = f"{LZT_BASE_URL}/{item_id}/fast-buy"
         if balance_id is None:
-            bid, _, _ = await self.get_balance_info()
-            balance_id = bid
+            # Never let a balance hiccup block the purchase itself.
+            try:
+                bid, _, _ = await asyncio.wait_for(
+                    self.get_balance_info(), timeout=20
+                )
+                balance_id = bid
+            except Exception as exc:
+                logger.warning(f"LZT balance lookup before fast-buy failed: {exc}")
+                balance_id = None
 
         payload = {"price": str(price_str)}
         if balance_id:

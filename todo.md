@@ -120,3 +120,15 @@
 - [x] Verified with mocked TemporaSMS transport: balance 413.0, countries ru/jp with real price+stock, buy, OTP, cancel, honest error for an unsold service
 - [x] `python3 -m compileall` clean
 - [x] Commit on new branch + push + PR + merge (PR #12)
+
+## 15. LZT "still not working" — AttributeError crash (Request H)
+- [x] Railway log showed the real cause: `Error fetching LZT year for Japan: 'LZTClient' object has no attribute '_balance_id'`
+- [x] `LZTClient.__init__` never initialised `_balance_id/_balance_rub/_balance_usd/_balance_cache_ts`, so the FIRST `get_balance_info()` raised AttributeError and the whole `search_items()` aborted -> every country showed "No live accounts found"
+- [x] Added class-level defaults + real initialisation in `__init__`
+- [x] `get_balance_info()` fell off the end and returned `None` on any non-200 (401/402/429/5xx) -> broke tuple unpacking; now always returns a 3-tuple and logs the status
+- [x] `search_items()` wraps the balance lookup in try/except + 20s timeout: a balance failure can no longer kill the search
+- [x] `fast_buy()` balance lookup moved inside try/except
+- [x] `show_years()` now sets `lzt_client.last_error` on exception so the empty-state card explains the real reason
+- [x] `aged` filter now sends `session_age=6` + `session_age_period=month` (period is required by the API)
+- [x] Verified: fresh client has balance attrs, returns 3-tuple, search survives balance failure, all 11 filters send the correct params, `telegram_spam_block=False` is not spam
+- [ ] Commit on new branch + push + PR + merge
