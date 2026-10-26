@@ -48,6 +48,14 @@ DEFAULTS = {
     # global cheap list only covers a few pages, so 0 usually means "unknown",
     # not "out of stock".
     "show_zero_counts": "0",
+    # LZT's own search param: "Allow geo spam block in search with spam=no".
+    # Without it, spam=no (Good Quality) hides every account that has a geo
+    # spam block, which is a huge share of real stock -> empty lists.
+    "allow_geo_spam": "1",
+    # When a filtered search comes back empty, retry once with the spam /
+    # price filters relaxed so the user sees real live accounts instead of
+    # an empty "no stock" card.
+    "auto_fallback": "1",
 }
 
 # Allowed values, used for validation and for cycling buttons in the panel.
@@ -61,7 +69,10 @@ VALID_ORDERS = [
 VALID_LIMITS = ["20", "50", "100", "200"]
 VALID_PAGES = ["1", "2", "3", "4", "6", "8"]
 
-_BOOL_KEYS = {"live_search_enabled", "both_cheap", "strict_spam", "show_zero_counts"}
+_BOOL_KEYS = {
+    "live_search_enabled", "both_cheap", "strict_spam", "show_zero_counts",
+    "allow_geo_spam", "auto_fallback",
+}
 
 
 def _raw_get(key):
@@ -143,6 +154,21 @@ def is_strict_spam():
 def show_zero_counts():
     """Whether the country picker should print "(0)" for empty countries."""
     return get_search_setting("show_zero_counts") == "1"
+
+
+def allow_geo_spam():
+    """Send ``allow_geo_spamblock=true`` with ``spam=no`` searches.
+
+    LZT hides geo-spam-blocked accounts from ``spam=no`` unless this flag is
+    set.  Those accounts are still perfectly usable, so leaving it off made
+    the "Good Quality" list look empty for most countries.
+    """
+    return get_search_setting("allow_geo_spam") == "1"
+
+
+def auto_fallback():
+    """Retry a zero-result search with relaxed spam/price filters."""
+    return get_search_setting("auto_fallback") == "1"
 
 
 def resolve_mode(mode):

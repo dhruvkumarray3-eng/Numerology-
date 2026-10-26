@@ -1,29 +1,23 @@
-# Task: Fix LZT live search + Good/Cheap logic + admin panel controls
+# Fix: LZT search still empty for USA (round 2)
 
-## 1. Analysis
-- [x] Read screenshots (LZT API bot)
-- [x] Clone repo & inspect utils/lzt.py, plugins/buy.py, admin panel
-- [x] Verify official LZT API params (spam=yes/no/nomatter, order_by enum)
+## Root causes found in official LZT OpenAPI spec
+- [x] Per-request timeout was 20s; LZT docs recommend 300s+ for category search
+- [x] Missing `allow_geo_spamblock` param -> `spam=no` hid geo-spam-blocked stock
+- [x] No fallback when a filtered search returned 0 items
+- [x] Confirm `USA` is a supported ISO-3 code (it is)
 
-## 2. Search settings module
-- [x] Create utils/search_settings.py (defaults + getters/setters + mode resolver)
+## Code changes
+- [x] `utils/lzt.py`: request timeout 75s via `aiohttp.ClientTimeout`
+- [x] `utils/lzt.py`: send `allow_geo_spamblock=true` for `spam=no` searches
+- [x] `utils/lzt.py`: auto-fallback retry (relax spam/price, 2 pages max)
+- [x] `utils/lzt.py`: generous outer budget tied to per-request timeout
+- [x] `utils/search_settings.py`: `allow_geo_spam()` + `auto_fallback()` + defaults
+- [x] `plugins/admin_actions.py`: two new toggles on Search & Quality page
 
-## 3. Fix live search
-- [x] Remove blocking balance lookup from search_items
-- [x] Raise search timeout / configurable pages / price range / sort
-- [x] Strict client-side spam filter for Good vs Cheap
-- [x] Remember per-country totals so live counts appear
+## Verification
+- [x] `tests/test_search_settings.py` extended (geo-spam + fallback) -> all pass
+- [x] `tests/test_lzt_spec.py` -> all pass
+- [x] `compileall utils plugins tests` -> clean
 
-## 4. Admin panel
-- [x] Add "Search & Quality Settings" page
-- [x] Wire buttons/actions (live toggle, good/cheap filters, both-cheap, sort, results, pages, price range, reset)
-- [x] Add button to admin main panel
-
-## 5. Buy flow
-- [x] Use settings in show_years / process_purchase
-- [x] Hide misleading (0) counts in country picker
-
-## 6. Verify & push
-- [x] Run existing tests + new tests
-- [x] Syntax check all changed files
-- [x] Commit on new branch, push, open PR (merged #16)
+## Git
+- [x] Commit on new branch, push, open + merge PR

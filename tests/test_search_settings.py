@@ -201,6 +201,39 @@ check("country total recorded", L.lzt_client.country_totals.get("India") == 7,
       L.lzt_client.country_totals)
 check("no balance request on hot path", L.lzt_client._balance_id is None)
 
+# ---------------------------------------------------------------------------
+# 7. Geo-spam flag + auto-fallback
+# ---------------------------------------------------------------------------
+S.reset_search_settings()
+check("default allow_geo_spam on", S.allow_geo_spam() is True)
+check("default auto_fallback on", S.auto_fallback() is True)
+S.set_search_setting("allow_geo_spam", "0")
+check("allow_geo_spam toggles off", S.allow_geo_spam() is False)
+S.set_search_setting("allow_geo_spam", "1")
+
+captured.clear()
+items = asyncio.get_event_loop().run_until_complete(
+    L.lzt_client.search_items("India", mode="nonspam")
+)
+p = captured[0] if captured else {}
+check("nonspam sends allow_geo_spamblock", p.get("allow_geo_spamblock") == "true",
+      p.get("allow_geo_spamblock"))
+check("nonspam sends spam=no", p.get("spam") == "no", p.get("spam"))
+check("fallback dropped spam filter", len(captured) > 1 and "spam" not in captured[1],
+      captured[1:2])
+check("fallback flag set", L.lzt_client.last_fallback is True, L.lzt_client.last_fallback)
+check("fallback returned the spam item", len(items) == 1, len(items))
+
+# With auto_fallback OFF an empty filtered search must stay empty.
+S.set_search_setting("auto_fallback", "0")
+captured.clear()
+items = asyncio.get_event_loop().run_until_complete(
+    L.lzt_client.search_items("India", mode="nonspam")
+)
+check("no fallback when disabled", len(captured) == 1, len(captured))
+check("no results when fallback disabled", items == [], items)
+S.set_search_setting("auto_fallback", "1")
+
 print()
 if FAILS:
     print(f"{len(FAILS)} TEST(S) FAILED: {FAILS}")

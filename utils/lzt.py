@@ -18,6 +18,8 @@ try:
         price_bounds,
         int_setting,
         is_strict_spam,
+        allow_geo_spam,
+        auto_fallback,
     )
 except Exception:  # pragma: no cover - defensive fallback
     def resolve_order(mode, *a, **k):
@@ -38,12 +40,24 @@ except Exception:  # pragma: no cover - defensive fallback
     def is_strict_spam(*a, **k):
         return False
 
+    def allow_geo_spam(*a, **k):
+        return True
+
+    def auto_fallback(*a, **k):
+        return True
+
 LZT_BASE_URL = "https://api.lzt.market"
 
 # Category Search allows 20 requests/minute -> keep a global 3s gap.
 _LZT_SEARCH_LOCK = asyncio.Lock()
 _LZT_LAST_CALL = 0.0
 _LZT_MIN_INTERVAL = 3.0
+
+# LZT's own docs say: "It's highly recommended to set the request timeout to
+# 300+ seconds, because certain methods can take a long time to be processed."
+# The old 20s timeout was aborting perfectly valid category searches, which the
+# UI then rendered as "No live accounts found".
+_LZT_REQUEST_TIMEOUT = 75
 
 # Comprehensive Country Name to ISO 3166-1 alpha-2 mapping with all aliases
 COUNTRY_TO_LZT = {
@@ -318,6 +332,7 @@ class LZTClient:
     _balance_usd = 0.0
     _balance_cache_ts = 0.0
     last_total = 0
+    last_fallback = False
     country_totals = {}
 
     def __init__(self):
@@ -548,15 +563,23 @@ class LZTClient:
         if wait > 0:
             await asyncio.sleep(wait)
 
-    async def _get_telegram_page(self, params, retries=3):
-        """GET /telegram with 429 handling. Returns parsed JSON or None."""
+    async def _get_telegram_page(self, params, retries=2):
+        """GET /telegram with 429 handling. Returns parsed JSON or None.
+
+        Uses a long per-request timeout because LZT explicitly recommends
+        300s+ for category search; a 20s cap was silently killing real
+        searches and making the market look empty.
+        """
         url = f"{LZT_BASE_URL}/telegram"
         for attempt in range(retries):
             await self._throttle()
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
-                        url, headers=self.get_headers(), params=params, timeout=20
+                        url,
+                        headers=self.get_headers(),
+                        params=params,
+                        timeout=aiohttp.ClientTimeout(total=_LZT_REQUEST_TIMEOUT),
                     ) as resp:
                         if resp.status == 429:
                             retry_after = resp.headers.get("Retry-After")
@@ -768,6 +791,11 @@ class LZTClient:
             base_params["spam"] = "yes"
         elif effective_mode == 'nonspam':
             base_params["spam"] = "no"
+            # Official param: "Allow geo spam block in search with spam=no".
+            # Without it LZT hides every geo-spam-blocked account from the
+            # Good Quality list, which is why whole countries looked empty.
+            if allow_geo_spam():
+                base_params["allow_geo_spamblock"] = "true"
 
         if effective_mode == 'no_2fa':
             base_params["password"] = "no"
@@ -810,12 +838,13 @@ class LZTClient:
             except Exception:
                 pass
 
-        async def _run():
+        async def _run(search_params, relax=False, page_cap=None):
             results = []
             after = None
             pages = 0
-            while pages < max_pages:
-                params = dict(base_params)
+            cap = page_cap or max_pages
+            while pages < cap:
+                params = dict(search_params)
                 if after:
                     params["after"] = after
 
@@ -879,16 +908,17 @@ class LZTClient:
                     # items whose spam state is unknown, so the Good Quality
                     # list can never contain a spam-blocked account.
                     strict = is_strict_spam()
-                    if effective_mode == 'nonspam':
-                        if parsed["spam_known"] and parsed["is_spam"]:
-                            continue
-                        if strict and not parsed["spam_known"]:
-                            continue
-                    if effective_mode == 'spam':
-                        if parsed["spam_known"] and not parsed["is_spam"]:
-                            continue
-                        if strict and not parsed["spam_known"]:
-                            continue
+                    if not relax:
+                        if effective_mode == 'nonspam':
+                            if parsed["spam_known"] and parsed["is_spam"]:
+                                continue
+                            if strict and not parsed["spam_known"]:
+                                continue
+                        if effective_mode == 'spam':
+                            if parsed["spam_known"] and not parsed["is_spam"]:
+                                continue
+                            if strict and not parsed["spam_known"]:
+                                continue
                     if effective_mode == 'no_email' and parsed["has_email"]:
                         continue
                     if effective_mode == 'with_email' and not parsed["has_email"]:
@@ -918,9 +948,11 @@ class LZTClient:
         # Generous hard timeout: 4 pages at the documented 3s spacing plus
         # network latency needs well over 30s, and the old 30s cap was cutting
         # searches off mid-flight (returning [] -> "no live accounts").
-        budget = max(25, 15 + 6 * int(max_pages or 1))
+        # Budget must exceed the per-request timeout, otherwise a single slow
+        # page can trip the outer wait_for before aiohttp gives up.
+        budget = max(60, 20 + 15 * int(max_pages or 1))
         try:
-            return await asyncio.wait_for(_run(), timeout=budget)
+            results = await asyncio.wait_for(_run(base_params), timeout=budget)
         except asyncio.TimeoutError:
             self.last_error = (
                 "LZT search timed out. Please try again, or lower the number "
@@ -928,6 +960,41 @@ class LZTClient:
             )
             logger.warning(f"LZT search_items hard timeout ({budget}s)")
             return []
+
+        # ------------------------------------------------------------------
+        # Auto-fallback: a filtered search that comes back empty is usually a
+        # filter problem, not an empty market.  Retry once with the spam and
+        # price filters relaxed so the user sees real live stock instead of a
+        # misleading "no accounts found" card.
+        # ------------------------------------------------------------------
+        if not results and auto_fallback() and (
+            base_params.get("spam")
+            or base_params.get("allow_geo_spamblock")
+            or base_params.get("pmin")
+            or base_params.get("pmax")
+        ):
+            relaxed = dict(base_params)
+            for k in ("spam", "allow_geo_spamblock", "pmin", "pmax"):
+                relaxed.pop(k, None)
+            logger.info(
+                f"LZT search: no results for '{country_name}' with filters; "
+                "retrying with relaxed spam/price filters"
+            )
+            # Fallback only needs to prove stock exists, so cap it at 2 pages
+            # and keep the wait short.
+            fb_cap = min(int(max_pages or 1), 2)
+            fb_budget = max(45, 20 + 15 * fb_cap)
+            try:
+                results = await asyncio.wait_for(
+                    _run(relaxed, relax=True, page_cap=fb_cap), timeout=fb_budget
+                )
+                if results:
+                    self.last_fallback = True
+            except asyncio.TimeoutError:
+                logger.warning("LZT search_items fallback timeout")
+                results = []
+
+        return results
 
     async def fast_buy(self, item_id, price_str, balance_id=None):
         """Buy an item via POST /{item_id}/fast-buy.
