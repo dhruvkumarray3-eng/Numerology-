@@ -10,6 +10,7 @@ propcache==0.5.2
 pyaes==1.6.1
 pyasn1==0.6.4
 pyflakes==3.4.0
+pymongo==4.9.2
 python-dotenv==1.2.2
 qrcode==8.2
 requests==2.32.3

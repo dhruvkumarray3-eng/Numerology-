@@ -320,3 +320,19 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
             try: return await bot.edit_message(peer, edit_msg_id, message, buttons=buttons, parse_mode='html', link_preview=True)
             except: pass
         return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=True)
+
+
+# ---------------------------------------------------------
+# Global bot instance (used by background tasks that need to send messages)
+# ---------------------------------------------------------
+_BOT_INSTANCE = None
+
+
+def set_bot_instance(bot):
+    global _BOT_INSTANCE
+    _BOT_INSTANCE = bot
+    return bot
+
+
+def get_bot_instance():
+    return _BOT_INSTANCE

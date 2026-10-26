@@ -26,6 +26,8 @@ SERVER_ICONS = {
     "nonspam": "✅",
     "numchange": "🔁",
     "spam": "💰",
+    "whatsapp": "💬",
+    "laptop": "💻",
 }
 
 
@@ -103,6 +105,13 @@ def register_servers(bot):
     async def cb_srv_open(e):
         raw = e.pattern_match.group(1)
         mode = raw.decode() if isinstance(raw, bytes) else raw
+        # Each server opens its own dedicated panel.
+        from plugins.product_panels import PANELS, show_terms, show_countries as pp_countries
+        if mode in PANELS:
+            from plugins.product_panels import _terms_accepted
+            if not _terms_accepted(e.sender_id, mode):
+                return await show_terms(e, mode)
+            return await pp_countries(e, mode, 1)
         if mode == "numchange":
             return await show_num_change(e)
         # Other servers open the buy catalogue filtered by that mode

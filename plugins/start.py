@@ -5,7 +5,8 @@ from database import cur, db, ensure_user, is_user_banned, is_bot_online, is_adm
 from utils.keyboards import get_persistent_menu, get_terms_buttons, get_join_buttons, style_btn, style_url
 from utils.terms import get_terms_message
 from utils.helpers import check_channel_joined, to_small_caps, send_preview_on_top
-from config import PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL, logger
+from config import (PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL,
+                    QC_ID_PREFIX, logger)
 from utils.states import session_buy_state, deposit_input
 
 async def send_start_sticker_or_menu(bot, uid):
@@ -66,18 +67,36 @@ async def send_main_menu(bot, event, uid):
     
     styled_name = to_small_caps(bot_name)
     
+    # QC ID is derived from this bot's own id, so it always matches the bot.
+    qc_id = f"{QC_ID_PREFIX}-{str(me.id)[-8:]}"
+
+    dep_row = cur.execute("SELECT total_deposited FROM users WHERE user_id=?", (uid,)).fetchone()
+    total_dep = float(dep_row[0]) if dep_row and dep_row[0] is not None else 0.0
+    if total_dep >= 5000:
+        vip = "💎 Diamond"
+    elif total_dep >= 2000:
+        vip = "🥇 Gold"
+    elif total_dep >= 500:
+        vip = "🥈 Silver"
+    else:
+        vip = "🏆 Bronze"
+
     msg = (f"<a href='{start_img}'>&#8203;</a>💬 <b>{html.escape(styled_name)}</b>\n\n"
            f"<blockquote expandable>"
            f"👥 <b>𝐍ᴀᴍᴇ:</b> {html.escape(first_name)}\n"
            f"🪪 <b>𝐔sᴇʀ 𝐈𝐃:</b> <code>{uid}</code>\n"
            f"🎯 <b>𝐔sᴇʀɴᴀᴍᴇ:</b> {username}\n"
-           f"💳 <b>𝐁ᴀʟᴀɴᴄᴇ:</b> <code>₹{bal:.2f}</code>"
+           f"🆔 <b>𝐊𝐂 𝐈𝐃:</b> <code>{qc_id}</code>\n"
+           f"💳 <b>𝐁ᴀʟᴀɴᴄᴇ:</b> <code>₹{bal:.2f}</code>\n"
+           f"🏆 <b>𝐕𝐈𝐏:</b> {vip}"
            f"</blockquote>\n"
            f"<blockquote>✈️ <b>𝐒ᴜᴘᴘᴏʀᴛ :</b> <a href='{support_url}'>{support_handle}</a></blockquote>")
            
     buttons = [
         [style_btn("📲 𝓑𝓾𝔂 𝓐𝓬𝓬𝓸𝓾𝓷𝓽", b"open_buy_categories", "success", icon=5440627033111557670)],
         [style_btn("📱 𝓐𝓵𝓵 𝓪𝓹𝓹𝓼 𝓪𝓬𝓬", b"all_apps_menu", "success", icon=5409320020058584473)],
+        [style_btn("💬 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩 𝐏𝐚𝐧𝐞𝐥", b"pp_open|whatsapp", "success", icon=5408995930416362034)],
+        [style_btn("🔁 𝐍𝐮𝐦𝐛𝐞𝐫 𝐂𝐡𝐚𝐧𝐠𝐞", b"pp_open|numchange", "primary", icon=5409119256107297715), style_btn("💻 𝐋𝐚𝐩𝐭𝐨𝐩 𝐏𝐚𝐧𝐞𝐥", b"pp_open|laptop", "primary", icon=5409320020058584473)],
         [style_btn("🚀 𝓢𝓸𝓬𝓲𝓪𝓵 𝓶𝓮𝓭𝓲𝓪 𝓼𝓮𝓻𝓿𝓲𝓬𝓮𝓼", b"smm_menu_main", "success", icon=5408995930416362034)],
         [style_btn("🛒 𝓑𝓾𝔂 𝓢𝓸𝓾𝓻𝓬𝓮 𝓒𝓸𝓭𝓮𝓼", b"src_code_menu", "success", icon=5409320020058584473)],
         [style_btn("🛒 𝓑𝓾𝔂 𝓟𝓪𝓷𝓮𝓵𝓼", b"panels_menu", "success", icon=5409098988156629257)],

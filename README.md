@@ -158,3 +158,78 @@ text fallbacks when `USE_PREMIUM_EMOJIS=0`.
 > The bot starts fine with these blank — the related feature simply reports that
 > the provider is not configured. Add real keys in Railway → Variables,
 > Render → Environment, or Heroku → Config Vars. Never commit real keys.
+
+---
+
+## 🧩 Product Panels (WhatsApp · Number Change · Laptop)
+
+Every product now has its **own dedicated panel**, and all three run on
+**TemporaSMS**:
+
+| Button | Callback | TemporaSMS service variable |
+|---|---|---|
+| 💬 WhatsApp Panel | `pp_open\|whatsapp` | `TEMPORASMS_SERVICE_WHATSAPP` (default `whatsapp`) |
+| 🔁 Number Change | `pp_open\|numchange` | `TEMPORASMS_SERVICE_NUMCHANGE` (default `telegram`) |
+| 💻 Laptop Panel | `pp_open\|laptop` | `TEMPORASMS_SERVICE_LAPTOP` (default `laptop`) |
+
+Each panel follows the exact screenshot flow: **Terms & Conditions → How to buy /
+Agree & Continue / Cancel → country grid (2 per row, cheapest first) →
+Search Country / Refresh / Back → number reserved → Get OTP → Cancel & Refund**.
+
+Slash commands: `/whatsapp` `/wa`, `/numchange` `/numberchange`, `/laptop` `/pc`,
+`/panels` `/products`, `/rates`.
+
+## 💰 Profit Engine (users never see the real price)
+
+All displayed prices pass through `utils/markup.apply_markup()`. The owner sets
+the profit live from Telegram — the customer only ever sees `real + profit`.
+
+| Command | What it does |
+|---|---|
+| `/setmarkup 30` | 30 % profit on every sale |
+| `/setprofit 50 INR` | Fixed ₹50 profit per sale |
+| `/setprofit 2 USD` | Fixed $2 profit per sale (converted at `USDT_TO_INR`) |
+| `/markup` | Show the current profit setting |
+| `/resetmarkup` | Back to the default from env |
+
+Defaults can also be set with `DEFAULT_MARKUP_MODE` (`percent`/`fixed`),
+`DEFAULT_MARKUP_PERCENT`, `DEFAULT_MARKUP_FIXED`, `DEFAULT_MARKUP_CURRENCY`.
+
+## 🗄️ MongoDB — full user history
+
+Set `MONGO_URI` (e.g. `mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net`) and
+`MONGO_DB`. Every order, panel order, deposit, redeem, session and event is
+mirrored to MongoDB. If `MONGO_URI` is blank the bot still runs on SQLite only —
+nothing breaks.
+
+| Command | What it does |
+|---|---|
+| `/history <user_id>` | Full history of any user (SQLite + Mongo counts) |
+| `/myhistory` | Your own recent activity |
+| `/mongostatus` | Mongo connection + collection counts |
+| `/panelstats` | Panel orders / revenue / profit totals |
+| `/panelsales 20` | Last 20 panel sales with real cost vs profit |
+| `/panelbalance` | TemporaSMS account balance |
+| `/grant <user_id> <amount>` | Add balance to a user |
+| `/myid` | Your Telegram ID + this bot's QC ID |
+
+**QC ID** on the welcome card is built from the bot's own Telegram ID
+(`QC_ID_PREFIX` + last 8 digits of the bot id), so it always matches the bot.
+
+## 🔑 Where each API key goes
+
+Add these in **Railway → Variables**, **Render → Environment**, or
+**Heroku → Config Vars** (never commit them):
+
+| Variable | Where it is used |
+|---|---|
+| `API_ID`, `API_HASH`, `BOT_TOKEN`, `ADMIN_ID` | Core Telegram login (required) |
+| `TEMPORASMS_API_KEY` | WhatsApp / Number Change / Laptop panels |
+| `TEMPORASMS_BASE_URL` | TemporaSMS endpoint (default `https://api.temporasms.com`) |
+| `MONGO_URI`, `MONGO_DB` | Full history storage |
+| `FIVESIM_API_KEY`, `SMSACTIVATE_API_KEY`, `SMSPVA_API_KEY`, `SMSMAN_API_KEY` | All-Apps OTP numbers |
+| `LZT_API_KEY` | LZT Market TG account stock |
+| `TEMPMAIL_API_KEY` | Temp-mail inboxes |
+| `IMAP_HOST`, `IMAP_PORT`, `IMAP_USER`, `IMAP_PASSWORD` | Auto-read Telegram login codes |
+| `DEFAULT_MARKUP_MODE`, `DEFAULT_MARKUP_PERCENT`, `DEFAULT_MARKUP_FIXED`, `DEFAULT_MARKUP_CURRENCY` | Profit engine defaults |
+| `QC_ID_PREFIX`, `BOT_BRAND_NAME` | QC ID / welcome card branding |

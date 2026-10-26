@@ -11,6 +11,8 @@ from plugins.settings_menu import register_settings
 from plugins.servers import register_servers
 from plugins.all_apps import register_all_apps
 from plugins.more_content import register_more_content
+from plugins.product_panels import register_product_panels
+from plugins.admin_extras import register_admin_extras
 
 def register_all_handlers(bot):
     # Standard Handler Registrations
@@ -27,6 +29,8 @@ def register_all_handlers(bot):
     register_servers(bot)
     register_all_apps(bot)
     register_more_content(bot)
+    register_product_panels(bot)
+    register_admin_extras(bot)
 
     # Buy Plugin safely load karne ke liye
     try:

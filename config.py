@@ -352,3 +352,29 @@ def build_color_button(label: str, emoji_key: str = "", fallback_emoji: str = "â
 def style_btn(text: str, data: str, style_type: str = "primary", icon: int = None):
     """Generates Telethon Inline Button with custom data/style support."""
     return Button.inline(text, data=data)
+
+# ---------------------------------------------------------
+# 5. PRODUCT PANELS, PROFIT ENGINE, MONGODB & BOT IDENTITY
+# ---------------------------------------------------------
+# MongoDB â€” every order / deposit / redeem / session / event is mirrored here.
+MONGO_URI = os.getenv("MONGO_URI", "").strip()
+MONGO_DB = os.getenv("MONGO_DB", "numerology_bot").strip()
+
+# TemporaSMS service slugs per product panel (change in host variables if
+# your TemporaSMS dashboard uses different service codes).
+TEMPORASMS_SERVICE_WHATSAPP = os.getenv("TEMPORASMS_SERVICE_WHATSAPP", "whatsapp").strip()
+TEMPORASMS_SERVICE_NUMCHANGE = os.getenv("TEMPORASMS_SERVICE_NUMCHANGE", "telegram").strip()
+TEMPORASMS_SERVICE_LAPTOP = os.getenv("TEMPORASMS_SERVICE_LAPTOP", "laptop").strip()
+TEMPORASMS_COUNTRY_WHATSAPP = os.getenv("TEMPORASMS_COUNTRY_WHATSAPP", "any").strip()
+TEMPORASMS_COUNTRY_NUMCHANGE = os.getenv("TEMPORASMS_COUNTRY_NUMCHANGE", "any").strip()
+TEMPORASMS_COUNTRY_LAPTOP = os.getenv("TEMPORASMS_COUNTRY_LAPTOP", "any").strip()
+
+# Bot identity shown on the welcome card (falls back to the live bot name/id).
+BOT_BRAND_NAME = os.getenv("BOT_BRAND_NAME", "").strip()
+QC_ID_PREFIX = os.getenv("QC_ID_PREFIX", "QC").strip().upper() or "QC"
+
+# Default profit settings (owner can change live with /setmarkup or /setprofit)
+DEFAULT_MARKUP_MODE = os.getenv("DEFAULT_MARKUP_MODE", "percent").strip().lower()
+DEFAULT_MARKUP_PERCENT = float(os.getenv("DEFAULT_MARKUP_PERCENT", "25") or 25)
+DEFAULT_MARKUP_FIXED = float(os.getenv("DEFAULT_MARKUP_FIXED", "0") or 0)
+DEFAULT_MARKUP_CURRENCY = os.getenv("DEFAULT_MARKUP_CURRENCY", "INR").strip().upper()

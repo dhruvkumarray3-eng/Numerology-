@@ -189,4 +189,8 @@ def register_all_apps(bot):
 
     @bot.on(events.CallbackQuery(pattern=r"^buy_wp_acc$"))
     async def cb_buy_wp(e):
-        await show_countries_for_app(e, "whatsapp")
+        # Dedicated WhatsApp panel (TemporaSMS) with its own T&C + country list.
+        from plugins.product_panels import show_terms, show_countries, _terms_accepted
+        if not _terms_accepted(e.sender_id, "whatsapp"):
+            return await show_terms(e, "whatsapp")
+        await show_countries(e, "whatsapp", 1)

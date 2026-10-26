@@ -241,8 +241,8 @@ async def show_filters_catalog(event, page=1):
 async def show_buy_menu(event):
     msg = (f"<blockquote expandable><tg-emoji emoji-id=\"5408995930416362034\">🎁</tg-emoji> <b>𝐒𝐄𝐋𝐄𝐂𝐓 𝐀𝐂𝐂𝐎𝐔𝐍𝐓 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘</b> <tg-emoji emoji-id=\"5409320020058584473\">💎</tg-emoji>\n\n"
            f"🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> 𝐐𝐮𝐢𝐜𝐤 𝐥𝐨𝐨𝐤𝐮𝐩 𝐛𝐲 𝐧𝐚𝐦𝐞 𝐨𝐫 𝐝𝐢𝐚𝐥 𝐜𝐨𝐝𝐞 (+91, +55...)\n"
-           f"🟢 <b>𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 / 𝐂𝐥𝐞𝐚𝐧:</b> 100% 𝐒𝐩𝐚𝐦𝐛𝐥𝐨𝐜𝐤-𝐅𝐫𝐞𝐞 (𝐃𝐌 & 𝐏𝐞𝐫𝐬𝐨𝐧𝐚𝐥 𝐔𝐬𝐞).\n"
-           f"🟡 <b>𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩):</b> 𝐁𝐮𝐝𝐠𝐞𝐭 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬 (𝐂𝐡𝐚𝐧𝐧𝐞𝐥 𝐉𝐨𝐢𝐧𝐞𝐫𝐬 & 𝐌𝐞𝐦𝐛𝐞𝐫𝐬).\n"
+           f"🟢 <b>Good Quality:</b> 100% Spam-Block Free (DM & Personal Use).\n"
+           f"🟡 <b>Cheap:</b> Budget Accounts (Channel Joiners & Members).\n"
            f"🎯 <b>𝐌𝐨𝐫𝐞 𝐅𝐢𝐥𝐭𝐞𝐫𝐬:</b> 𝐒𝐭𝐚𝐫𝐬, 𝐄𝐦𝐚𝐢𝐥, 2𝐅𝐀, 𝐏𝐫𝐞𝐦𝐢𝐮𝐦, 𝐃𝐂...\n"
            f"🌍 <b>𝐀𝐥𝐥 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬:</b> 𝐁𝐫𝐨𝐰𝐬𝐞 50+ 𝐜𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬 𝐬𝐭𝐨𝐜𝐤 (𝐅𝐫𝐞𝐬𝐡 & 𝐀𝐥𝐥).\n"
            f"🏛 <b>𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> 𝐅𝐢𝐥𝐭𝐞𝐫 𝐛𝐲 𝐒𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐘𝐞𝐚𝐫 (2025, 2024, 2023...).</blockquote>")
@@ -251,8 +251,8 @@ async def show_buy_menu(event):
         [style_btn("📱 𝐀𝐥𝐥 𝐚𝐩𝐩𝐬 𝐚𝐜𝐜", "all_apps_menu", "success", icon=5409320020058584473),
          style_btn("💬 𝐁𝐮𝐲 𝐖𝐩 𝐀𝐜𝐜", "buy_wp_acc", "success", icon=5408995930416362034)],
         [
-            style_btn("🟢 𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 / 𝐂𝐥𝐞𝐚𝐧", "pg_c|nonspam|1", "success", icon=5409320020058584473),
-            style_btn("🟡 𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩)", "pg_c|spam|1", "primary", icon=5408995930416362034)
+            style_btn("✅ 𝓖𝓸𝓸𝓭 𝓠𝓾𝓪𝓵𝓲𝓽𝔂 𝓣𝓖 𝓐𝓬𝓬", "pg_c|nonspam|1", "success", icon=5409320020058584473),
+            style_btn("💰 𝓒𝓱𝓮𝓪𝓹 𝓣𝓖 𝓐𝓬𝓬", "pg_c|spam|1", "primary", icon=5408995930416362034)
         ],
         [style_btn("🎯 𝐌𝐨𝐫𝐞 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐅𝐢𝐥𝐭𝐞𝐫𝐬 (𝐒𝐭𝐚𝐫𝐬/2𝐅𝐀...)", "pg_filters|1", "success", icon=5409320020058584473)],
         [style_btn("🌍 𝐀𝐥𝐥 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬 (𝐅𝐫𝐞𝐬𝐡 & 𝐀𝐥𝐥)", "pg_c|bulk|1", "primary", icon=6154249597532248059)],

@@ -12,6 +12,7 @@ os.makedirs("sessions", exist_ok=True)
 # Plugins, Health Server & Utilities
 from plugins import register_all_handlers
 from utils.health import start_health_server
+from utils.helpers import set_bot_instance
 
 
 def validate_runtime_config():
@@ -49,6 +50,7 @@ async def main():
     bot.parse_mode = 'html'
 
     # 3. Register all plugin handlers (start, buy, admin, callbacks, etc.)
+    set_bot_instance(bot)  # lets background tasks (OTP poller) send messages
     register_all_handlers(bot)
 
     # 4. Bot Connect & Start
