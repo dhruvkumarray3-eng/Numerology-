@@ -309,11 +309,12 @@ def get_country_from_lzt(code):
 # ---------------------------------------------------------------------------
 # ISO 3166-1 alpha-2 -> alpha-3
 # ---------------------------------------------------------------------------
-# The LZT Market `country[]` filter ONLY accepts ISO-3166 alpha-3 codes in
-# UPPERCASE (e.g. IND, USA, GBR).  Sending alpha-2 codes (IN, US, GB) makes the
-# API silently return an empty result set, which is why "search country" showed
-# no cheap accounts.  We keep the human-friendly alpha-2 map above for display
-# and convert to alpha-3 here before talking to the API.
+# The LZT Market `country[]` filter accepts ISO-3166 **alpha-2** codes in
+# UPPERCASE (e.g. US, IN, GB) -- verified live against api.lzt.market: sending
+# alpha-3 (USA / IRN / IDN) silently returns `totalItems: 0`, while alpha-2
+# returns the real stock (US=18k+, IR=676, ID=1595).  LZT also *reports* the
+# country as alpha-2 in `telegram_country`, so alpha-2 is the native format.
+# The alpha-3 map below is kept only for display / tolerant client-side checks.
 ISO2_TO_ISO3 = {
     'ad': 'AND', 'ae': 'ARE', 'af': 'AFG', 'ag': 'ATG', 'al': 'ALB', 'am': 'ARM', 'ao': 'AGO', 'ar': 'ARG', 'at': 'AUT', 'au': 'AUS',
     'az': 'AZE', 'ba': 'BIH', 'bb': 'BRB', 'bd': 'BGD', 'be': 'BEL', 'bg': 'BGR', 'bh': 'BHR', 'bi': 'BDI', 'bj': 'BEN', 'bn': 'BRN',
@@ -377,6 +378,43 @@ def get_lzt_code3(country_name):
         if code2 in ISO2_TO_ISO3:
             return ISO2_TO_ISO3[code2]
     return None
+
+
+def get_lzt_code2(country_name):
+    """Resolve any country name / dial code / ISO-2 / ISO-3 to UPPERCASE ISO-2.
+
+    This is the format LZT's `country[]` filter actually expects (verified
+    live: `country[]=US` -> 20599 items, `country[]=USA` -> 0).  Returns
+    ``None`` when the country cannot be resolved so the caller can omit the
+    filter instead of sending a bogus value.
+    """
+    if not country_name:
+        return None
+
+    raw = str(country_name).strip()
+    upper = raw.upper()
+
+    # Already an ISO-2 code?
+    if len(upper) == 2 and upper.isalpha():
+        return upper
+
+    # Already an ISO-3 code -> convert down to ISO-2.
+    if len(upper) == 3 and upper.isalpha() and upper in ISO3_TO_ISO2:
+        return ISO3_TO_ISO2[upper].upper()
+
+    code2 = get_lzt_code(country_name)
+    if code2:
+        code2 = str(code2).strip()
+        if len(code2) == 2 and code2.isalpha():
+            return code2.upper()
+    return None
+
+
+# ISO-2 codes LZT accepts for the ``country[]`` filter, derived from the
+# official enum (documented as alpha-3 but consumed as alpha-2 live).
+LZT_SUPPORTED_ISO2 = {
+    ISO3_TO_ISO2[c].upper() for c in LZT_SUPPORTED_ISO3 if c in ISO3_TO_ISO2
+}
 
 DC_IPS = {
     1: '149.154.175.50',
@@ -902,11 +940,23 @@ class LZTClient:
             )
 
             spam_flag = item.get("telegram_spam_block")
-            # LZT returns a real boolean (or -1 when unknown).  The old check
-            # `spam_flag != -1` treated False as spam (because False != -1),
-            # which silently hid every clean account from the Non-Spam filter.
-            spam_known = spam_flag is not None and spam_flag != -1
-            is_spam = bool(spam_flag) if spam_known else False
+            # LZT encodes the spam state as an integer (verified live):
+            #   -3        -> real Telegram spam block
+            #   -4        -> geo spam block only (LZT still returns these under
+            #                spam=no when `allow_geo_spamblock=true`)
+            #   -1 / None -> not checked / unknown
+            #    0        -> clean
+            #   > 0       -> spam block (days)
+            # The old `spam_flag != -1` check treated -4 as spam and dropped
+            # every geo-blocked account, which emptied whole countries.
+            if spam_flag is None or spam_flag in (-1, -4):
+                spam_known, is_spam = False, False
+            elif spam_flag == -3:
+                spam_known, is_spam = True, True
+            elif isinstance(spam_flag, (int, float)) and spam_flag > 0:
+                spam_known, is_spam = True, True
+            else:
+                spam_known, is_spam = True, False
 
             created_ts = (
                 item.get("telegram_session_created_at")
@@ -962,7 +1012,7 @@ class LZTClient:
         """Search live LZT Telegram accounts with the correct server-side filters.
 
         Fixes the "no cheap accounts" bug:
-          * country[]  -> ISO-3 UPPERCASE (IND / USA / GBR ...), not ISO-2
+          * country[]  -> ISO-2 UPPERCASE (IN / US / GB ...) -- ISO-3 returns 0
           * spam=no    -> good quality / non-spam  (mode='nonspam')
           * spam=yes   -> cheap spam-blocked       (mode='spam')
           * password / premium / dc_id[] / min_stars for the matching filters
@@ -975,6 +1025,7 @@ class LZTClient:
         """
         c3 = get_lzt_code3(country_name)
         c2 = get_lzt_code(country_name)
+        c2_api = get_lzt_code2(country_name)
 
         self.last_error = None
         self.last_error_kind = None
@@ -991,14 +1042,15 @@ class LZTClient:
             logger.error("LZT search aborted: no API key")
             return []
 
-        # Only send country[] when LZT supports the resolved code.  Unknown or
-        # unsupported codes make the API return an empty list, which used to
-        # look like "this country has no stock".  In that case we omit the
-        # server-side filter and rely on the tolerant client-side check.
-        send_country_filter = bool(c3 and c3 in LZT_SUPPORTED_ISO3)
-        if c3 and not send_country_filter:
+        # The API's `country[]` filter wants ISO-2 UPPERCASE (US / IR / ID).
+        # Sending ISO-3 (USA / IRN / IDN) silently returns 0 items, which is
+        # exactly what made every country look empty.  Only send the filter
+        # when we resolved a code LZT knows about; otherwise omit it and rely
+        # on the tolerant client-side country check.
+        send_country_filter = bool(c2_api and c2_api in LZT_SUPPORTED_ISO2)
+        if c2_api and not send_country_filter:
             logger.info(
-                f"LZT search: '{country_name}' -> {c3} is not in LZT's country "
+                f"LZT search: '{country_name}' -> {c2_api} is not in LZT's country "
                 "enum; omitting country[] and filtering client-side"
             )
 
@@ -1020,7 +1072,7 @@ class LZTClient:
 
         base_params = {"order_by": order_by}
         if send_country_filter:
-            base_params["country[]"] = c3
+            base_params["country[]"] = c2_api
 
         def _num(v):
             return str(int(v)) if float(v) == int(v) else str(v)
@@ -1212,7 +1264,7 @@ class LZTClient:
         # ------------------------------------------------------------------
         if not results and send_country_filter and self.last_status == 200:
             logger.info(
-                f"LZT search: 0 items for country[]={c3} ('{country_name}'); "
+                f"LZT search: 0 items for country[]={c2_api} ('{country_name}'); "
                 "retrying without the country filter"
             )
             no_country = {k: v for k, v in base_params.items() if k != "country[]"}

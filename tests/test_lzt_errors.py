@@ -145,6 +145,40 @@ ids = sorted(i["item_id"] for i in items)
 check("unknown-spam item kept", 1 in ids, ids)
 check("known-clean item kept", 2 in ids, ids)
 
+# ---------------------------------------------------------------------------
+# [2b] LZT spam-block integer codes: -3 = real spam, -4 = geo spam block,
+#      -1/None = unknown, 0 = clean, >0 = blocked (days)
+# ---------------------------------------------------------------------------
+print("\n[2b] spam-block code mapping")
+for flag, want_known, want_spam in [
+    (-3, True, True), (-4, False, False), (-1, False, False),
+    (None, False, False), (0, True, False), (7, True, True),
+]:
+    p = L.lzt_client._parse_item(
+        {"item_id": 9, "price": 1, "rub_price": 1,
+         "telegram_country": "IN", "telegram_spam_block": flag}, None
+    )
+    check(f"spam_block={flag!r} -> known={want_known} spam={want_spam}",
+          p["spam_known"] is want_known and p["is_spam"] is want_spam,
+          (p["spam_known"], p["is_spam"]))
+
+# Geo-blocked (-4) items must survive the Good Quality (nonspam) filter.
+GEO = [{"item_id": 11, "price": 1, "rub_price": 1, "telegram_country": "IN",
+        "telegram_spam_block": -4, "telegram_session_created_at": 1700000000}]
+
+async def geo_page(params, retries=2):
+    L.lzt_client.last_status = 200
+    L.lzt_client.last_error = None
+    L.lzt_client.last_error_kind = None
+    return {"items": GEO, "totalItems": 1, "hasNextPage": False}
+
+L.lzt_client._get_telegram_page = geo_page
+geo_items = asyncio.get_event_loop().run_until_complete(
+    L.lzt_client.search_items("India", mode="nonspam", limit=10)
+)
+check("geo-spam-block item kept in Good Quality",
+      any(i["item_id"] == 11 for i in geo_items), geo_items)
+
 
 # ---------------------------------------------------------------------------
 # 3. country-filter fallback recovers stock
@@ -173,6 +207,22 @@ check("fallback flag set", L.lzt_client.last_fallback is True)
 check("country filter was tried first", any("country[]" in c for c in calls))
 check("retry without country filter happened", any("country[]" not in c for c in calls))
 
+
+# ---------------------------------------------------------------------------
+# [5] country[] must be ISO-2 UPPERCASE (live API returns 0 for ISO-3)
+# ---------------------------------------------------------------------------
+print("\n[5] country code conversion (ISO-2 for the API)")
+for name, want in [
+    ("India", "IN"), ("USA", "US"), ("United States", "US"), ("Iran", "IR"),
+    ("Indonesia", "ID"), ("Morocco", "MA"), ("Turkey", "TR"), ("in", "IN"),
+    ("IND", "IN"), ("us", "US"),
+]:
+    got = L.get_lzt_code2(name)
+    check(f"get_lzt_code2({name!r}) == {want}", got == want, got)
+
+check("IN is a supported ISO-2 code", "IN" in L.LZT_SUPPORTED_ISO2)
+check("US is a supported ISO-2 code", "US" in L.LZT_SUPPORTED_ISO2)
+check("ISO-3 USA is NOT sent to the API", "USA" not in L.LZT_SUPPORTED_ISO2)
 
 print(f"\nALL {PASS} CHECKS PASSED")
 
@@ -204,5 +254,21 @@ check("Bearer prefix tolerated", ok is True, why)
 fp = L.token_fingerprint("eyJhbGciOiJSUzUxMiJ9.eyJzdWIiOiIxIn0.sig")
 check("fingerprint hides middle", "eyJhbGci" in fp and "len=" in fp, fp)
 check("fingerprint of empty", L.token_fingerprint("") == "not set")
+
+# ---------------------------------------------------------------------------
+# [5] country[] must be ISO-2 UPPERCASE (live API returns 0 for ISO-3)
+# ---------------------------------------------------------------------------
+print("\n[5] country code conversion (ISO-2 for the API)")
+for name, want in [
+    ("India", "IN"), ("USA", "US"), ("United States", "US"), ("Iran", "IR"),
+    ("Indonesia", "ID"), ("Morocco", "MA"), ("Turkey", "TR"), ("in", "IN"),
+    ("IND", "IN"), ("us", "US"),
+]:
+    got = L.get_lzt_code2(name)
+    check(f"get_lzt_code2({name!r}) == {want}", got == want, got)
+
+check("IN is a supported ISO-2 code", "IN" in L.LZT_SUPPORTED_ISO2)
+check("US is a supported ISO-2 code", "US" in L.LZT_SUPPORTED_ISO2)
+check("ISO-3 USA is NOT sent to the API", "USA" not in L.LZT_SUPPORTED_ISO2)
 
 print(f"\nALL {PASS} CHECKS PASSED")

@@ -195,7 +195,7 @@ check("search sent cheap order", p.get("order_by") == "price_to_down", p.get("or
 check("search sent spam=yes (both cheap)", p.get("spam") == "yes", p.get("spam"))
 check("search sent pmin", p.get("pmin") == "100", p.get("pmin"))
 check("search sent pmax", p.get("pmax") == "900", p.get("pmax"))
-check("search sent ISO-3 country", p.get("country[]") == "IND", p.get("country[]"))
+check("search sent ISO-2 country", p.get("country[]") == "IN", p.get("country[]"))
 check("search returned item", len(items) == 1, len(items))
 check("country total recorded", L.lzt_client.country_totals.get("India") == 7,
       L.lzt_client.country_totals)
