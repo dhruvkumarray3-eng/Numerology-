@@ -43,6 +43,9 @@ _COUNTRIES_CACHE = {"ts": 0.0, "data": []}
 _COUNTRIES_TTL = 3600
 _PRICES_CACHE = {}  # service -> {"ts": float, "data": dict}
 _PRICES_TTL = 120
+_SERVICES_CACHE = {"ts": 0.0, "data": []}
+_SERVICES_TTL = 3600
+_RESOLVED_SERVICE = {}  # requested name -> provider's real service code
 
 # Full app names / slugs -> the short service codes the panel expects.
 _SERVICE_ALIASES = {
@@ -134,6 +137,10 @@ def _parse_countries(data):
                 rows.append({"id": str(cid), "name": str(name)})
                 return
             for k, v in node.items():
+                # SMS-Activate style flat map: {"0": "Russia", "12": "Japan"}.
+                if str(k).isdigit() and isinstance(v, str) and v.strip():
+                    rows.append({"id": str(k), "name": v.strip()})
+                    continue
                 walk(v, str(k) if str(k).isdigit() else hint_id)
         elif isinstance(node, list):
             for item in node:
@@ -255,31 +262,122 @@ async def _countries_map():
 
 
 async def _prices_for(service):
-    """Cached {country_id: {'price','stock'}} for a service."""
+    """Cached {country_id: {'price','stock'}} for a service.
+
+    The provider's service codes are not guaranteed to be the SMS-Activate
+    short codes (``tg``/``wa``/...).  If we ask for prices with a code the
+    panel does not know, it happily returns an empty table -- which used to
+    make every panel render "countries with flags but 0 stock / no price".
+    So we resolve the real code first and try every plausible spelling.
+    """
     svc = _norm_service(service)
     now = time.time()
     cached = _PRICES_CACHE.get(svc)
     if cached and now - cached["ts"] < _PRICES_TTL and cached["data"]:
         return cached["data"]
 
+    candidates = []
+    for cand in (await _resolve_service(service), svc, str(service or "").strip().lower()):
+        cand = str(cand or "").strip().lower()
+        if cand and cand not in candidates:
+            candidates.append(cand)
+
     merged = {}
     # getPrices is the classic, most widely supported action.
     for action in ("getPrices", "getPricesV2", "getPricesV3"):
-        text, err = await _call(action, service=svc)
-        data = _try_json(text) if text else None
-        if data is None:
-            continue
-        parsed = _parse_prices(data, svc)
-        for cid, info in parsed.items():
-            prev = merged.get(cid)
-            if prev is None or (info["price"] and
-                                (prev["price"] is None or info["price"] < prev["price"])):
-                merged[cid] = info
+        for cand in candidates:
+            text, err = await _call(action, service=cand)
+            data = _try_json(text) if text else None
+            if data is None:
+                continue
+            parsed = _parse_prices(data, cand)
+            for cid, info in parsed.items():
+                prev = merged.get(cid)
+                if prev is None or (info["price"] and
+                                    (prev["price"] is None or info["price"] < prev["price"])):
+                    merged[cid] = info
+            if merged:
+                break
         if merged:
             break
     if merged:
         _PRICES_CACHE[svc] = {"ts": now, "data": merged}
     return merged
+
+
+async def _services_list():
+    """Cached provider service catalogue: [{'slug','name'}]."""
+    now = time.time()
+    if _SERVICES_CACHE["data"] and now - _SERVICES_CACHE["ts"] < _SERVICES_TTL:
+        return _SERVICES_CACHE["data"]
+    text, err = await _call("getServices")
+    data = _try_json(text) if text else None
+    rows = []
+    if isinstance(data, dict):
+        for key, val in data.items():
+            if isinstance(val, dict):
+                slug = val.get("code") or val.get("slug") or val.get("service") or key
+                name = val.get("name") or val.get("title") or slug
+                rows.append({"slug": str(slug), "name": str(name)})
+            elif isinstance(val, str):
+                rows.append({"slug": str(key), "name": val})
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                slug = item.get("code") or item.get("slug") or item.get("service")
+                name = item.get("name") or item.get("title") or slug
+                if slug:
+                    rows.append({"slug": str(slug), "name": str(name)})
+    if rows:
+        _SERVICES_CACHE["data"] = rows
+        _SERVICES_CACHE["ts"] = now
+    return rows
+
+
+async def _resolve_service(service):
+    """Map an app name/slug onto the provider's real service code.
+
+    Order: exact alias -> exact slug -> name/slug containment -> alias.
+    Never raises; always returns something usable.
+    """
+    raw = str(service or "").strip()
+    if not raw:
+        return ""
+    key = raw.lower()
+    if key in _RESOLVED_SERVICE:
+        return _RESOLVED_SERVICE[key]
+
+    alias = _norm_service(raw)
+    resolved = None
+
+    services = await _services_list()
+    if services:
+        by_slug = {str(s["slug"]).lower(): s["slug"] for s in services}
+        # 1. exact slug match on the alias, then on the raw name
+        for cand in (alias, key):
+            if cand in by_slug:
+                resolved = by_slug[cand]
+                break
+        # 2. exact name match
+        if resolved is None:
+            for s in services:
+                if str(s["name"]).strip().lower() in (key, alias):
+                    resolved = s["slug"]
+                    break
+        # 3. containment either way (e.g. "telegram" vs "Telegram (TG)")
+        if resolved is None:
+            for s in services:
+                nm = str(s["name"]).strip().lower()
+                sl = str(s["slug"]).strip().lower()
+                if key and (key in nm or nm in key or key in sl):
+                    resolved = s["slug"]
+                    break
+
+    if resolved is None:
+        resolved = alias or key
+    _RESOLVED_SERVICE[key] = resolved
+    return resolved
+
 
 
 async def get_countries(service: str):
@@ -299,6 +397,16 @@ async def get_countries(service: str):
                 "countries": []}
 
     prices = await _prices_for(svc)
+    if not prices:
+        # No price table at all means the service code was not understood by
+        # the panel.  Returning 180 price-less rows is what made the UI look
+        # like it was "only showing country flags", so report it honestly.
+        return {
+            "ok": False,
+            "error": (f"Panel returned no prices for service '{svc}'. "
+                      "Check the service code / that this app is sold on the panel."),
+            "countries": [],
+        }
 
     rows = []
     for c in countries:
@@ -313,11 +421,17 @@ async def get_countries(service: str):
             "id": pid,
         })
 
-    # When we have live prices, only show countries that actually have stock or
-    # a price (so the list is real, not 180 empty rows).
+    # Only show countries that actually have stock or a price (so the list is
+    # real, not 180 empty rows).
     priced = [r for r in rows if r["price"] is not None or r["stock"] > 0]
     if priced:
         rows = priced
+    else:
+        return {
+            "ok": False,
+            "error": f"No country on the panel currently sells '{svc}'.",
+            "countries": [],
+        }
 
     best = {}
     for r in rows:
@@ -362,7 +476,7 @@ async def buy_number(service: str, country: str):
     if not configured():
         return {"ok": False, "error": "TEMPORASMS_API_KEY is not configured",
                 "order_id": None, "phone": None}
-    svc = _norm_service(service)
+    svc = await _resolve_service(service)
     pid = await _resolve_country_id(country)
     if pid is None:
         return {"ok": False, "error": f"Unknown country '{country}' on panel",

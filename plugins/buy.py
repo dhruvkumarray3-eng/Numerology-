@@ -35,6 +35,20 @@ search_state = {}
 change_number_state = {}
 user_states = {}
 
+
+def _lzt_live():
+    """True when a live LZT market key is configured.
+
+    The market is the primary stock source.  BOT_MODE only decides whether
+    *local* (manually uploaded) stock is preferred first -- it must never
+    disable live search, otherwise a bot on the default 'manual' mode shows
+    "No live accounts found" while the market is full of accounts.
+    """
+    try:
+        return bool(get_lzt_key())
+    except Exception:
+        return bool(LZT_API_KEY)
+
 # Comprehensive Country & Dial Code Fallback Map
 COUNTRY_MAP = {
     "india": "India", "in": "India", "+91": "India", "91": "India",
@@ -182,8 +196,6 @@ async def get_countries_list():
     never dead-ends just because one mode/panel has no stock right now.  The
     count next to each country is the real number available (0 = none).
     """
-    bot_mode = get_bot_mode()
-
     # Canonical country names (deduplicated, no aliases).
     try:
         from utils.country_search import all_countries
@@ -191,15 +203,17 @@ async def get_countries_list():
     except Exception:
         base_names = sorted(set(COUNTRY_TO_LZT.keys()))
 
-    if bot_mode == 'manual':
-        rows = cur.execute(
+    # Local (manual) stock is always merged in, whatever the mode.
+    local_counts = {}
+    try:
+        for c_name, count in cur.execute(
             "SELECT country_name, COUNT(*) FROM stock WHERE available=1 "
             "GROUP BY country_name"
-        ).fetchall()
-        if rows:
-            return sorted(rows, key=lambda x: x[0])
-        # No local stock at all -> still let users search/browse any country.
-        return [(name, 0) for name in base_names]
+        ).fetchall():
+            if c_name:
+                local_counts[c_name] = int(count or 0)
+    except Exception:
+        local_counts = {}
 
     all_c = list(base_names)
     try:
@@ -210,20 +224,19 @@ async def get_countries_list():
     except Exception:
         pass
 
-    live = await _live_country_counts() if bot_mode in ('panel', 'hybrid') else {}
+    # LIVE LZT counts whenever a market key exists.  This used to be gated on
+    # BOT_MODE in ('panel','hybrid'), so a bot left on the default 'manual'
+    # mode never asked LZT at all and every country showed 0 -> "No live
+    # accounts found" even though the market had thousands of accounts.
+    live = await _live_country_counts() if _lzt_live() else {}
 
     country_dict = {}
     for c_name in all_c:
         code = get_lzt_code(c_name)
         country_dict[c_name] = live.get(code, 0) if code else 0
 
-    if bot_mode == 'hybrid':
-        local_rows = cur.execute(
-            "SELECT country_name, COUNT(*) FROM stock WHERE available=1 "
-            "GROUP BY country_name"
-        ).fetchall()
-        for c_name, count in local_rows:
-            country_dict[c_name] = max(country_dict.get(c_name, 0), count)
+    for c_name, count in local_counts.items():
+        country_dict[c_name] = max(country_dict.get(c_name, 0), count)
 
     return sorted(country_dict.items(), key=lambda x: x[0])
 
@@ -478,28 +491,30 @@ async def show_years(event, mode, country):
         if len(parts) > 1 and mode == 'bulk':
             mode = parts[0].strip()
             
-    bot_mode = get_bot_mode()
     year_options = []
-    
-    if bot_mode in ('manual', 'hybrid'):
-        if mode == 'spam':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND LOWER(category)='spam' GROUP BY account_year, price", (country,)).fetchall()
-        elif mode == 'nonspam':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL GROUP BY account_year, price", (country,)).fetchall()
-        elif mode == 'no_2fa':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') GROUP BY account_year, price", (country,)).fetchall()
-        elif mode == 'with_2fa':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') GROUP BY account_year, price", (country,)).fetchall()
-        else:
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 GROUP BY account_year, price", (country,)).fetchall()
-            
-        for y, count, price in rows:
-            year_options.append({
-                'year': y, 'count': count, 'price': price, 'source': 'local'
-            })
+
+    # Local (manually uploaded) stock is always considered.
+    if mode == 'spam':
+        rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND LOWER(category)='spam' GROUP BY account_year, price", (country,)).fetchall()
+    elif mode == 'nonspam':
+        rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL GROUP BY account_year, price", (country,)).fetchall()
+    elif mode == 'no_2fa':
+        rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') GROUP BY account_year, price", (country,)).fetchall()
+    elif mode == 'with_2fa':
+        rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') GROUP BY account_year, price", (country,)).fetchall()
+    else:
+        rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 GROUP BY account_year, price", (country,)).fetchall()
+
+    for y, count, price in rows:
+        year_options.append({
+            'year': y, 'count': count, 'price': price, 'source': 'local'
+        })
 
     lzt_used = False
-    if (bot_mode == 'panel' or (bot_mode == 'hybrid' and not year_options)) and get_lzt_key():
+    # LIVE LZT search always runs when a market key exists.  Previously this
+    # was skipped entirely in 'manual' mode, which is why searching a country
+    # that clearly had stock on lzt.market returned "No live accounts found".
+    if _lzt_live():
         lzt_used = True
         try:
             items = await lzt_client.search_items(country, mode=mode, limit=50)
@@ -521,7 +536,7 @@ async def show_years(event, mode, country):
     if not year_options:
         # Be honest: never fabricate "40+" stock.  If the live panel returned
         # nothing (or LZT is not configured) show a clear empty-state card.
-        if bot_mode in ('panel', 'hybrid') and not get_lzt_key():
+        if not _lzt_live():
             return await _lzt_not_configured_card(event, country, mode)
         reason = getattr(lzt_client, "last_error", None)
         return await _no_stock_card(event, mode, country=country, reason=reason)
@@ -558,14 +573,12 @@ async def _live_stock_count(country, year, mode):
     except Exception:
         count = 0
 
-    if count == 0:
-        bot_mode = get_bot_mode()
-        if bot_mode in ("panel", "hybrid") and get_lzt_key():
-            try:
-                items = await lzt_client.search_items(country, year=year, mode=mode, limit=50)
-                count = len(items)
-            except Exception as exc:
-                logger.debug(f"live stock lookup failed for {country}: {exc}")
+    if count == 0 and _lzt_live():
+        try:
+            items = await lzt_client.search_items(country, year=year, mode=mode, limit=50)
+            count = len(items)
+        except Exception as exc:
+            logger.debug(f"live stock lookup failed for {country}: {exc}")
     return count
 
 
@@ -608,7 +621,6 @@ async def process_purchase(event, mode, country, year, price_str):
             mode = parts[0].strip()
             
     uid, price = event.sender_id, int(price_str)
-    bot_mode = get_bot_mode()
     
     async with get_user_lock(uid):
         disc_row = cur.execute("SELECT discount, balance FROM users WHERE user_id=?", (uid,)).fetchone()
@@ -620,22 +632,27 @@ async def process_purchase(event, mode, country, year, price_str):
             return await event.answer("❌ Insufficient Balance!", alert=True)
 
         local_row = None
-        if bot_mode in ('manual', 'hybrid'):
-            if mode == 'spam':
-                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)='spam' LIMIT 1", (country, int(year))).fetchone()
-            elif mode == 'nonspam':
-                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL LIMIT 1", (country, int(year))).fetchone()
-            elif mode == 'no_2fa':
-                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
-            elif mode == 'with_2fa':
-                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, int(year))).fetchone()
-            else:
-                local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 LIMIT 1", (country, int(year))).fetchone()
-        
-        is_local = (bot_mode in ('manual', 'hybrid')) and (local_row is not None)
-        
-        if not is_local and bot_mode == 'manual':
-            return await event.answer("❌ Out of stock!", alert=True)
+        # Local stock is always checked first; if there is none we fall back to
+        # a live LZT purchase.  This must not depend on BOT_MODE, otherwise a
+        # 'manual' bot refuses every live purchase with "Out of stock".
+        if mode == 'spam':
+            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)='spam' LIMIT 1", (country, int(year))).fetchone()
+        elif mode == 'nonspam':
+            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL LIMIT 1", (country, int(year))).fetchone()
+        elif mode == 'no_2fa':
+            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
+        elif mode == 'with_2fa':
+            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, int(year))).fetchone()
+        else:
+            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 LIMIT 1", (country, int(year))).fetchone()
+
+        is_local = local_row is not None
+
+        if not is_local and not _lzt_live():
+            return await event.answer(
+                "\u274c Out of stock! (no local stock and no LZT market key)",
+                alert=True,
+            )
 
         if is_local:
             phone, sess, twofa_pass = local_row
