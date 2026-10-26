@@ -149,3 +149,4 @@
 - [x] Mocked regression suite passes: OTP `codes.code`, fast-buy retry loop + numeric price + phone/2FA + DC 4, year/email/spam/stars parsing, unknown-year item kept
 - [x] `python3 -m compileall` clean
 - [x] Commit on new branch + push + PR + merge (PR #14)
+- [x] Regression suite committed to the repo: `tests/test_lzt_spec.py` (mocked, no token/network/DB) — PR #15
