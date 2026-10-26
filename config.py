@@ -90,17 +90,37 @@ def is_super_admin(uid: int) -> bool:
     except (ValueError, TypeError):
         return False
 
+# ---------------------------------------------------------
+# OFFICIAL LINKS (hardcoded defaults, overridable by env)
+# ---------------------------------------------------------
+# Support group for users
+SUPPORT_URL = os.getenv("SUPPORT_URL", "").strip() or "https://t.me/usersupportgroupby_vendors"
+SUPPORT_USERNAME = "@usersupportgroupby_vendors"
+
+# Owner / vendor master contact
+OWNER_URL = os.getenv("OWNER_URL", "").strip() or "https://t.me/Vendor_masterz"
+OWNER_USERNAME = "@Vendor_masterz"
+
+# Main channel / logger channel (also used for UPDATES)
+UPDATES_URL = os.getenv("UPDATES_URL", "").strip() or "https://t.me/vendorsellings"
+UPDATES_USERNAME = "@vendorsellings"
+
+# Main network channel used for force-join
+MAIN_CHANNEL_URL = os.getenv("MAIN_CHANNEL_URL", "").strip() or "https://t.me/RDXnetworkinghub"
+MAIN_CHANNEL_USERNAME = "@RDXnetworkinghub"
+
 # CHANNELS
-LOG_CHANNEL_ID = env_int("LOG_CHANNEL_ID", 0)
+# Logger channel id (log channel for all bot events)
+LOG_CHANNEL_ID = env_int("LOG_CHANNEL_ID", -1004451890857)
 LOG_CHANNEL_ID_2 = env_int("LOG_CHANNEL_ID_2", 0)
 LOG_CHANNELS = [ch for ch in [LOG_CHANNEL_ID, LOG_CHANNEL_ID_2] if ch]
-CHECK_CHANNELS = env_list("CHECK_CHANNELS", "")
-JOIN_URLS = env_list("JOIN_URLS", "")
+
+# Force-join: single main network channel
+CHECK_CHANNELS = env_list("CHECK_CHANNELS", "") or ["@RDXnetworkinghub"]
+JOIN_URLS = env_list("JOIN_URLS", "") or ["https://t.me/RDXnetworkinghub"]
 
 # LINKS & MEDIA
 TERMS_URL = os.getenv("TERMS_URL", "").strip() or "https://github.com/dhruvkumarray3-eng/Numerology-/blob/main/TERMS_AND_CONDITIONS.md"
-SUPPORT_URL = os.getenv("SUPPORT_URL", "").strip() or "https://t.me/Sexypremiums"
-UPDATES_URL = os.getenv("UPDATES_URL", "").strip() or "https://t.me/mafiaXupdates"
 
 # PAYMENT & API DETAILS
 CWALLET_QR = os.getenv("CWALLET_QR", "").strip()

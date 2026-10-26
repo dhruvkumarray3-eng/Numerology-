@@ -521,6 +521,73 @@ def remove_log_channel_db(channel_id):
     chs = [c for c in chs if str(c) != c_str]
     set_log_channels_db(chs)
 
+# ---------------------------------------------------------
+# OFFICIAL LINKS MIGRATION
+# ---------------------------------------------------------
+# The bot ships with one official support group, one owner contact,
+# one logger channel and one main network channel. Older deployments may
+# still have different values stored in the settings table, so this runs
+# once and force-aligns them with config.py.
+LINKS_MIGRATION_KEY = "official_links_v2"
+
+
+def apply_official_links_migration(force=False):
+    """Force-align support / owner / logger / force-join links with config.py.
+
+    Runs only once per database unless ``force=True`` is passed.
+    Returns True when values were written, False when already applied.
+    """
+    try:
+        if not force:
+            done = cur.execute(
+                "SELECT value FROM settings WHERE key=?", (LINKS_MIGRATION_KEY,)
+            ).fetchone()
+            if done and str(done[0]).strip() == "done":
+                return False
+
+        from config import (
+            CHECK_CHANNELS,
+            JOIN_URLS,
+            LOG_CHANNEL_ID,
+            SUPPORT_URL,
+            OWNER_URL,
+            UPDATES_URL,
+        )
+
+        channels = [c for c in (CHECK_CHANNELS or []) if str(c).strip()]
+        urls = [u for u in (JOIN_URLS or []) if str(u).strip()]
+
+        set_fsub_data(channels, urls)
+        set_fsub_status("on")
+
+        log_ids = [LOG_CHANNEL_ID] if LOG_CHANNEL_ID else []
+        set_log_channels_db(log_ids)
+
+        for key, value in (
+            ("support_url", SUPPORT_URL),
+            ("owner_url", OWNER_URL),
+            ("updates_url", UPDATES_URL),
+        ):
+            cur.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                (key, value),
+            )
+
+        cur.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            (LINKS_MIGRATION_KEY, "done"),
+        )
+        db.commit()
+        logger.info(
+            "\u2705 Official links applied: support=%s owner=%s logger=%s join=%s",
+            SUPPORT_URL, OWNER_URL, LOG_CHANNEL_ID, urls,
+        )
+        return True
+    except Exception as exc:  # never break startup
+        logger.warning(f"\u26a0\ufe0f Official links migration skipped: {exc}")
+        return False
+
+
 def get_start_image_url():
     res = cur.execute("SELECT value FROM settings WHERE key='start_image'").fetchone()
     if res and res[0]:
@@ -535,8 +602,8 @@ def get_source_codes():
     rows = cur.execute("SELECT id, title, description, price, file_content, available FROM source_codes WHERE available=1").fetchall()
     if not rows:
         defaults = [
-            ("Main Store Bot (Full Modular Code)", "Complete full modular bot source code with OTP buying, SMM services, panels & instant delivery.", 500.0, "https://github.com/SUDEEPBOTS/Numbott"),
-            ("OTP & SMM Bot Source Code", "Complete Python Telethon based automated OTP & SMM bot source code.", 299.0, "https://github.com/SUDEEPBOTS/Numbott")
+            ("Main Store Bot (Full Modular Code)", "Complete full modular bot source code with OTP buying, SMM services, panels & instant delivery.", 500.0, "https://github.com/dhruvkumarray3-eng/Numerology-"),
+            ("OTP & SMM Bot Source Code", "Complete Python Telethon based automated OTP & SMM bot source code.", 299.0, "https://github.com/dhruvkumarray3-eng/Numerology-")
         ]
         for t, d, p, f in defaults:
             cur.execute("INSERT INTO source_codes (title, description, price, file_content) VALUES (?,?,?,?)", (t, d, p, f))

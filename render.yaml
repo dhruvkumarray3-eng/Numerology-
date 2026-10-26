@@ -16,11 +16,19 @@ services:
       - key: ADMIN_ID
         sync: false
       - key: LOG_CHANNEL_ID
-        sync: false
+        value: "-1004451890857"
       - key: CHECK_CHANNELS
-        sync: false
+        value: "@RDXnetworkinghub"
       - key: JOIN_URLS
-        sync: false
+        value: "https://t.me/RDXnetworkinghub"
+      - key: SUPPORT_URL
+        value: "https://t.me/usersupportgroupby_vendors"
+      - key: OWNER_URL
+        value: "https://t.me/Vendor_masterz"
+      - key: UPDATES_URL
+        value: "https://t.me/vendorsellings"
+      - key: MAIN_CHANNEL_URL
+        value: "https://t.me/RDXnetworkinghub"
       - key: LZT_API_KEY
         sync: false
       - key: LZT_MARGIN

@@ -13,6 +13,7 @@ os.makedirs("sessions", exist_ok=True)
 from plugins import register_all_handlers
 from utils.health import start_health_server
 from utils.helpers import set_bot_instance
+from database import apply_official_links_migration
 
 
 def validate_runtime_config():
@@ -49,17 +50,23 @@ async def main():
     # 2. Enable HTML parse mode for Custom/Premium Emojis & Formatting
     bot.parse_mode = 'html'
 
-    # 3. Register all plugin handlers (start, buy, admin, callbacks, etc.)
+    # 3. Align support / owner / logger / force-join links with config.py
+    try:
+        apply_official_links_migration()
+    except Exception as e:
+        logger.warning(f"\u26a0\ufe0f Link migration failed: {e}")
+
+    # 4. Register all plugin handlers (start, buy, admin, callbacks, etc.)
     set_bot_instance(bot)  # lets background tasks (OTP poller) send messages
     register_all_handlers(bot)
 
-    # 4. Bot Connect & Start
+    # 5. Bot Connect & Start
     await bot.start(bot_token=BOT_TOKEN)
     print("==================================================", flush=True)
     print("🚀 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!", flush=True)
     print("==================================================", flush=True)
 
-    # 5. Reconnection Loop
+    # 6. Reconnection Loop
     while True:
         try:
             if not bot.is_connected():

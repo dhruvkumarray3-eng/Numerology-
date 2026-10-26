@@ -48,7 +48,7 @@ def _support_handle():
     try:
         url = get_support_url()
     except Exception:
-        url = "https://t.me/Sexypremiums"
+        url = "https://t.me/usersupportgroupby_vendors"
     if url.startswith("https://t.me/"):
         return url, "@" + url.split("/")[-1]
     return url, url
@@ -57,8 +57,17 @@ def _support_handle():
 # ---------------------------------------------------------------------------
 # user card (3 - 5 commands only)
 # ---------------------------------------------------------------------------
+def _owner_handle():
+    try:
+        from config import OWNER_URL, OWNER_USERNAME
+    except Exception:
+        OWNER_URL, OWNER_USERNAME = "https://t.me/Vendor_masterz", "@Vendor_masterz"
+    return OWNER_URL, OWNER_USERNAME
+
+
 def _user_help_text():
     support_url, support_handle = _support_handle()
+    owner_url, owner_handle = _owner_handle()
     return (
         "<blockquote expandable>"
         "\U0001F198 <b>\u1d07\u1d00\u0280\u1d0f\u1d0d\u1d07\u1d0e \u029c\u1d07\u029f\u1d18 \u1d04\u1d07\u0274\u1d1b\u1d07\u0280</b>\n\n"
@@ -67,7 +76,8 @@ def _user_help_text():
         "\U0001F4E6 <b>/myhistory</b> \u2014 \u028f\u1d0f\u1d1c\u0280 \u1d0f\u0280\u1d05\u1d07\u0280s &amp; \u1d18\u1d00\u028f\u1d0d\u1d07\u0274\u1d1bs\n"
         "\U0001F194 <b>/myid</b> \u2014 \u028f\u1d0f\u1d1c\u0280 \u1d1b\u1d07\u029f\u1d07\u0262\u0280\u1d00\u1d0d \u026a\u1d05 &amp; \u1d04\u1d0f\u1d05\u1d07\n"
         "\U0001F4AC <b>/support</b> \u2014 \u1d04\u1d0f\u0274\u1d1b\u1d00\u1d04\u1d1b \u029c\u1d07\u029f\u1d18\n\n"
-        f"\U0001F4E9 \u1d0d\u1d07\u1d07\u1d05 \u029c\u1d07\u029f\u1d18? <a href='{support_url}'>{html.escape(support_handle)}</a>"
+        f"\U0001F465 \u1d05\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b \u0262\u0280\u1d0f\u1d1c\u1d18: <a href='{support_url}'>{html.escape(support_handle)}</a>\n"
+        f"\U0001F451 \u1d0f\u1d21\u0274\u1d07\u0280: <a href='{owner_url}'>{html.escape(owner_handle)}</a>"
         "</blockquote>"
     )
 
@@ -77,6 +87,7 @@ def _user_help_text():
 # ---------------------------------------------------------------------------
 def _admin_help_text():
     support_url, support_handle = _support_handle()
+    owner_url, owner_handle = _owner_handle()
     return (
         "<blockquote expandable>"
         "\U0001F451 <b>\u1d00\u1d05\u1d0d\u026a\u0274 &amp; \u1d0f\u1d21\u0274\u1d07\u0280 \u2014 \u1d04\u1d0f\u1d0d\u1d0d\u1d00\u0274\u1d05 \u0280\u1d07\u1d18\u1d07\u0280\u1d1b\u1d0f\u026a\u0280\u028f</b>\n"
@@ -138,7 +149,8 @@ def _admin_help_text():
 
         "<blockquote expandable>"
         "\U0001F4E9 <b>\u1d05\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b</b>\n"
-        f"<a href='{support_url}'>{html.escape(support_handle)}</a>"
+        f"\U0001F465 \u1d05\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b \u0262\u0280\u1d0f\u1d1c\u1d18: <a href='{support_url}'>{html.escape(support_handle)}</a>\n"
+        f"\U0001F451 \u1d0f\u1d21\u0274\u1d07\u0280: <a href='{owner_url}'>{html.escape(owner_handle)}</a>"
         "</blockquote>"
     )
 
@@ -148,9 +160,11 @@ def _admin_help_text():
 # ---------------------------------------------------------------------------
 def _user_buttons():
     support_url, _ = _support_handle()
+    owner_url, owner_handle = _owner_handle()
     return [
         [style_btn("\U0001F3E0 \u1d0d\u1d00\u026a\u0274 \u1d0d\u1d07\u0274\u1d1c", b"dashboard_main", "success", icon=5409320020058584473)],
         [style_url("\U0001F4AC \u1d05\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b", support_url, "primary", icon=6129732880529628243)],
+        [style_url("\U0001F451 \u1d0f\u1d21\u0274\u1d07\u0280", owner_url, "primary", icon=5409098988156629257)],
     ]
 
 

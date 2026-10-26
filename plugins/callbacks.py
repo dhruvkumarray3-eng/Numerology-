@@ -92,7 +92,7 @@ async def show_more_menu(event):
     pct_row = cur.execute("SELECT value FROM settings WHERE key='ref_percent'").fetchone()
     pct = pct_row[0] if pct_row else "3"
     
-    from config import TERMS_URL
+    from config import TERMS_URL, OWNER_URL
     from database import get_support_url
     
     msg = (f"<blockquote>💬 <b>𝐌ᴏʀᴇ 𝐎ᴘᴛɪᴏɴs & 𝐓ᴏᴏʟs</b>\n\n"
@@ -104,7 +104,8 @@ async def show_more_menu(event):
         [style_btn("🎁 Refer & Earn", b"view_referrals", "success", icon=5354889508674360491)],
         [style_btn("📊 Live Stock", b"stk_pg|1", "primary", icon=6129627894349045589)],
         [Button.url("📜 Terms & Conditions", TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else get_support_url())],
-        [Button.url("📩 Support", get_support_url())],
+        [Button.url("\U0001F465 Support Group", get_support_url())],
+        [Button.url("\U0001F451 Owner", OWNER_URL)],
         [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)]
     ]
     try: await event.edit(msg, buttons=btns)
@@ -259,6 +260,13 @@ def register_callbacks(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^(📩 𝐒ᴜᴘᴘᴏʀᴛ|📩 Support)$"))
     async def msg_support(e):
         url = get_support_url()
-        msg = f"<blockquote>📩 <b>𝐒ᴜᴘᴘᴏʀᴛ</b></blockquote>\n\n<blockquote>𝐅ᴏʀ ᴀɴʏ ɪssᴜᴇs ᴏʀ ǫᴜᴇsᴛɪᴏɴs, ᴄᴏɴᴛᴀᴄᴛ ᴏᴜʀ sᴜᴘᴘᴏʀᴛ:</blockquote>"
-        btns = [[Button.url("📩 𝐂ᴏɴᴛᴀᴄᴛ 𝐒ᴜᴘᴘᴏʀᴛ", url)]]
+        from config import OWNER_URL, OWNER_USERNAME, SUPPORT_USERNAME
+        msg = (f"<blockquote>\U0001F4E9 <b>𝐒\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b</b></blockquote>\n\n"
+               f"<blockquote>𝐅\u1d0f\u0280 \u1d00\u0274\u028f \u026ass\u1d1c\u1d07s \u1d0f\u0280 \u01eb\u1d1c\u1d07s\u1d1b\u026a\u1d0f\u0274s, \u1d04\u1d0f\u0274\u1d1b\u1d00\u1d04\u1d1b \u1d0f\u1d1c\u0280 s\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b:\n\n"
+               f"\U0001F465 <b>Support Group:</b> {SUPPORT_USERNAME}\n"
+               f"\U0001F451 <b>Owner:</b> {OWNER_USERNAME}</blockquote>")
+        btns = [
+            [Button.url("\U0001F465 𝐒\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b 𝐆\u1d1b\u1d0f\u1d1c\u1d18", url)],
+            [Button.url("\U0001F451 𝐎\u1d21\u0274\u1d07\u0280", OWNER_URL)],
+        ]
         await e.respond(msg, buttons=btns)

@@ -1,9 +1,15 @@
 {
   "name": "Numbott Telethon",
   "description": "Advanced Modular Telegram Account Shop Bot with Custom UI and Multi-Payment Systems.",
-  "repository": "https://github.com/SUDEEPBOTS/Numbott",
+  "repository": "https://github.com/dhruvkumarray3-eng/Numerology-",
   "logo": "https://cdn.worldvectorlogo.com/logos/telegram-1.svg",
-  "keywords": ["telegram", "bot", "shop", "telethon", "python"],
+  "keywords": [
+    "telegram",
+    "bot",
+    "shop",
+    "telethon",
+    "python"
+  ],
   "env": {
     "API_ID": {
       "description": "Get this from my.telegram.org",
@@ -22,20 +28,23 @@
       "required": true
     },
     "LOG_CHANNEL_ID": {
-      "description": "Primary Log Channel ID",
-      "required": true
+      "description": "Logger channel ID (default -1004451890857)",
+      "required": false,
+      "value": "-1004451890857"
     },
     "LOG_CHANNEL_ID_2": {
       "description": "Secondary Log Channel ID (Optional)",
       "required": false
     },
     "CHECK_CHANNELS": {
-      "description": "Comma separated Must-Join Channel IDs",
-      "required": true
+      "description": "Must-Join main network channel (default @RDXnetworkinghub)",
+      "required": false,
+      "value": "@RDXnetworkinghub"
     },
     "JOIN_URLS": {
-      "description": "Comma separated Must-Join Channel URLs",
-      "required": true
+      "description": "Must-Join channel URLs (default https://t.me/RDXnetworkinghub)",
+      "required": false,
+      "value": "https://t.me/RDXnetworkinghub"
     },
     "UPI_ID": {
       "description": "Your UPI ID for Indian Payments",
@@ -47,6 +56,26 @@
     },
     "CWALLET_QR": {
       "description": "Your Crypto Wallet QR Image URL",
+      "required": false
+    },
+    "SUPPORT_URL": {
+      "description": "User support group",
+      "value": "https://t.me/usersupportgroupby_vendors",
+      "required": false
+    },
+    "OWNER_URL": {
+      "description": "Owner / vendor master contact",
+      "value": "https://t.me/Vendor_masterz",
+      "required": false
+    },
+    "UPDATES_URL": {
+      "description": "Logger / updates channel link",
+      "value": "https://t.me/vendorsellings",
+      "required": false
+    },
+    "MAIN_CHANNEL_URL": {
+      "description": "Main network channel for force-join",
+      "value": "https://t.me/RDXnetworkinghub",
       "required": false
     }
   },

@@ -314,10 +314,14 @@ async def cmd_myid(e, bot=None):
 
 async def cmd_support(e):
     from database import get_support_url
+    from config import OWNER_URL, OWNER_USERNAME, SUPPORT_USERNAME
     url = get_support_url()
     await e.reply(
         f"<blockquote expandable>💬 <b>Support</b>\n\n"
-        f"👉 <a href='{url}'>{html.escape(url)}</a></blockquote>"
+        f"👥 <b>Support Group:</b> {SUPPORT_USERNAME}\n"
+        f"👑 <b>Owner:</b> {OWNER_USERNAME}\n\n"
+        f"👉 <a href='{url}'>{html.escape(url)}</a>\n"
+        f"👉 <a href='{OWNER_URL}'>{html.escape(OWNER_URL)}</a></blockquote>"
     )
 
 

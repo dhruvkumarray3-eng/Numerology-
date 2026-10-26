@@ -233,6 +233,38 @@ nothing breaks.
 **QC ID** on the welcome card is built from the bot's own Telegram ID
 (`QC_ID_PREFIX` + last 8 digits of the bot id), so it always matches the bot.
 
+## 🔗 Official links (hardcoded — no env needed)
+
+These are baked into `config.py` as defaults, so the bot works out of the box.
+You can still override any of them with an environment variable of the same name.
+
+| Purpose | Link | Env override |
+|---|---|---|
+| 👥 User support group | https://t.me/usersupportgroupby_vendors | `SUPPORT_URL` |
+| 👑 Owner / vendor master | https://t.me/Vendor_masterz | `OWNER_URL` |
+| 📢 Main network channel (force-join) | https://t.me/RDXnetworkinghub | `MAIN_CHANNEL_URL` |
+| 📜 Logger / updates channel | https://t.me/vendorsellings | `UPDATES_URL` |
+| 🧾 Logger channel ID | `-1004451890857` | `LOG_CHANNEL_ID` |
+
+Where they appear in the bot:
+
+* **Support group** — `/support`, the 📩 Support reply-keyboard button, the main menu
+  support line, the More menu, the `/help` card, and the Terms & Conditions.
+* **Owner** — shown directly under the support line on the welcome card, on the `/support`
+  card, in the More menu, and in the `/help` card (both user and admin views).
+* **Main network channel** — the single force-join gate on `/start`
+  (`CHECK_CHANNELS=@RDXnetworkinghub`, `JOIN_URLS=https://t.me/RDXnetworkinghub`).
+* **Logger channel** — every order, deposit, redeem and panel event is mirrored to
+  `-1004451890857`.
+
+> ⚠️ The bot must be an **admin** in `@RDXnetworkinghub` for the force-join check to work,
+> and an **admin** in the logger channel `-1004451890857` for logs to land.
+
+A one-time migration (`apply_official_links_migration()` in `database.py`, run from
+`main.py` on boot) overwrites any older support / owner / logger / force-join values
+that may already be stored in the `settings` table, so existing deployments get
+aligned automatically without touching the database by hand.
+
 ## 🆘 `/help` — one card, two audiences
 
 `/help` (aliases `/commands`, `/cmds`) is **role-aware**:

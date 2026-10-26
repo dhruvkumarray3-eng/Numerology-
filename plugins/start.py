@@ -61,6 +61,8 @@ async def send_main_menu(bot, event, uid):
     start_img = get_start_image_url()
     support_url = get_support_url()
     support_handle = f"@{support_url.split('/')[-1]}" if support_url.startswith("https://t.me/") else support_url
+    from config import OWNER_URL, OWNER_USERNAME
+    owner_handle = OWNER_USERNAME
     
     update_link = UPDATES_URL
     feedback_link = support_url
@@ -90,7 +92,8 @@ async def send_main_menu(bot, event, uid):
            f"💳 <b>𝐁ᴀʟᴀɴᴄᴇ:</b> <code>₹{bal:.2f}</code>\n"
            f"🏆 <b>𝐕𝐈𝐏:</b> {vip}"
            f"</blockquote>\n"
-           f"<blockquote>✈️ <b>𝐒ᴜᴘᴘᴏʀᴛ :</b> <a href='{support_url}'>{support_handle}</a></blockquote>")
+           f"<blockquote>✈️ <b>𝐒ᴜᴘᴘᴏʀᴛ :</b> <a href='{support_url}'>{support_handle}</a></blockquote>\n"
+           f"<blockquote>\U0001F451 <b>𝐎\u1d21\u0274\u1d07\u0280 :</b> <a href='{OWNER_URL}'>{owner_handle}</a></blockquote>")
            
     buttons = [
         [style_btn("📲 𝓑𝓾𝔂 𝓐𝓬𝓬𝓸𝓾𝓷𝓽", b"open_buy_categories", "success", icon=5440627033111557670)],
@@ -103,7 +106,7 @@ async def send_main_menu(bot, event, uid):
         [style_btn("🖥 𝓢𝓮𝓻𝓿𝓮𝓻𝓼", b"servers_menu", "primary", icon=5409119256107297715)],
         [style_btn("📦 𝓜𝓸𝓻𝓮 𝓒𝓸𝓷𝓽𝓮𝓷𝓽", b"more_content", "primary", icon=5409320020058584473)],
         [style_btn("💳 𝓡𝓮𝓬𝓱𝓪𝓻𝓰𝓮", b"open_deposit_menu", "primary", icon=5409271925014801629), style_btn("🧙 𝓟𝓻𝓸𝓯𝓲𝓵𝓮", b"profile_stats", "primary", icon=6203982793379154737)],
-        [style_btn("⚙️ 𝓢𝓮𝓽𝓽𝓲𝓷𝓰𝓼", b"settings_menu", "primary", icon=5408995930416362034), style_url("📑 𝓕𝓮𝓮𝓭𝓫𝓪𝓬𝓴 ↗️", feedback_link, "primary", icon=6129732880529628243)]
+        [style_btn("⚙️ 𝓢𝓮𝓽𝓽𝓲𝓷𝓰𝓼", b"settings_menu", "primary", icon=5408995930416362034), style_url("📑 𝓕𝓮𝓮𝓭𝓫𝓪𝓬𝓴 ↗️", feedback_link, "primary", icon=6129732880529628243)],
         [style_btn("🆘 𝐇𝐞𝐥𝐩 𝐂𝐨𝐦𝐦𝐚𝐧𝐝𝐬", b"help_main", "success", icon=6129732880529628243)],
     ]
     

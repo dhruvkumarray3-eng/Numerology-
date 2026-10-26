@@ -32,8 +32,10 @@ Operational logs may contain Telegram user IDs, usernames, order status, and dia
 
 ## 6. Support and updates
 
-- Support Telegram: https://t.me/Sexypremiums
-- Updates and other content: https://t.me/mafiaXupdates
+- Support group: https://t.me/usersupportgroupby_vendors
+- Owner / vendor master: https://t.me/Vendor_masterz
+- Main network channel: https://t.me/RDXnetworkinghub
+- Logger / updates channel: https://t.me/vendorsellings
 
 Terms may be updated when the service, providers, or legal requirements change. Continued use after an update means you accept the revised terms.
 

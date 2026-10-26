@@ -887,7 +887,7 @@ async def admin_actions(event):
 
             elif action_data == "set_all_fsub" and has_perm(uid, 'p_settings'):
                 ch_resp = await get_reply(f"📢 <b>Enter all Must-Join Channel IDs (Comma-separated):</b>\n<i>Example: -1003875933534, -1003965638370</i>")
-                url_resp = await get_reply(f"🔗 <b>Enter all Join URLs (Comma-separated, same order):</b>\n<i>Example: https://t.me/sivamXpruff, https://t.me/+z_62d3jVVtkzYTZl</i>")
+                url_resp = await get_reply(f"🔗 <b>Enter all Join URLs (Comma-separated, same order):</b>\n<i>Example: https://t.me/RDXnetworkinghub, https://t.me/+z_62d3jVVtkzYTZl</i>")
                 
                 ch_list = [c.strip() for c in ch_resp.text.split(",") if c.strip()]
                 url_list = [u.strip() for u in url_resp.text.split(",") if u.strip()]
