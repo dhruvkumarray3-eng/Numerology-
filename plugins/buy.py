@@ -531,7 +531,14 @@ async def show_years(event, mode, country):
                     'year': y, 'count': info['count'], 'price': info['price'], 'source': 'lzt'
                 })
         except Exception as e:
+            # Surface the real reason on the empty-state card instead of a
+            # generic "no stock" message (this is how a missing balance
+            # attribute used to look like an empty market).
             logger.error(f"Error fetching LZT years for {country}: {e}")
+            try:
+                lzt_client.last_error = f"LZT search failed: {e}"
+            except Exception:
+                pass
 
     if not year_options:
         # Be honest: never fabricate "40+" stock.  If the live panel returned
