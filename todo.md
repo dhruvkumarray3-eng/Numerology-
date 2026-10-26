@@ -103,3 +103,20 @@
 - [x] Verified OTP provider layer: providers=['temporasms'], stock/price/buy/otp all OK
 - [x] `python3 -m compileall` clean; no `parse_sticky_items` / invented REST paths remain
 - [x] Commit on new branch + push + PR + merge (PR #11)
+
+## 14. LZT live search + TemporaSMS prices + every filter applied (Request G)
+- [x] Root cause (LZT): every LZT call was gated on `bot_mode in ('panel','hybrid')`, but the default mode is `manual` -> the bot never queried LZT, so every country showed 0 and the UI said "No live accounts found"
+- [x] Added `_lzt_live()` (key-based, not mode-based) and used it in `get_countries_list()`, `show_years()`, `_live_stock_count()`, `process_purchase()`
+- [x] Local (manual) stock is always merged with live LZT counts instead of being mode-gated
+- [x] `process_purchase()` now falls back to a live LZT purchase when there is no local row (was "Out of stock" in manual mode)
+- [x] Root cause (TemporaSMS): `_prices_for()` asked for prices with short codes (`tg`/`wa`/`go`); unknown codes return an empty table -> 180 flag-only rows with no price/stock
+- [x] Added `_services_list()` + `_resolve_service()` (exact alias -> slug -> name -> containment) and probe `getPrices`/`getPricesV2`/`getPricesV3` with candidate spellings
+- [x] `get_countries()` now returns `ok: False` with a real error instead of flag-only rows when there are no prices
+- [x] `plugins/product_panels.py`: `_countries_for()` records `_last_error`; `show_countries()` shows an honest "panel is not returning live data" card instead of the hardcoded flag fallback
+- [x] Fixed `_parse_countries()` to handle the real SMS-Activate flat map `{"0":"Russia","12":"Japan"}` (previously returned an empty list -> "Could not load country list")
+- [x] LZT: added missing filter mappings `email=yes/no` (with_email/no_email) and `session_age=180` (aged)
+- [x] Fixed `_parse_item()` spam bug: `telegram_spam_block=False` was parsed as `is_spam=True` (because `False != -1`), hiding every clean account from the Non-Spam filter
+- [x] Verified with mocked LZT transport: `GET /telegram?country[]=KAZ&order_by=price_to_up` plus spam/password/premium/dc_id[]/min_stars/email/session_age for each filter
+- [x] Verified with mocked TemporaSMS transport: balance 413.0, countries ru/jp with real price+stock, buy, OTP, cancel, honest error for an unsold service
+- [x] `python3 -m compileall` clean
+- [ ] Commit on new branch + push + PR + merge

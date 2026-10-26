@@ -536,8 +536,11 @@ class LZTClient:
             )
 
             spam_flag = item.get("telegram_spam_block")
-            spam_known = spam_flag is not None
-            is_spam = spam_known and spam_flag != -1
+            # LZT returns a real boolean (or -1 when unknown).  The old check
+            # `spam_flag != -1` treated False as spam (because False != -1),
+            # which silently hid every clean account from the Non-Spam filter.
+            spam_known = spam_flag is not None and spam_flag != -1
+            is_spam = bool(spam_flag) if spam_known else False
 
             created_ts = (
                 item.get("telegram_session_created_at")
@@ -634,11 +637,20 @@ class LZTClient:
         if mode == 'premium':
             base_params["premium"] = "yes"
 
+        if mode == 'no_email':
+            base_params["email"] = "no"
+        elif mode == 'with_email':
+            base_params["email"] = "yes"
+
         if mode == 'dc5':
             base_params["dc_id[]"] = "5"
 
         if mode == 'stars':
             base_params["min_stars"] = "1"
+
+        if mode == 'aged':
+            # "Aged / old accounts": session created at least ~6 months ago.
+            base_params["session_age"] = "180"
 
         balance_id, _, _ = await self.get_balance_info()
 

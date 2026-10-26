@@ -265,6 +265,7 @@ def _filter_apps(query):
 #         "price": float, "mode": "search"}
 panel_state = {}
 _cache = {}  # key -> {"ts": float, "countries": [...]}
+_last_error = {}  # cache key -> human readable provider error
 
 
 # --------------------------------------------------------------------------
@@ -340,23 +341,30 @@ async def _countries_for(key, uid=None, force=False):
 
     `force=True` bypasses the cache and re-queries the provider, which is what
     the Buy flow does when it finds a country without a live price.
+
+    The last provider error is stored in ``_last_error`` so the UI can explain
+    *why* a panel is empty instead of silently showing a hardcoded flag list.
     """
     service = _service_for(key, uid)
     cache_key = f"{key}:{service}"
     cached = _cache.get(cache_key)
     if not force and cached and time.time() - cached["ts"] < CACHE_TTL and cached["countries"]:
+        _last_error.pop(cache_key, None)
         return cached["countries"], True
     try:
         result = await asyncio.wait_for(temporasms.get_countries(service), timeout=20)
     except asyncio.TimeoutError:
         logger.warning(f"TemporaSMS get_countries({service}) timed out")
-        result = {"ok": False, "countries": []}
+        result = {"ok": False, "countries": [],
+                  "error": "The panel did not answer in time."}
     except Exception as exc:
         logger.warning(f"TemporaSMS get_countries({service}) failed: {exc}")
-        result = {"ok": False, "countries": []}
+        result = {"ok": False, "countries": [], "error": str(exc)}
     if result.get("ok") and result.get("countries"):
         _cache[cache_key] = {"ts": time.time(), "countries": result["countries"]}
+        _last_error.pop(cache_key, None)
         return result["countries"], True
+    _last_error[cache_key] = result.get("error") or "No live data from the panel."
     if cached and cached["countries"]:
         return cached["countries"], False
     return temporasms.fallback_countries(), False
@@ -627,6 +635,23 @@ async def show_countries(event, key, page=1, query=None):
         return await show_allotp_hub(event)
 
     countries, live = await _countries_for(key, uid)
+    if not live and not query:
+        err = _last_error.get(f"{key}:{_service_for(key, uid)}")
+        if err:
+            msg = (
+                f"<blockquote expandable>{p['icon']} <b>{p['title']}</b>\n\n"
+                "\u26a0\ufe0f <b>The panel is not returning live data right now.</b>\n\n"
+                f"<i>{html.escape(str(err))}</i>\n\n"
+                "This is a provider/API-key issue, not a stock issue. Please tap "
+                "Refresh in a moment or contact support.</blockquote>"
+            )
+            btns = [
+                [style_btn("\U0001F504 Refresh", f"pp_open|{key}", "success",
+                           icon=5409320020058584473)],
+                [style_btn("\U0001F519 Back", b"pp_hub", "danger",
+                           icon=6129812419028982717)],
+            ]
+            return await _safe_edit(event, msg, btns)
     filtered = _filter_countries(countries, query)
     if query and not filtered:
         # The cached list may be stale or empty - force a live refresh once
