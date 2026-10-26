@@ -145,6 +145,10 @@ def _admin_help_text():
         "/setchangefee &lt;n&gt; \u2014 \u0274\u1d1c\u1d0d\u0299\u1d07\u0280 \u1d04\u029c\u1d00\u0274\u0262\u1d07 \u0493\u1d07\u1d07\n"
         "/lztmargin &lt;n&gt; \u2022 /setlztmargin &lt;n&gt; \u2014 \u029f\u1d22\u1d1b \u1d0d\u1d00\u0280\u1d0b\u1d1c\u1d18 \u1d18\u1d07\u0280 \u026a\u1d1b\u1d07\u1d0d\n"
         "/setsticker \u2014 \u1d05\u1d07\u1d1b \u1d1b\u029c\u1d07 \u1d05\u1d1b\u1d00\u0280\u1d1b \u1d05\u1d1b\u026a\u1d04\u1d0b\u1d07\u0280"
+        "/setpack [pack-link] \u2014 learn a premium sticker pack (countries + apps)\n"
+        "/pack \u2022 /packsync \u2014 sticker pack status / re-sync\n"
+        "/packmode off|country|all \u2014 when stickers are sent\n"
+        "/mapsticker [name] \u2014 reply to a sticker to pin it for a name"
         "</blockquote>\n"
 
         "<blockquote expandable>"

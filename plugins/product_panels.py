@@ -40,6 +40,7 @@ from utils.markup import (
     format_dual_price, format_dual_from_inr, price_breakdown,
 )
 from utils import mongo_store
+from utils import stickers as sticker_engine
 
 PAGE_SIZE = 12
 CACHE_TTL = 240
@@ -627,6 +628,8 @@ async def show_countries(event, key, page=1, query=None):
         f"{live_line}\n<i>Page {page}/{total_pages}</i></blockquote>"
     )
     await _safe_edit(event, msg, btns)
+    if dynamic and app:
+        await sticker_engine.send_for_event(event, _app_label(app), mode_required="all")
 
 
 async def start_search(event, key):
