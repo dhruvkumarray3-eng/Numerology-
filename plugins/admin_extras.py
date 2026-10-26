@@ -14,7 +14,7 @@ Admin:
 
 User:
     /myhistory                    -> own recent orders / deposits / redeems
-    /myid                         -> own Telegram id + QC id
+    /myid                         -> own Telegram id + RDX id
     /support                      -> support link
 """
 import html
@@ -28,6 +28,7 @@ from config import (
     QC_ID_PREFIX,
     format_price,
     logger,
+    PE_ID, PE_USER, PE_TAG, PE_STAR, PE_CROWN, PE_CHECK, PE_GIFT,
 )
 from database import cur, db, ensure_user, is_admin, get_user_currency
 from utils.keyboards import style_btn
@@ -44,7 +45,7 @@ def _is_admin(uid):
         return bool(ADMIN_ID and uid == ADMIN_ID)
 
 
-def _qc_id(bot_id):
+def _rdx_id(bot_id):
     return f"{QC_ID_PREFIX}-{str(bot_id)[-8:]}" if bot_id else f"{QC_ID_PREFIX}-00000000"
 
 
@@ -313,10 +314,10 @@ async def cmd_myid(e, bot=None):
     except Exception:
         pass
     await e.reply(
-        "<blockquote expandable>🆔 <b>Your IDs</b>\n\n"
-        f"👤 Telegram ID: <code>{uid}</code>\n"
-        f"🤖 Bot: <b>{html.escape(bot_name)}</b>\n"
-        f"🏷 QC ID: <code>{_qc_id(bot_id)}</code></blockquote>"
+        f"<blockquote expandable>{PE_ID} <b>Your IDs</b>\n\n"
+        f"{PE_USER} Telegram ID: <code>{uid}</code>\n"
+        f"{PE_STAR} Bot: <b>{html.escape(bot_name)}</b>\n"
+        f"{PE_TAG} RDX ID: <code>{_rdx_id(bot_id)}</code></blockquote>"
     )
 
 

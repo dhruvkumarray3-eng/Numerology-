@@ -25,7 +25,7 @@ import time
 
 from telethon import events
 
-from config import bot, format_price, logger
+from config import bot, format_price, logger, PE_ID, PE_PHONE, PE_CARD, PE_CHECK, PE_GIFT
 from database import (
     cur, db, ensure_user, is_admin, has_perm, get_log_channels_db, get_user_currency,
 )
@@ -228,7 +228,7 @@ async def deliver_account(event, account_id):
         f"📱 <b>Phone:</b> <code>+{html.escape(acct['phone'])}</code>",
         f"🔐 <b>2FA Password:</b> <code>{html.escape(twofa) if twofa else 'Not set'}</code>",
         f"💵 <b>Paid:</b> {_price(acct['price'], uid)}",
-        f"🆔 <b>Account ID:</b> <code>{acct['id']}</code>\n",
+        f"{PE_ID} <b>Account ID:</b> <code>{acct['id']}</code>\n",
         "<i>Open Telegram → Add Account → enter the phone number. If Telegram "
         "asks for a code, use the session below with a Telethon client, or "
         "contact support.</i></blockquote>",

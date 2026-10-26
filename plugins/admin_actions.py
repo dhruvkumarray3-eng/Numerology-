@@ -482,7 +482,7 @@ async def admin_actions(event):
                 o_spent = o_row[1] if o_row and o_row[1] else 0
                 u_upi = up_row[0] if up_row and up_row[0] else 0
                 
-                msg = (f"{P_ACC} <b>USER INFO:</b> <code>{t_uid}</code>\n\n"
+                msg = (f"{PE_USER} <b>USER INFO:</b> <code>{t_uid}</code>\n\n"
                        f"{P_MONEY} Balance: {P_INR}{bal}\n"
                        f"{P_CARD} Total Deposited: {P_INR}{dep}\n"
                        f"{P_UPI} UPI Deposited: {P_INR}{u_upi}\n"

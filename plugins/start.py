@@ -6,7 +6,9 @@ from utils.keyboards import get_persistent_menu, get_terms_buttons, get_join_but
 from utils.terms import get_terms_message
 from utils.helpers import check_channel_joined, to_small_caps, send_preview_on_top
 from config import (PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL,
-                    QC_ID_PREFIX, logger)
+                    QC_ID_PREFIX, logger, PE_LIGHTNING, PE_CROWN, PE_CHECK, PE_GIFT,
+                    PE_ID, PE_USER, PE_TARGET, PE_TAG, PE_TROPHY, PE_CARD, PE_STAR,
+                    ADMIN_ID, is_super_admin)
 from utils.states import session_buy_state, deposit_input
 
 async def send_start_sticker_or_menu(bot, uid):
@@ -69,8 +71,8 @@ async def send_main_menu(bot, event, uid):
     
     styled_name = to_small_caps(bot_name)
     
-    # QC ID is derived from this bot's own id, so it always matches the bot.
-    qc_id = f"{QC_ID_PREFIX}-{str(me.id)[-8:]}"
+    # RDX ID is derived from this bot's own id, so it always matches the bot.
+    rdx_id = f"{QC_ID_PREFIX}-{str(me.id)[-8:]}"
 
     dep_row = cur.execute("SELECT total_deposited FROM users WHERE user_id=?", (uid,)).fetchone()
     total_dep = float(dep_row[0]) if dep_row and dep_row[0] is not None else 0.0
@@ -85,15 +87,15 @@ async def send_main_menu(bot, event, uid):
 
     msg = (f"<a href='{start_img}'>&#8203;</a>💬 <b>{html.escape(styled_name)}</b>\n\n"
            f"<blockquote expandable>"
-           f"👥 <b>𝐍ᴀᴍᴇ:</b> {html.escape(first_name)}\n"
-           f"🪪 <b>𝐔sᴇʀ 𝐈𝐃:</b> <code>{uid}</code>\n"
-           f"🎯 <b>𝐔sᴇʀɴᴀᴍᴇ:</b> {username}\n"
-           f"🆔 <b>𝐊𝐂 𝐈𝐃:</b> <code>{qc_id}</code>\n"
-           f"💳 <b>𝐁ᴀʟᴀɴᴄᴇ:</b> <code>₹{bal:.2f}</code>\n"
-           f"🏆 <b>𝐕𝐈𝐏:</b> {vip}"
+           f"{PE_USER} <b>\U0001D40D\U0001D41A\U0001D426\U0001D41E:</b> {html.escape(first_name)}\n"
+           f"{PE_ID} <b>\U0001D414s\U0001D407\U0001D404\U0001D411 \U0001D408\U0001D403:</b> <code>{uid}</code>\n"
+           f"{PE_TARGET} <b>\U0001D414s\U0001D404\U0001D411\U0001D40D\U0001D400\U0001D426\U0001D404:</b> {username}\n"
+           f"{PE_TAG} <b>\U0001D411\U0001D403\U0001D417 \U0001D408\U0001D403:</b> <code>{rdx_id}</code>\n"
+           f"{PE_CARD} <b>\U0001D401\U0001D41A\U0001D425\U0001D41A\U0001D427\U0001D41C\U0001D41E:</b> <code>\u20b9{bal:.2f}</code>\n"
+           f"{PE_TROPHY} <b>\U0001D415\U0001D408\U0001D40F:</b> {vip}"
            f"</blockquote>\n"
-           f"<blockquote>{PE_LIGHTNING} <b>𝐒ᴜᴘᴘᴏʀᴛ :</b> <a href='{support_url}'>{support_handle}</a></blockquote>\n"
-           f"<blockquote>{PE_CROWN} <b>𝐎\u1d21\u0274\u1d07\u0280 :</b> <a href='{OWNER_URL}'>{owner_handle}</a></blockquote>")
+           f"<blockquote>{PE_LIGHTNING} <b>\U0001D412\U0001D42E\U0001D429\U0001D429\U0001D428\U0001D42B\U0001D42D :</b> <a href='{support_url}'>{support_handle}</a></blockquote>\n"
+           f"<blockquote>{PE_CROWN} <b>\U0001D40E\u1d21\u0274\u1d07\u0280 :</b> <a href='{OWNER_URL}'>{owner_handle}</a></blockquote>")
     # Premium identity blocks — only shown to staff, using premium emojis.
     if is_admin(uid):
         staff = (f"<blockquote>{PE_CHECK} <b>𝓐𝓭𝓶𝓲𝓷 𝓘𝓓 :</b> <code>{uid}</code>\n"

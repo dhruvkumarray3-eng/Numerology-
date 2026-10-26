@@ -299,6 +299,15 @@ PREMIUM_EMOJIS = {
     "gift": 5440627033111557670,
     "angel": 6203982793379154737,
     "devil": 6064310143380625195,
+    # --- identity / profile icons (reuse verified ids) ---
+    "id": 5409098988156629257,
+    "user": 6203982793379154737,
+    "target": 5408995930416362034,
+    "tag": 5440627033111557670,
+    "trophy": 5409166771330494453,
+    "card": 5409271925014801629,
+    "phone": 5409119256107297715,
+    "star": 5409320020058584473,
 }
 
 CUSTOM_PREMIUM_EMOJIS = {
@@ -360,6 +369,14 @@ PE_MONKEY = tg_emoji("monkey", "🐵")
 PE_GIFT = tg_emoji("gift", "🎁")
 PE_ANGEL = tg_emoji("angel", "😇")
 PE_DEVIL = tg_emoji("devil", "😈")
+PE_ID = tg_emoji("id", "🆔")
+PE_USER = tg_emoji("user", "👥")
+PE_TARGET = tg_emoji("target", "🎯")
+PE_TAG = tg_emoji("tag", "🏷️")
+PE_TROPHY = tg_emoji("trophy", "🏆")
+PE_CARD = tg_emoji("card", "💳")
+PE_PHONE = tg_emoji("phone", "📱")
+PE_STAR = tg_emoji("star", "⭐")
 
 P_YES = PE_CHECK
 P_NO = '❌'
@@ -431,7 +448,9 @@ TEMPORASMS_COUNTRY_LAPTOP = TEMPORASMS_COUNTRY_ALLOTP
 
 # Bot identity shown on the welcome card (falls back to the live bot name/id).
 BOT_BRAND_NAME = os.getenv("BOT_BRAND_NAME", "").strip()
-QC_ID_PREFIX = os.getenv("QC_ID_PREFIX", "QC").strip().upper() or "QC"
+# Brand ID prefix.  Was "QC" - now "RDX" everywhere (env override still works).
+RDX_ID_PREFIX = os.getenv("RDX_ID_PREFIX", "RDX").strip().upper() or "RDX"
+QC_ID_PREFIX = os.getenv("QC_ID_PREFIX", RDX_ID_PREFIX).strip().upper() or RDX_ID_PREFIX
 
 # Default profit settings (owner can change live with /setmarkup or /setprofit)
 DEFAULT_MARKUP_MODE = os.getenv("DEFAULT_MARKUP_MODE", "percent").strip().lower()
