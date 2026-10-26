@@ -76,13 +76,15 @@ async def send_main_menu(bot, event, uid):
            f"<blockquote>✈️ <b>𝐒ᴜᴘᴘᴏʀᴛ :</b> <a href='{support_url}'>{support_handle}</a></blockquote>")
            
     buttons = [
-        [style_btn("📲 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ", b"open_buy_categories", "success", icon=5440627033111557670)],
-        [style_btn("🚀 𝐒ᴏᴄɪᴀʟ ᴍᴇᴅɪᴀ sᴇʀᴠɪᴄᴇs", b"smm_menu_main", "success", icon=5408995930416362034)],
-        [style_btn("🛒 𝐁ᴜʏ 𝐒ᴏᴜʀᴄᴇ 𝐂ᴏᴅᴇs", b"src_code_menu", "success", icon=5409320020058584473)],
-        [style_btn("🛒 𝐁ᴜʏ 𝐏ᴀɴᴇʟs", b"panels_menu", "success", icon=5409098988156629257)],
-        [style_url("💬 𝐎ᴛʜᴇʀ 𝐂ᴏɴᴛᴇɴᴛ ↗️", update_link, "danger", icon=6129812419028982717)],
-        [style_btn("💳 𝐑ᴇᴄʜᴀʀɢᴇ", b"open_deposit_menu", "primary", icon=5409271925014801629), style_btn("🧙 𝐏ʀᴏғɪʟᴇ", b"profile_stats", "primary", icon=6203982793379154737)],
-        [style_btn("💬 𝐌ᴏʀᴇ", b"more_menu", "primary", icon=6129627894349045589), style_url("📑 𝐅ᴇᴇᴅʙᴀᴄᴋ ↗️", feedback_link, "primary", icon=6129732880529628243)]
+        [style_btn("📲 𝓑𝓾𝔂 𝓐𝓬𝓬𝓸𝓾𝓷𝓽", b"open_buy_categories", "success", icon=5440627033111557670)],
+        [style_btn("📱 𝓐𝓵𝓵 𝓪𝓹𝓹𝓼 𝓪𝓬𝓬", b"all_apps_menu", "success", icon=5409320020058584473)],
+        [style_btn("🚀 𝓢𝓸𝓬𝓲𝓪𝓵 𝓶𝓮𝓭𝓲𝓪 𝓼𝓮𝓻𝓿𝓲𝓬𝓮𝓼", b"smm_menu_main", "success", icon=5408995930416362034)],
+        [style_btn("🛒 𝓑𝓾𝔂 𝓢𝓸𝓾𝓻𝓬𝓮 𝓒𝓸𝓭𝓮𝓼", b"src_code_menu", "success", icon=5409320020058584473)],
+        [style_btn("🛒 𝓑𝓾𝔂 𝓟𝓪𝓷𝓮𝓵𝓼", b"panels_menu", "success", icon=5409098988156629257)],
+        [style_btn("🖥 𝓢𝓮𝓻𝓿𝓮𝓻𝓼", b"servers_menu", "primary", icon=5409119256107297715)],
+        [style_btn("📦 𝓜𝓸𝓻𝓮 𝓒𝓸𝓷𝓽𝓮𝓷𝓽", b"more_content", "primary", icon=5409320020058584473)],
+        [style_btn("💳 𝓡𝓮𝓬𝓱𝓪𝓻𝓰𝓮", b"open_deposit_menu", "primary", icon=5409271925014801629), style_btn("🧙 𝓟𝓻𝓸𝓯𝓲𝓵𝓮", b"profile_stats", "primary", icon=6203982793379154737)],
+        [style_btn("⚙️ 𝓢𝓮𝓽𝓽𝓲𝓷𝓰𝓼", b"settings_menu", "primary", icon=5408995930416362034), style_url("📑 𝓕𝓮𝓮𝓭𝓫𝓪𝓬𝓴 ↗️", feedback_link, "primary", icon=6129732880529628243)]
     ]
     
     edit_id = event.message_id if isinstance(event, events.CallbackQuery.Event) else None

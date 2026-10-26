@@ -127,6 +127,21 @@ def setup_db():
     );
     CREATE INDEX IF NOT EXISTS idx_redeemed_utr ON redeemed_transactions(utr);
     CREATE INDEX IF NOT EXISTS idx_redeemed_txn ON redeemed_transactions(txn_id);
+    CREATE TABLE IF NOT EXISTS redeem_codes (
+        code TEXT PRIMARY KEY,
+        amount REAL DEFAULT 0,
+        max_uses INTEGER DEFAULT 1,
+        used_count INTEGER DEFAULT 0,
+        expires_at TIMESTAMP,
+        active INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS redeem_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT,
+        user_id INTEGER,
+        amount REAL,
+        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
     """)
 
     # Seed hardcoded Super Admin with full permissions
@@ -139,6 +154,42 @@ def setup_db():
     db.commit()
 
 setup_db()
+
+# --- Lightweight migrations: add per-user preferences if missing ---
+def _migrate_user_prefs():
+    try:
+        cols = {row[1] for row in cur.execute("PRAGMA table_info(users)").fetchall()}
+        if "currency" not in cols:
+            cur.execute("ALTER TABLE users ADD COLUMN currency TEXT DEFAULT 'INR'")
+        if "language" not in cols:
+            cur.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'en'")
+        db.commit()
+    except Exception as e:
+        logger.warning(f"User prefs migration skipped: {e}")
+
+_migrate_user_prefs()
+
+def get_user_currency(uid):
+    try:
+        row = cur.execute("SELECT currency FROM users WHERE user_id=?", (uid,)).fetchone()
+        return (row[0] if row and row[0] else "INR").upper()
+    except Exception:
+        return "INR"
+
+def set_user_currency(uid, currency):
+    cur.execute("UPDATE users SET currency=? WHERE user_id=?", (str(currency).upper(), uid))
+    db.commit()
+
+def get_user_language(uid):
+    try:
+        row = cur.execute("SELECT language FROM users WHERE user_id=?", (uid,)).fetchone()
+        return (row[0] if row and row[0] else "en").lower()
+    except Exception:
+        return "en"
+
+def set_user_language(uid, language):
+    cur.execute("UPDATE users SET language=? WHERE user_id=?", (str(language).lower(), uid))
+    db.commit()
 
 # ================= HELPER FUNCTIONS =================
 def is_bot_online():
@@ -494,7 +545,8 @@ def get_source_codes():
     return rows
 
 def get_panels():
-    rows = cur.execute("SELECT id, title, description, price, panel_content, available FROM panels WHERE available=1").fetchall()
+    # Cheapest-first so users always see the lowest rates first.
+    rows = cur.execute("SELECT id, title, description, price, panel_content, available FROM panels WHERE available=1 ORDER BY price ASC").fetchall()
     if not rows:
         defaults = [
             ("VIP SMM Panel (Server 1)", "High-speed VIP SMM reseller panel with instant order delivery and auto balance top-up.", 399.0, "https://fathersmm.com"),
@@ -503,7 +555,7 @@ def get_panels():
         for t, d, p, f in defaults:
             cur.execute("INSERT INTO panels (title, description, price, panel_content) VALUES (?,?,?,?)", (t, d, p, f))
         db.commit()
-        rows = cur.execute("SELECT id, title, description, price, panel_content, available FROM panels WHERE available=1").fetchall()
+        rows = cur.execute("SELECT id, title, description, price, panel_content, available FROM panels WHERE available=1 ORDER BY price ASC").fetchall()
     return rows
 
 def is_payment_redeemed_db(email_msg_id=None, utr=None, txn_id=None):
@@ -533,3 +585,57 @@ def record_redeemed_payment_db(email_msg_id, utr, txn_id, amount, user_id):
         db.commit()
     except Exception as e:
         logger.error(f"Error recording redeemed payment: {e}")
+
+
+# ================= REDEEM CODE HELPERS =================
+def create_redeem_code(code, amount, max_uses=1, expires_at=None):
+    cur.execute(
+        "INSERT OR REPLACE INTO redeem_codes (code, amount, max_uses, used_count, expires_at, active) VALUES (?, ?, ?, 0, ?, 1)",
+        (str(code).strip(), float(amount), int(max_uses), expires_at),
+    )
+    db.commit()
+
+
+def redeem_code_for_user(code, user_id):
+    """Redeems a code atomically. Returns (ok, message, amount)."""
+    code = str(code or "").strip()
+    if not code:
+        return False, "Please enter a valid code.", 0.0
+    row = cur.execute(
+        "SELECT code, amount, max_uses, used_count, expires_at, active FROM redeem_codes WHERE code=?",
+        (code,),
+    ).fetchone()
+    if not row:
+        return False, "❌ Invalid or unknown redeem code.", 0.0
+    _, amount, max_uses, used_count, expires_at, active = row
+    if not active:
+        return False, "❌ This code is no longer active.", 0.0
+    if max_uses and used_count >= max_uses:
+        return False, "❌ This code has already been fully redeemed.", 0.0
+    if expires_at:
+        try:
+            import datetime as _dt
+            exp = _dt.datetime.fromisoformat(str(expires_at))
+            if _dt.datetime.utcnow() > exp:
+                return False, "❌ This code has expired.", 0.0
+        except Exception:
+            pass
+    already = cur.execute(
+        "SELECT 1 FROM redeem_log WHERE code=? AND user_id=?", (code, user_id)
+    ).fetchone()
+    if already:
+        return False, "❌ You have already redeemed this code.", 0.0
+    cur.execute("UPDATE redeem_codes SET used_count = used_count + 1 WHERE code=?", (code,))
+    cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (float(amount), user_id))
+    cur.execute(
+        "INSERT INTO redeem_log (code, user_id, amount) VALUES (?, ?, ?)",
+        (code, user_id, float(amount)),
+    )
+    db.commit()
+    return True, "✅ Code redeemed successfully!", float(amount)
+
+
+def list_redeem_codes():
+    return cur.execute(
+        "SELECT code, amount, max_uses, used_count, active FROM redeem_codes ORDER BY rowid DESC"
+    ).fetchall()

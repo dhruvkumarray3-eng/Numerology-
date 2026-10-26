@@ -119,6 +119,96 @@ ADMIN_PROFIT_INR = float(os.getenv("ADMIN_PROFIT_INR", "50.0"))
 OTP_REGEX = r"\b\d{4,8}\b"
 AUTO_CANCEL_SECONDS = 600
 
+# ---------------------------------------------------------
+# 2b. EXTERNAL API KEYS (OTP / SMS / MAIL PROVIDERS)
+# ---------------------------------------------------------
+# These power the "All Apps OTP Accounts" and "TG Number Change"
+# features. Set the real values in your host's secret manager
+# (Railway -> Variables, Render -> Environment, Heroku -> Config Vars)
+# or in a local .env file. Leaving them blank keeps the bot running;
+# the related feature simply reports that the provider is not configured.
+
+# --- OTP / SMS providers for "All Apps Accounts" ---
+FIVESIM_API_KEY = os.getenv("FIVESIM_API_KEY", "").strip()          # https://5sim.net
+SMSACTIVATE_API_KEY = os.getenv("SMSACTIVATE_API_KEY", "").strip()  # https://sms-activate.org
+SMSPVA_API_KEY = os.getenv("SMSPVA_API_KEY", "").strip()            # https://smspva.com
+SMSMAN_API_KEY = os.getenv("SMSMAN_API_KEY", "").strip()            # https://sms-man.com
+TEMPMAIL_API_KEY = os.getenv("TEMPMAIL_API_KEY", "").strip()        # temp-mail style inbox API
+
+# --- TG Number Change (TemporaSMS / temporary number service) ---
+# Used by the "Server-3 (TG NUM change)" flow.
+TEMPORASMS_API_KEY = os.getenv("TEMPORASMS_API_KEY", "").strip()
+TEMPORASMS_BASE_URL = os.getenv("TEMPORASMS_BASE_URL", "https://api.temporasms.com").strip()
+
+# --- Generic OTP mailbox (IMAP) used to auto-read Telegram codes ---
+IMAP_HOST = os.getenv("IMAP_HOST", "").strip()
+IMAP_PORT = env_int("IMAP_PORT", 993)
+IMAP_USER = os.getenv("IMAP_USER", "").strip()
+IMAP_PASSWORD = os.getenv("IMAP_PASSWORD", "").strip()
+
+# --- All Apps catalog (JSON override; falls back to built-in list) ---
+ALL_APPS_CATALOG_JSON = os.getenv("ALL_APPS_CATALOG_JSON", "").strip()
+
+# --- Servers shown in the "Servers" screen ---
+# Format: "name|status|mode" separated by commas. status: on/off
+SERVERS_CONFIG = os.getenv(
+    "SERVERS_CONFIG",
+    "Server-1|off|bulk,"
+    "Server-2 (Good Quality TG)|on|nonspam,"
+    "Server-3 (TG NUM change)|on|numchange,"
+    "Server-4 (cheap phishing)|on|spam",
+).strip()
+
+# --- Default user preferences ---
+DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "INR").strip().upper()
+DEFAULT_LANGUAGE = os.getenv("DEFAULT_LANGUAGE", "en").strip().lower()
+
+CURRENCY_RATES = {
+    "INR": 1.0,
+    "USD": 1.0 / float(os.getenv("USDT_TO_INR", "88.0")),
+    "EUR": 1.0 / (float(os.getenv("USDT_TO_INR", "88.0")) * 1.08),
+    "GBP": 1.0 / (float(os.getenv("USDT_TO_INR", "88.0")) * 1.27),
+}
+
+CURRENCY_SYMBOLS = {"INR": "₹", "USD": "$", "EUR": "€", "GBP": "£"}
+
+def convert_from_inr(amount_inr: float, currency: str = None) -> float:
+    """Converts an INR amount into the user's chosen currency."""
+    cur_code = (currency or DEFAULT_CURRENCY or "INR").upper()
+    rate = CURRENCY_RATES.get(cur_code, 1.0)
+    try:
+        return round(float(amount_inr) * rate, 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+def format_price(amount_inr: float, currency: str = None) -> str:
+    """Formats an INR price using the user's currency symbol/code."""
+    cur_code = (currency or DEFAULT_CURRENCY or "INR").upper()
+    symbol = CURRENCY_SYMBOLS.get(cur_code, "₹")
+    value = convert_from_inr(amount_inr, cur_code)
+    return f"{symbol}{value:,.2f}" if cur_code != "INR" else f"{symbol}{value:,.0f}"
+
+SUPPORTED_LANGUAGES = {
+    "en": "🇬🇧 English",
+    "hinglish": "🇮🇳 Hinglish",
+    "hi": "🇮🇳 हिंदी",
+    "ru": "🇷🇺 Русский",
+    "zh": "🇨🇳 中文",
+    "ar": "🇸🇦 العربية",
+}
+
+def provider_status() -> dict:
+    """Returns which external providers are configured (for admin/debug)."""
+    return {
+        "5sim": bool(FIVESIM_API_KEY),
+        "smsactivate": bool(SMSACTIVATE_API_KEY),
+        "smspva": bool(SMSPVA_API_KEY),
+        "smsman": bool(SMSMAN_API_KEY),
+        "tempmail": bool(TEMPMAIL_API_KEY),
+        "temporasms": bool(TEMPORASMS_API_KEY),
+        "imap": bool(IMAP_HOST and IMAP_USER and IMAP_PASSWORD),
+    }
+
 # Fetch Dynamic Admin Profit Margin from SQLite Database (if present)
 try:
     db_path = "bot.db" if os.path.exists("bot.db") else "database.db"

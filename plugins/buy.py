@@ -248,6 +248,8 @@ async def show_buy_menu(event):
            f"🏛 <b>𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> 𝐅𝐢𝐥𝐭𝐞𝐫 𝐛𝐲 𝐒𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐘𝐞𝐚𝐫 (2025, 2024, 2023...).</blockquote>")
     btns = [
         [style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "search_country_btn", "primary", icon=5409098988156629257)],
+        [style_btn("📱 𝐀𝐥𝐥 𝐚𝐩𝐩𝐬 𝐚𝐜𝐜", "all_apps_menu", "success", icon=5409320020058584473),
+         style_btn("💬 𝐁𝐮𝐲 𝐖𝐩 𝐀𝐜𝐜", "buy_wp_acc", "success", icon=5408995930416362034)],
         [
             style_btn("🟢 𝐍𝐨𝐧-𝐒𝐩𝐚𝐦 / 𝐂𝐥𝐞𝐚𝐧", "pg_c|nonspam|1", "success", icon=5409320020058584473),
             style_btn("🟡 𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩)", "pg_c|spam|1", "primary", icon=5408995930416362034)
@@ -817,6 +819,14 @@ async def process_combined_text_input(event):
     if "buy account" in lowered:
         return
 
+    # Let the More Content router handle redeem codes / session strings.
+    try:
+        from plugins.more_content import more_state as _mc_state
+        if _mc_state.get(uid):
+            return
+    except Exception:
+        pass
+
     if search_state.get(uid) or user_states.get(uid) == "AWAITING_COUNTRY":
         search_state[uid] = False
         user_states[uid] = None
@@ -845,7 +855,12 @@ async def process_combined_text_input(event):
             btns.append([style_btn(f"{flag} {c_name} {cnt_str}", f"bc|bulk|{c_name}", "primary", icon=6154249597532248059)])
             
         btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)])
-        await event.respond(f"<blockquote expandable>🔎 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐑𝐞𝐬𝐮𝐥𝐭𝐬 𝐟𝐨𝐫 '{html.escape(event.text)}':</b></blockquote>", buttons=btns)
+        await event.respond(
+            f"<blockquote expandable>🔎 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐑𝐞𝐬𝐮𝐥𝐭𝐬 𝐟𝐨𝐫 '{html.escape(event.text)}':</b>\n\n"
+            f"✅ <b>Good Quality and Cheap Rates</b> — all accounts below are verified "
+            f"and priced at the lowest market rate.</blockquote>",
+            buttons=btns,
+        )
 
 @bot.on(events.CallbackQuery(pattern=r"^open_buy_categories$"))
 async def cb_open_buy_categories(event):

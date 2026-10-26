@@ -99,3 +99,62 @@ Developed with ❤️ by **[𝐌꧊᱂ 𝁛 ꪜᛧƖƖ𝛂ᛧ𝝶](https://t.me/
 The bot can fetch listings and complete purchases through the LZT Market API when LZT mode is enabled and a key is configured. Set `LZT_API_KEY` as a deployment secret, or enter it in **Admin Panel → LZT Settings**; never commit a real API key. The admin setting is checked first, with the environment variable used as a fallback.
 
 Use `/lztmargin` to view the current fixed INR markup per automatically priced LZT item, or `/lztmargin 25` (also `/setlztmargin 25`) to set it. This command is admin-only; negative, infinite, and invalid values are rejected. Explicit/manual prices can still override automatic pricing.
+
+---
+
+## 🧩 New Feature Set (Settings, Servers, All Apps, More Content)
+
+The bot now ships with the full feature set from the reference app:
+
+### ⚙️ Settings (per-user currency & language)
+- **Currency:** INR ₹ / USD $ / EUR € / GBP £
+- **Language:** English / Hinglish / हिंदी / Русский / 中文 / العربية
+- Preferences are stored per user in the `users` table (`currency`, `language` columns).
+
+### 🖥 Servers
+Configured via `SERVERS_CONFIG` (name|status|mode):
+- `Server-1` — OFF by default
+- `Server-2 (Good Quality TG)` — non-spam Telegram accounts
+- `Server-3 (TG NUM change)` — TemporaSMS number-change flow
+- `Server-4 (cheap phishing)` — cheapest bulk accounts
+
+### 📱 All Apps Accounts (OTP) + Buy Wp Acc
+Buy OTP numbers for Telegram, WhatsApp, Instagram, Facebook, Twitter/X, TikTok,
+Google, Discord, Uber, Amazon, Netflix and PayPal. Prices/numbers are fetched
+from your configured OTP provider (5SIM is the default engine).
+
+### 📦 More Content
+- **Read & Generate Sessions** — convert a Telethon `StringSession` into a
+  downloadable `.session` file, or read an uploaded `.session`.
+- **Redeem** — redeem gift codes (`/redeem CODE`) for instant balance.
+- **Refer & Earn** — existing referral engine.
+- **Get your own Bots** — external link.
+
+### ✅ Good Quality & Cheap Rates
+Every Telegram search result now shows a **“Good Quality and Cheap Rates”**
+header, and the **Panels** store is sorted cheapest-first for users.
+
+### 💎 Premium Emoji
+All new menus use Telegram premium `<tg-emoji>` where available, with safe
+text fallbacks when `USE_PREMIUM_EMOJIS=0`.
+
+---
+
+## 🔑 API Keys (set these in your host's Variables/Secrets)
+
+| Variable | Purpose |
+|---|---|
+| `FIVESIM_API_KEY` | 5SIM OTP numbers (default engine) |
+| `SMSACTIVATE_API_KEY` | SMS-Activate OTP numbers |
+| `SMSPVA_API_KEY` | SMSPVA OTP numbers |
+| `SMSMAN_API_KEY` | SMS-Man OTP numbers |
+| `TEMPMAIL_API_KEY` | Temp-mail inbox API |
+| `TEMPORASMS_API_KEY` | **TG Number Change** (TemporaSMS) |
+| `TEMPORASMS_BASE_URL` | TemporaSMS base URL (default `https://api.temporasms.com`) |
+| `IMAP_HOST` / `IMAP_PORT` / `IMAP_USER` / `IMAP_PASSWORD` | Auto-read Telegram login codes |
+| `SERVERS_CONFIG` | Server list shown in the Servers screen |
+| `DEFAULT_CURRENCY` / `DEFAULT_LANGUAGE` | Defaults for new users |
+
+> The bot starts fine with these blank — the related feature simply reports that
+> the provider is not configured. Add real keys in Railway → Variables,
+> Render → Environment, or Heroku → Config Vars. Never commit real keys.

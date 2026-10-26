@@ -9,14 +9,16 @@ from utils.keyboards import style_btn
 async def show_panels_menu(event):
     pnls = get_panels()
     btns = []
-    for p_id, title, desc, price, panel_link, avail in pnls:
-        btns.append([style_btn(f"{title} - {P_INR}{price}", f"pnl_info|{p_id}", "primary")])
+    for idx, (p_id, title, desc, price, panel_link, avail) in enumerate(pnls):
+        tag = " 💸" if idx == 0 else ""
+        btns.append([style_btn(f"{title} - {P_INR}{price}{tag}", f"pnl_info|{p_id}", "success" if idx == 0 else "primary")])
         
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)])
     
     msg = ("<blockquote>🌌 <b>𝐏ᴀɴᴇʟ 𝐒ᴛᴏʀᴇ</b>\n"
            "───────────────────────────────\n"
            "• 𝐂ʜᴇᴀᴘᴇsᴛ ᴀɴᴅ 𝐓ʀᴜsᴛᴇᴅ ᴘᴀɴᴇʟs\n"
+           "• ✅ 𝐒ᴏʀᴛᴇᴅ 𝐂ʜᴇᴀᴘᴇsᴛ 𝐅ɪʀsᴛ (ʟᴏᴡᴇsᴛ ʀᴀᴛᴇs ᴀᴛ ᴛᴏᴘ)\n"
            "• 𝐓ʜᴇsᴇ ᴘᴀɴᴇʟs ᴀʀᴇ ᴜsᴇᴅ ʙʏ ᴜs ᴀʟsᴏ\n\n"
            "<i>𝐒ᴇʟᴇᴄᴛ ᴛʜᴇ ᴘᴀɴᴇʟ ʏᴏᴜ ᴡᴀɴɴᴀ ʙᴜʏ:</i></blockquote>")
            
