@@ -364,10 +364,13 @@ MONGO_DB = os.getenv("MONGO_DB", "numerology_bot").strip()
 # your TemporaSMS dashboard uses different service codes).
 TEMPORASMS_SERVICE_WHATSAPP = os.getenv("TEMPORASMS_SERVICE_WHATSAPP", "whatsapp").strip()
 TEMPORASMS_SERVICE_NUMCHANGE = os.getenv("TEMPORASMS_SERVICE_NUMCHANGE", "telegram").strip()
-TEMPORASMS_SERVICE_LAPTOP = os.getenv("TEMPORASMS_SERVICE_LAPTOP", "laptop").strip()
+TEMPORASMS_SERVICE_ALLOTP = os.getenv("TEMPORASMS_SERVICE_ALLOTP", "telegram").strip()
+# kept for backwards compatibility
+TEMPORASMS_SERVICE_LAPTOP = TEMPORASMS_SERVICE_ALLOTP
 TEMPORASMS_COUNTRY_WHATSAPP = os.getenv("TEMPORASMS_COUNTRY_WHATSAPP", "any").strip()
 TEMPORASMS_COUNTRY_NUMCHANGE = os.getenv("TEMPORASMS_COUNTRY_NUMCHANGE", "any").strip()
-TEMPORASMS_COUNTRY_LAPTOP = os.getenv("TEMPORASMS_COUNTRY_LAPTOP", "any").strip()
+TEMPORASMS_COUNTRY_ALLOTP = os.getenv("TEMPORASMS_COUNTRY_ALLOTP", "any").strip()
+TEMPORASMS_COUNTRY_LAPTOP = TEMPORASMS_COUNTRY_ALLOTP
 
 # Bot identity shown on the welcome card (falls back to the live bot name/id).
 BOT_BRAND_NAME = os.getenv("BOT_BRAND_NAME", "").strip()

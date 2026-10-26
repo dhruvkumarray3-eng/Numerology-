@@ -27,7 +27,7 @@ SERVER_ICONS = {
     "numchange": "🔁",
     "spam": "💰",
     "whatsapp": "💬",
-    "laptop": "💻",
+    "allotp": "🧩",
 }
 
 

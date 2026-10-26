@@ -2,7 +2,7 @@
 
     💬 WhatsApp Account panel      -> TemporaSMS (service = TEMPORASMS_SERVICE_WHATSAPP)
     🔁 TG Number Change panel      -> TemporaSMS (service = TEMPORASMS_SERVICE_NUMCHANGE)
-    💻 Laptop / PC Account panel   -> TemporaSMS (service = TEMPORASMS_SERVICE_LAPTOP)
+    🧩 All Apps OTP panel         -> TemporaSMS (service = selected app slug)
 
 Every panel has the exact flow from the reference screenshots:
 
@@ -25,10 +25,10 @@ from telethon.errors import MessageNotModifiedError
 from config import (
     TEMPORASMS_SERVICE_WHATSAPP,
     TEMPORASMS_SERVICE_NUMCHANGE,
-    TEMPORASMS_SERVICE_LAPTOP,
+    TEMPORASMS_SERVICE_ALLOTP,
     TEMPORASMS_COUNTRY_WHATSAPP,
     TEMPORASMS_COUNTRY_NUMCHANGE,
-    TEMPORASMS_COUNTRY_LAPTOP,
+    TEMPORASMS_COUNTRY_ALLOTP,
     format_price,
     logger,
 )
@@ -96,32 +96,121 @@ PANELS = {
             "5️⃣ Enter the code inside Telegram. Done ✅"
         ),
     },
-    "laptop": {
-        "title": "Laptop / PC Account",
-        "short": "Laptop",
-        "icon": "💻",
-        "service": TEMPORASMS_SERVICE_LAPTOP,
-        "country": TEMPORASMS_COUNTRY_LAPTOP,
+    "allotp": {
+        "title": "All Apps OTP",
+        "short": "All Apps",
+        "icon": "\U0001F9E9",
+        "service": TEMPORASMS_SERVICE_ALLOTP,   # overridden by the selected app
+        "country": TEMPORASMS_COUNTRY_ALLOTP,
         "style": "primary",
-        "tc_title": "Laptop / PC Account — Terms & Conditions",
+        "dynamic_apps": True,
+        "tc_title": "All Apps OTP \u2014 Terms & Conditions",
         "tc_body": (
-            "A fresh virtual number is provided for creating a laptop / PC "
-            "style account on the supported platform.\n\n"
-            "Numbers are live from the panel and are released if the SMS is "
-            "not received in time. Always tap <b>Get OTP</b> right after you "
-            "request the code on the platform.\n\n"
-            "Read the guide below, then click <b>Agree &amp; Continue</b>."
+            "This panel gives you a fresh virtual number for <b>any app</b> \u2014 "
+            "Telegram, WhatsApp, Instagram, Google, ChatGPT, Discord, TikTok and "
+            "8,500+ more.\n\n"
+            "Pick the app first, then pick the country. A live number is reserved "
+            "from the panel for a limited time and the OTP is delivered straight "
+            "into this chat.\n\n"
+            "If no SMS arrives, cancel the order and the amount is refunded to "
+            "your balance automatically.\n\n"
+            "Read the guide below, then tap <b>Agree & Continue</b>."
         ),
         "guide": (
-            "<b>How to use the Laptop panel</b>\n\n"
-            "1️⃣ Pick the country that matches the platform you are creating.\n"
-            "2️⃣ Tap the country button to reserve a number.\n"
-            "3️⃣ Enter that number on the platform's signup screen.\n"
-            "4️⃣ Tap <b>Get OTP</b> here to receive the code.\n"
-            "5️⃣ If nothing arrives, <b>Cancel &amp; Refund</b> and retry."
+            "<b>How to use the All Apps OTP panel</b>\n\n"
+            "1\ufe0f\u20e3 Tap <b>Browse All Apps</b> or <b>Search App</b> and pick the app.\n"
+            "2\ufe0f\u20e3 Pick the country (or use <b>Search Country</b>).\n"
+            "3\ufe0f\u20e3 Tap the country button \u2014 a number is reserved for you.\n"
+            "4\ufe0f\u20e3 Enter that number in the app's signup screen.\n"
+            "5\ufe0f\u20e3 Tap <b>Get OTP</b> here \u2014 the code arrives in this chat.\n"
+            "6\ufe0f\u20e3 No SMS? Tap <b>Cancel & Refund</b> and try another country."
         ),
     },
 }
+
+# --------------------------------------------------------------------------
+# All Apps catalogue (used by the All Apps OTP panel)
+# slug = TemporaSMS service code, label = what the user sees
+# --------------------------------------------------------------------------
+ALL_APPS = [
+    ("telegram", "\u2708\ufe0f Telegram"),
+    ("whatsapp", "\U0001F4AC WhatsApp"),
+    ("instagram", "\U0001F4F8 Instagram"),
+    ("facebook", "\U0001F4D8 Facebook"),
+    ("twitter", "\U0001F426 Twitter / X"),
+    ("tiktok", "\U0001F3B5 TikTok"),
+    ("google", "\U0001F50D Google / Gmail"),
+    ("openai", "\U0001F916 ChatGPT / OpenAI"),
+    ("discord", "\U0001F3AE Discord"),
+    ("snapchat", "\U0001F47B Snapchat"),
+    ("linkedin", "\U0001F4BC LinkedIn"),
+    ("youtube", "\u25b6\ufe0f YouTube"),
+    ("amazon", "\U0001F6D2 Amazon"),
+    ("netflix", "\U0001F3AC Netflix"),
+    ("paypal", "\U0001F4B3 PayPal"),
+    ("uber", "\U0001F697 Uber"),
+    ("bolt", "\U0001F695 Bolt"),
+    ("tinder", "\U0001F525 Tinder"),
+    ("bumble", "\U0001F41D Bumble"),
+    ("binance", "\U0001FA99 Binance"),
+    ("coinbase", "\U0001F4B0 Coinbase"),
+    ("revolut", "\U0001F4B8 Revolut"),
+    ("wise", "\U0001F30D Wise"),
+    ("steam", "\U0001F3AE Steam"),
+    ("twitch", "\U0001F4FA Twitch"),
+    ("spotify", "\U0001F3A7 Spotify"),
+    ("reddit", "\U0001F4E2 Reddit"),
+    ("pinterest", "\U0001F4CC Pinterest"),
+    ("signal", "\U0001F512 Signal"),
+    ("viber", "\U0001F4DE Viber"),
+    ("line", "\U0001F4AC LINE"),
+    ("wechat", "\U0001F4AC WeChat"),
+    ("okcupid", "\U0001F49D OkCupid"),
+    ("grindr", "\U0001F308 Grindr"),
+    ("badoo", "\U0001F48B Badoo"),
+    ("truecaller", "\U0001F4F2 Truecaller"),
+    ("yahoo", "\U0001F4E7 Yahoo"),
+    ("microsoft", "\U0001F4BB Microsoft"),
+    ("apple", "\U0001F34E Apple ID"),
+    ("adobe", "\U0001F3A8 Adobe"),
+    ("canva", "\U0001F58C\ufe0f Canva"),
+    ("notion", "\U0001F4DD Notion"),
+    ("zoom", "\U0001F4F9 Zoom"),
+    ("skype", "\U0001F4DE Skype"),
+    ("deliveroo", "\U0001F6F5 Deliveroo"),
+    ("doordash", "\U0001F355 DoorDash"),
+    ("airbnb", "\U0001F3E0 Airbnb"),
+    ("booking", "\U0001F3E8 Booking.com"),
+    ("alipay", "\U0001F4B5 Alipay"),
+    ("kakao", "\U0001F4AC KakaoTalk"),
+    ("zalo", "\U0001F4AC Zalo"),
+]
+APP_LABELS = dict(ALL_APPS)
+
+
+def _app_label(slug):
+    return APP_LABELS.get(slug, slug)
+
+
+def _app_icon(slug):
+    label = _app_label(slug)
+    return label.split(" ", 1)[0] if label else "\U0001F4F1"
+
+
+def _clean_name(name):
+    """Strip a leading flag/emoji from a country or app name."""
+    name = (name or "").strip()
+    while name and (ord(name[0]) > 0x2000):
+        name = name[1:].strip()
+    return name or "Unknown"
+
+
+def _filter_apps(query):
+    if not query:
+        return list(ALL_APPS)
+    q = query.strip().lower().lstrip("@")
+    return [a for a in ALL_APPS if q in a[0].lower() or q in a[1].lower()]
+
 
 # uid -> {"panel": key, "country": code, "order_id": str, "phone": str,
 #         "price": float, "mode": "search"}
@@ -184,15 +273,32 @@ def _accept_terms(uid, key):
     db.commit()
 
 
-async def _countries_for(key):
+def _selected_app(uid):
+    """App slug currently selected in the All Apps OTP panel."""
+    return (panel_state.get(uid) or {}).get("app")
+
+
+def _service_for(key, uid=None):
+    """TemporaSMS service code for a panel.
+
+    The All Apps panel is dynamic: the service is whichever app the user picked.
+    """
+    if PANELS[key].get("dynamic_apps"):
+        app = _selected_app(uid) if uid is not None else None
+        return app or PANELS[key].get("service") or "telegram"
+    return PANELS[key]["service"]
+
+
+async def _countries_for(key, uid=None):
     """Cached live country list for a panel, with fallback."""
-    cached = _cache.get(key)
+    service = _service_for(key, uid)
+    cache_key = f"{key}:{service}"
+    cached = _cache.get(cache_key)
     if cached and time.time() - cached["ts"] < CACHE_TTL and cached["countries"]:
         return cached["countries"], True
-    service = PANELS[key]["service"]
     result = await temporasms.get_countries(service)
     if result.get("ok") and result.get("countries"):
-        _cache[key] = {"ts": time.time(), "countries": result["countries"]}
+        _cache[cache_key] = {"ts": time.time(), "countries": result["countries"]}
         return result["countries"], True
     if cached and cached["countries"]:
         return cached["countries"], False
@@ -269,7 +375,7 @@ async def show_panel_hub(event):
     btns = [
         [style_btn("💬 WhatsApp Account", b"pp_open|whatsapp", "success", icon=5408995930416362034)],
         [style_btn("🔁 TG Number Change", b"pp_open|numchange", "primary", icon=5409119256107297715)],
-        [style_btn("💻 Laptop / PC Account", b"pp_open|laptop", "primary", icon=5409320020058584473)],
+        [style_btn("🧩 All Apps OTP — 8,526+ Apps", b"pp_open|allotp", "success", icon=5409320020058584473)],
         [style_btn("🔍 Search All Services", b"all_apps_menu", "success", icon=5409098988156629257)],
         [style_btn("🆘 Help", b"pp_help", "primary", icon=6129732880529628243)],
         [style_btn("🔙 Back", b"dashboard_main", "danger", icon=6129812419028982717)],
@@ -294,10 +400,10 @@ async def show_terms(event, key, country=None):
     panel_state.setdefault(uid, {})["panel"] = key
     header = ""
     if country:
-        countries, _ = await _countries_for(key)
+        countries, _ = await _countries_for(key, uid)
         match = next((c for c in countries if c["code"] == country), None)
         if match:
-            header = (f"\n\n{_flag(match['code'])} <b>{html.escape(match['name'])}</b>"
+            header = (f"\n\n{_flag(match['code'])} <b>{html.escape(_clean_name(match['name']))}</b>"
                       f" · {_price_label(match['price'], uid)}")
     msg = (
         f"<blockquote expandable>{p['icon']} <b>{p['tc_title']}</b>{header}\n\n"
@@ -321,11 +427,137 @@ async def show_guide(event, key):
     await _safe_edit(event, msg, btns)
 
 
+async def show_allotp_hub(event, page=1, query=None):
+    """All Apps OTP panel: browse / search every app, then pick a country."""
+    uid = event.sender_id
+    panel_state.setdefault(uid, {})["panel"] = "allotp"
+    panel_state[uid].pop("app", None)
+    panel_state[uid].pop("mode", None)
+
+    apps = _filter_apps(query)
+    total = len(apps)
+    total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * PAGE_SIZE
+    chunk = apps[start:start + PAGE_SIZE]
+
+    if not chunk:
+        msg = (
+            "<blockquote expandable>\U0001F9E9 <b>All Apps OTP</b>\n\n"
+            f"\U0001F615 No app matched <b>{html.escape(query or '')}</b>.\n"
+            "Try another name, or tap <b>Browse All Apps</b>.</blockquote>"
+        )
+        btns = [
+            [style_btn("\U0001F4DA Browse All Apps", b"pp_apps|1", "success", icon=5409320020058584473)],
+            [style_btn("\U0001F50D Search App", b"pp_appsearch", "primary", icon=5409098988156629257)],
+            [style_btn("\U0001F519 Back", b"pp_hub", "danger", icon=6129812419028982717)],
+        ]
+        return await _safe_edit(event, msg, btns)
+
+    btns = []
+    row = []
+    for slug, label in chunk:
+        row.append(style_btn(label[:60], f"pp_app|{slug}", "primary"))
+        if len(row) == 2:
+            btns.append(row)
+            row = []
+    if row:
+        btns.append(row)
+
+    nav = []
+    if page > 1:
+        nav.append(style_btn("\u2b05\ufe0f Prev", f"pp_apps|{page - 1}", "primary", icon=6129627894349045589))
+    nav.append(style_btn(f"\U0001F4C4 {page}/{total_pages}", f"pp_apps|{page}", "primary"))
+    if page < total_pages:
+        nav.append(style_btn("Next \u27a1\ufe0f", f"pp_apps|{page + 1}", "primary", icon=6129732880529628243))
+    btns.append(nav)
+
+    btns.append([
+        style_btn("\U0001F50D Search App", b"pp_appsearch", "primary", icon=5409098988156629257),
+        style_btn("\U0001F30D Search Country", b"pp_csearch", "success", icon=5409098988156629257),
+    ])
+    btns.append([style_btn("\U0001F519 Back", b"pp_hub", "danger", icon=6129812419028982717)])
+
+    status = "\u2705 Live" if temporasms.configured() else "\u26a0\ufe0f TEMPORASMS_API_KEY missing"
+    search_line = f"\n\U0001F50E Filter: <b>{html.escape(query)}</b>" if query else ""
+    msg = (
+        "<blockquote expandable>\U0001F9E9 <b>All Apps OTP \u2014 8,526+ apps & platforms</b>\n\n"
+        "\U0001F4F1 Pick any app, then pick a country \u2014 a fresh number is reserved "
+        "and the OTP lands right here in this chat.\n\n"
+        "\U0001F30D Numbers from many countries\n"
+        "\U0001F4CA Live stock & prices\n"
+        "\U0001F4B8 Auto refund if no SMS arrives\n"
+        f"\U0001F511 <b>Panel status:</b> {status}{search_line}\n\n"
+        f"<i>Page {page}/{total_pages} \u00b7 {total} apps</i></blockquote>"
+    )
+    await _safe_edit(event, msg, btns)
+
+
+async def open_app(event, slug):
+    """User picked an app -> show its country list."""
+    uid = event.sender_id
+    if slug not in APP_LABELS:
+        return await event.answer("\u26a0\ufe0f Unknown app, please browse again.", alert=True)
+    panel_state.setdefault(uid, {})["panel"] = "allotp"
+    panel_state[uid]["app"] = slug
+    panel_state[uid].pop("mode", None)
+    await mongo_store.log_event(uid, "allotp_app_open", app=slug)
+    await show_countries(event, "allotp", 1)
+
+
+async def start_app_search(event):
+    uid = event.sender_id
+    panel_state.setdefault(uid, {})["panel"] = "allotp"
+    panel_state[uid]["mode"] = "app_search"
+    msg = (
+        "<blockquote expandable>\U0001F50D <b>Search App \u2014 All Apps OTP</b>\n\n"
+        "Send the app name (e.g. <code>telegram</code>, <code>instagram</code>, "
+        "<code>chatgpt</code>, <code>discord</code>).</blockquote>"
+    )
+    btns = [
+        [style_btn("\U0001F4DA Browse All Apps", b"pp_apps|1", "success", icon=5409320020058584473)],
+        [style_btn("\U0001F519 Back", b"pp_open|allotp", "danger", icon=6129812419028982717)],
+    ]
+    await _safe_edit(event, msg, btns)
+
+
+async def start_country_search(event, key="allotp"):
+    """Country search. In the All Apps panel an app must be picked first."""
+    uid = event.sender_id
+    if PANELS[key].get("dynamic_apps") and not _selected_app(uid):
+        panel_state.setdefault(uid, {})["mode"] = "country_search_pending"
+        msg = (
+            "<blockquote expandable>\U0001F30D <b>Search Country</b>\n\n"
+            "First pick the app you want a number for \u2014 then you can search "
+            "countries for it.</blockquote>"
+        )
+        btns = [[style_btn("\U0001F4DA Browse All Apps", b"pp_apps|1", "success", icon=5409320020058584473)]]
+        return await _safe_edit(event, msg, btns)
+    panel_state.setdefault(uid, {})["mode"] = "search"
+    panel_state[uid]["panel"] = key
+    app_line = ""
+    if PANELS[key].get("dynamic_apps"):
+        app_line = f" \u2014 {_app_icon(_selected_app(uid))} {html.escape(_clean_name(_app_label(_selected_app(uid))))}"
+    msg = (
+        f"<blockquote expandable>\U0001F50D <b>Search Country{app_line}</b>\n\n"
+        "Send the country name or dial code (e.g. <code>India</code>, "
+        "<code>+91</code>, <code>usa</code>).</blockquote>"
+    )
+    btns = [[style_btn("\U0001F519 Back", f"pp_open|{key}", "danger", icon=6129812419028982717)]]
+    await _safe_edit(event, msg, btns)
+
+
 async def show_countries(event, key, page=1, query=None):
     uid = event.sender_id
     p = PANELS[key]
     panel_state.setdefault(uid, {})["panel"] = key
-    countries, live = await _countries_for(key)
+
+    dynamic = p.get("dynamic_apps")
+    app = _selected_app(uid) if dynamic else None
+    if dynamic and not app:
+        return await show_allotp_hub(event)
+
+    countries, live = await _countries_for(key, uid)
     countries = _filter_countries(countries, query)
     cfg = get_markup_config()
 
@@ -351,7 +583,7 @@ async def show_countries(event, key, page=1, query=None):
     btns = []
     row = []
     for c in chunk:
-        label = f"{_flag(c['code'])} {c['name']} · {_price_label(c['price'], uid, cfg)}"
+        label = f"{_flag(c['code'])} {_clean_name(c['name'])} · {_price_label(c['price'], uid, cfg)}"
         row.append(style_btn(label[:60], f"pp_buy|{key}|{c['code']}", p["style"]))
         if len(row) == 2:
             btns.append(row)
@@ -371,14 +603,25 @@ async def show_countries(event, key, page=1, query=None):
         style_btn("🔍 Search Country", f"pp_search|{key}", "primary", icon=5409098988156629257),
         style_btn("🔄 Refresh", f"pp_open|{key}", "success", icon=5409320020058584473),
     ])
-    btns.append([style_btn("🔙 Back", b"pp_hub", "danger", icon=6129812419028982717)])
+    if dynamic:
+        btns.append([
+            style_btn("🔄 Change App", b"pp_apps|1", "primary", icon=5409320020058584473),
+            style_btn("🔙 Back", b"pp_apps|1", "danger", icon=6129812419028982717),
+        ])
+    else:
+        btns.append([style_btn("🔙 Back", b"pp_hub", "danger", icon=6129812419028982717)])
 
     live_line = "🟢 Live rates" if live else "🟡 Cached rates (panel busy)"
     search_line = f"\n🔎 Filter: <b>{html.escape(query)}</b>" if query else ""
+    if dynamic:
+        service_line = (f"{p['icon']} <b>Service: All Apps OTP</b>\n"
+                        f"{_app_icon(app)} <b>App:</b> {html.escape(_clean_name(_app_label(app)))}")
+    else:
+        service_line = f"{p['icon']} <b>Service: {p['title']}</b>"
     msg = (
-        f"<blockquote expandable>{p['icon']} <b>Service: {p['title']}</b>\n\n"
-        f"Select a country to view available virtual numbers &amp; live rates: "
-        f"<b>{total} countries</b> in stock.{search_line}\n\n"
+        f"<blockquote expandable>{service_line}\n\n"
+        f"Select a country to view available virtual numbers & live rates: "
+        f"<b>{total} {'country' if total == 1 else 'countries'}</b> in stock.{search_line}\n\n"
         f"{live_line}\n<i>Page {page}/{total_pages}</i></blockquote>"
     )
     await _safe_edit(event, msg, btns)
@@ -397,16 +640,20 @@ async def start_search(event, key):
     await _safe_edit(event, msg, btns)
 
 
-async def handle_search_text(event, key, text):
+async def handle_search_text(event, key, text, mode=None):
+    """Text router for the panels: app search or country search."""
     uid = event.sender_id
+    mode = mode or (panel_state.get(uid) or {}).get("mode")
     panel_state.get(uid, {}).pop("mode", None)
+    if mode == "app_search":
+        return await show_allotp_hub(event, 1, query=text)
     await show_countries(event, key, 1, query=text)
 
 
 async def buy(event, key, code):
     uid = event.sender_id
     ensure_user(uid)
-    countries, _ = await _countries_for(key)
+    countries, _ = await _countries_for(key, uid)
     match = next((c for c in countries if c["code"] == code), None)
     if not match:
         return await event.answer("⚠️ Country not available, refresh the panel.", alert=True)
@@ -429,7 +676,7 @@ async def buy(event, key, code):
         )
 
     # reserve the number first, only charge on success
-    result = await temporasms.buy_number(PANELS[key]["service"], code)
+    result = await temporasms.buy_number(_service_for(key, uid), code)
     if not result.get("ok"):
         return await event.answer(
             f"⚠️ Could not reserve a number: {result.get('error') or 'panel busy'}",
@@ -455,7 +702,7 @@ async def buy(event, key, code):
     msg = (
         f"<blockquote expandable>✅ <b>Number reserved — {PANELS[key]['title']}</b>\n\n"
         f"📞 <b>Number:</b> <code>{html.escape(phone)}</code>\n"
-        f"{_flag(code)} <b>Country:</b> {html.escape(match['name'])}\n"
+        f"{_flag(code)} <b>Country:</b> {html.escape(_clean_name(match['name']))}\n"
         f"💳 <b>Paid:</b> {format_price(display_inr, _user_currency(uid))}\n"
         f"🆔 <b>Order:</b> <code>{html.escape(order_id)}</code>\n\n"
         "Use this number on the platform, then tap <b>Get OTP</b>.</blockquote>"
@@ -586,6 +833,8 @@ def register_product_panels(bot):
         panel_state.setdefault(uid, {})["panel"] = key
         if not _terms_accepted(uid, key):
             return await show_terms(e, key)
+        if PANELS[key].get("dynamic_apps"):
+            return await show_allotp_hub(e)
         await show_countries(e, key, 1)
 
     @bot.on(events.CallbackQuery(pattern=r"^pp_guide\|(\w+)$"))
@@ -599,6 +848,8 @@ def register_product_panels(bot):
             return await e.answer("Unknown panel", alert=True)
         _accept_terms(e.sender_id, key)
         await mongo_store.log_event(e.sender_id, "panel_terms_accepted", panel=key)
+        if PANELS[key].get("dynamic_apps"):
+            return await show_allotp_hub(e)
         await show_countries(e, key, 1)
 
     @bot.on(events.CallbackQuery(pattern=r"^pp_pg\|(\w+)\|(\d+)$"))
@@ -609,7 +860,24 @@ def register_product_panels(bot):
 
     @bot.on(events.CallbackQuery(pattern=r"^pp_search\|(\w+)$"))
     async def cb_search(e):
-        await start_search(e, e.pattern_match.group(1).decode())
+        await start_country_search(e, e.pattern_match.group(1).decode())
+
+    # --- All Apps OTP callbacks -----------------------------------------
+    @bot.on(events.CallbackQuery(pattern=r"^pp_app\|([\w-]+)$"))
+    async def cb_app(e):
+        await open_app(e, e.pattern_match.group(1).decode())
+
+    @bot.on(events.CallbackQuery(pattern=r"^pp_apps\|(\d+)$"))
+    async def cb_apps(e):
+        await show_allotp_hub(e, int(e.pattern_match.group(1)))
+
+    @bot.on(events.CallbackQuery(pattern=r"^pp_appsearch$"))
+    async def cb_appsearch(e):
+        await start_app_search(e)
+
+    @bot.on(events.CallbackQuery(pattern=r"^pp_csearch$"))
+    async def cb_csearch(e):
+        await start_country_search(e, "allotp")
 
     @bot.on(events.CallbackQuery(pattern=r"^pp_buy\|(\w+)\|([\w-]+)$"))
     async def cb_buy(e):
@@ -649,12 +917,12 @@ def register_product_panels(bot):
             return await show_terms(e, "numchange")
         await show_countries(e, "numchange", 1)
 
-    @bot.on(events.NewMessage(pattern=r"(?i)^/(laptop|pc)(?:@\w+)?$"))
-    async def cmd_laptop(e):
-        panel_state.setdefault(e.sender_id, {})["panel"] = "laptop"
-        if not _terms_accepted(e.sender_id, "laptop"):
-            return await show_terms(e, "laptop")
-        await show_countries(e, "laptop", 1)
+    @bot.on(events.NewMessage(pattern=r"(?i)^/(allotp|otp|apps)(?:@\w+)?$"))
+    async def cmd_allotp(e):
+        panel_state.setdefault(e.sender_id, {})["panel"] = "allotp"
+        if not _terms_accepted(e.sender_id, "allotp"):
+            return await show_terms(e, "allotp")
+        await show_allotp_hub(e)
 
     @bot.on(events.NewMessage(pattern=r"(?i)^/(panels|products)(?:@\w+)?$"))
     async def cmd_panels(e):
@@ -665,7 +933,7 @@ def register_product_panels(bot):
         cfg = get_markup_config()
         msg = (
             "<blockquote expandable>📈 <b>Live Panel Rates</b>\n\n"
-            "💬 WhatsApp · 🔁 Number Change · 💻 Laptop\n"
+            "💬 WhatsApp · 🔁 Number Change · 🧩 All Apps OTP\n"
             "🌍 All countries, cheapest first\n"
             f"⚙️ {describe_markup(cfg)}\n\n"
             "<i>Open a panel to see the current price for your country.</i></blockquote>"
@@ -679,10 +947,16 @@ def register_product_panels(bot):
     async def pp_text_router(e):
         uid = e.sender_id
         st = panel_state.get(uid) or {}
-        if st.get("mode") != "search":
+        mode = st.get("mode")
+        if mode not in ("search", "app_search", "country_search_pending"):
             return
         key = st.get("panel")
         if key not in PANELS:
             return
-        await handle_search_text(e, key, e.text)
+        if mode == "country_search_pending":
+            # user typed a country before picking an app -> treat as app search
+            panel_state[uid]["mode"] = "app_search"
+            await handle_search_text(e, key, e.text, mode="app_search")
+            raise events.StopPropagation
+        await handle_search_text(e, key, e.text, mode=mode)
         raise events.StopPropagation

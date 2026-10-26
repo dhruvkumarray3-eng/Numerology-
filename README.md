@@ -161,7 +161,7 @@ text fallbacks when `USE_PREMIUM_EMOJIS=0`.
 
 ---
 
-## 🧩 Product Panels (WhatsApp · Number Change · Laptop)
+## 🧩 Product Panels (WhatsApp · Number Change · All Apps OTP)
 
 Every product now has its **own dedicated panel**, and all three run on
 **TemporaSMS**:
@@ -170,14 +170,31 @@ Every product now has its **own dedicated panel**, and all three run on
 |---|---|---|
 | 💬 WhatsApp Panel | `pp_open\|whatsapp` | `TEMPORASMS_SERVICE_WHATSAPP` (default `whatsapp`) |
 | 🔁 Number Change | `pp_open\|numchange` | `TEMPORASMS_SERVICE_NUMCHANGE` (default `telegram`) |
-| 💻 Laptop Panel | `pp_open\|laptop` | `TEMPORASMS_SERVICE_LAPTOP` (default `laptop`) |
+| 🧩 All Apps OTP | `pp_open\|allotp` | selected app slug (e.g. `telegram`, `instagram`) |
 
 Each panel follows the exact screenshot flow: **Terms & Conditions → How to buy /
 Agree & Continue / Cancel → country grid (2 per row, cheapest first) →
 Search Country / Refresh / Back → number reserved → Get OTP → Cancel & Refund**.
 
-Slash commands: `/whatsapp` `/wa`, `/numchange` `/numberchange`, `/laptop` `/pc`,
+Slash commands: `/whatsapp` `/wa`, `/numchange` `/numberchange`, `/allotp` `/otp` `/apps`,
 `/panels` `/products`, `/rates`.
+
+### 🧩 All Apps OTP panel (replaces the old "Laptop" panel)
+
+The third panel is now a full **All Apps OTP** panel, not a laptop panel:
+
+1. **Browse All Apps** — 51 built-in apps (Telegram, WhatsApp, Instagram, Google/Gmail,
+   ChatGPT/OpenAI, Discord, TikTok, Binance, Netflix, Steam …) in a 2-per-row grid
+   with pagination.
+2. **Search App** — type any app name (`telegram`, `instagram`, `chatgpt`, `discord` …)
+   and the grid filters instantly.
+3. **Search Country** — after picking an app, type a country name or dial code
+   (`India`, `+91`, `usa`) to filter that app's country list.
+4. **Change App** — jump back to the app grid without losing the flow.
+
+Every app is a separate TemporaSMS service, so the price shown is that app's live
+price (plus your profit markup) for the selected country. The order card, Get OTP,
+background OTP delivery and Cancel & Refund work exactly like the other panels.
 
 ## 💰 Profit Engine (users never see the real price)
 
@@ -224,7 +241,7 @@ Add these in **Railway → Variables**, **Render → Environment**, or
 | Variable | Where it is used |
 |---|---|
 | `API_ID`, `API_HASH`, `BOT_TOKEN`, `ADMIN_ID` | Core Telegram login (required) |
-| `TEMPORASMS_API_KEY` | WhatsApp / Number Change / Laptop panels |
+| `TEMPORASMS_API_KEY` | WhatsApp / Number Change / All Apps OTP panels |
 | `TEMPORASMS_BASE_URL` | TemporaSMS endpoint (default `https://api.temporasms.com`) |
 | `MONGO_URI`, `MONGO_DB` | Full history storage |
 | `FIVESIM_API_KEY`, `SMSACTIVATE_API_KEY`, `SMSPVA_API_KEY`, `SMSMAN_API_KEY` | All-Apps OTP numbers |

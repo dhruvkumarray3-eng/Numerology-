@@ -3,7 +3,7 @@
 Powers the three product panels:
     * WhatsApp Account panel
     * TG Number Change panel
-    * Laptop / PC Account panel
+    * All Apps OTP panel (service = selected app slug)
 
 The public TemporaSMS API surface differs between reseller accounts, so this
 client is deliberately tolerant: every logical call tries a small list of
