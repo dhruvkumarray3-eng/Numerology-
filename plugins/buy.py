@@ -25,7 +25,7 @@ from config import (
     P_NO, P_YES, P_INR, P_TIME, P_FLAG, P_OTP, P_2FA, P_PHONE, AUTO_CANCEL_SECONDS,
     OTP_REGEX, bot, logger, API_ID, API_HASH, LZT_API_KEY, USDT_TO_INR
 )
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, matches_menu
 from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code
 
@@ -257,6 +257,7 @@ async def show_buy_menu(event):
         [style_btn("🎯 𝐌𝐨𝐫𝐞 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐅𝐢𝐥𝐭𝐞𝐫𝐬 (𝐒𝐭𝐚𝐫𝐬/2𝐅𝐀...)", "pg_filters|1", "success", icon=5409320020058584473)],
         [style_btn("🌍 𝐀𝐥𝐥 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬 (𝐅𝐫𝐞𝐬𝐡 & 𝐀𝐥𝐥)", "pg_c|bulk|1", "primary", icon=6154249597532248059)],
         [style_btn("🏛️ 𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬 (𝐛𝐲 𝐘𝐞𝐚𝐫)", "by_years_menu", "primary", icon=5408995930416362034)],
+        [style_btn("📱 𝓑𝓪𝓼𝓲𝓬 𝓣𝓮𝓵𝓮𝓰𝓻𝓪𝓶 𝓐𝓬𝓬𝓸𝓾𝓷𝓽𝓼", "mtg_home", "success", icon=5409320020058584473)],
         [style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐃𝐚𝐬𝐡𝐛𝐨𝐚𝐫𝐝", "dashboard_main", "danger", icon=6129812419028982717)]
     ]
     if isinstance(event, events.CallbackQuery.Event):
@@ -280,6 +281,28 @@ async def show_years_catalog(event):
     else:
         await event.respond(msg, buttons=btns)
 
+async def _no_stock_card(event, mode=None):
+    """Friendly empty-state instead of a dead-end warning."""
+    msg = (
+        "<blockquote expandable>📦 <b>Stock Update</b>\n\n"
+        "🕓 <b>No accounts in this section right now.</b>\n\n"
+        "✅ Fresh <b>Basic Telegram Accounts</b> are added manually by the admin "
+        "and appear here instantly. You can also try the live OTP panels for a "
+        "number right now.</blockquote>"
+    )
+    btns = [
+        [style_btn("📱 Basic Telegram Accounts", "mtg_home", "success", icon=5409320020058584473)],
+        [style_btn("🧩 All Panels", "pp_hub", "primary", icon=5409320020058584473)],
+        [style_btn("🔙 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)],
+    ]
+    if isinstance(event, events.CallbackQuery.Event):
+        try:
+            return await event.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            return
+    return await event.respond(msg, buttons=btns)
+
+
 async def show_countries_for_year(event, year, page):
     limit = 10
     offset = (page - 1) * limit
@@ -288,7 +311,7 @@ async def show_countries_for_year(event, year, page):
     countries = countries_all[offset:offset+limit]
     
     if not countries:
-        return await event.respond(f"⚠️ 𝐍𝐨 𝐬𝐭𝐨𝐜𝐤 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 {year} 𝐚𝐭 𝐭𝐡𝐞 𝐦𝐨𝐦𝐞𝐧𝐭.")
+        return await _no_stock_card(event)
 
     btns = []
     for c_name, count in countries:
@@ -320,7 +343,7 @@ async def show_countries(event, mode, page):
     countries = countries_all[offset:offset+limit]
     
     if not countries:
-        return await event.respond(f"⚠️ 𝐍𝐨 𝐬𝐭𝐨𝐜𝐤 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐚𝐭 𝐭𝐡𝐞 𝐦𝐨𝐦𝐞𝐧𝐭. 𝐏𝐥𝐞𝐚𝐬𝐞 𝐜𝐡𝐞𝐜𝐤 𝐛𝐚𝐜𝐤 𝐥𝐚𝐭𝐞𝐫!")
+        return await _no_stock_card(event)
 
     btns = []
     for c_name, count in countries:
@@ -770,19 +793,14 @@ async def handle_format_downloads(event, phone, file_type):
 
 # ---------------- COMMAND & HANDLER REGISTRATIONS ----------------
 
-@bot.on(events.NewMessage(pattern=r"(?i).*(buy account).*"))
+@bot.on(events.NewMessage(func=lambda e: e.is_private and matches_menu(e.raw_text, "buy account")))
 async def buy_account_handler(event):
-    user_id = event.sender_id
-    user_states[user_id] = "AWAITING_COUNTRY"
-    
-    msg_text = (
-        "🔍 <b>Search Country:</b>\n\n"
-        "Please type the country name or dial code (e.g., <b>India</b> or <b>+91</b>) in chat below."
-    )
-    buttons = [[style_btn("❌ ⬅️ Back to Menu", "back_to_menu", "danger")]]
-    await event.respond(msg_text, buttons=buttons)
-    # Stop other NewMessage handlers (e.g. the country search processor)
-    # from also consuming this same "Buy Account" trigger message.
+    # The reply-keyboard label is rendered with stylised Unicode glyphs
+    # ("🛒 𝗕ᴜʏ 𝗔ᴄᴄᴏᴜɴᴛ"), so `matches_menu` folds those back to ASCII
+    # before comparing.  Opening the full buy menu (rather than a bare text
+    # prompt) makes the button behave exactly like the inline "Buy Account".
+    user_states.pop(event.sender_id, None)
+    await show_buy_menu(event)
     raise events.StopPropagation
 
 @bot.on(events.CallbackQuery(pattern=b"back_to_menu"))

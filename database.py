@@ -257,6 +257,14 @@ def get_flag_by_country_name(name):
         row = cur.execute("SELECT flag FROM custom_countries WHERE name=?", (name,)).fetchone()
         if row: return row[0]
     except: pass
+    # Robust fallback: resolve ISO codes, slugs, dial codes and aliases.
+    try:
+        from utils.flags import flag_for
+        flag = flag_for(name)
+        if flag and flag != "🌍":
+            return flag
+    except Exception:
+        pass
     return "🌍"
 
 def get_country_info(phone):
@@ -706,3 +714,37 @@ def list_redeem_codes():
     return cur.execute(
         "SELECT code, amount, max_uses, used_count, active FROM redeem_codes ORDER BY rowid DESC"
     ).fetchall()
+
+
+def clear_legacy_stock_once():
+    """One-time cleanup of the old auto-imported stock.
+
+    The bot used to ship a large pool of stale Telethon sessions.  On the
+    first start after this update we wipe that legacy pool exactly once and
+    record a flag so newly added stock is never touched again.  Manual
+    "Basic Telegram Account" stock lives in a separate table and is safe.
+    """
+    try:
+        row = cur.execute(
+            "SELECT value FROM settings WHERE key='legacy_stock_cleared'"
+        ).fetchone()
+        if row:
+            return 0
+        removed = cur.execute("SELECT COUNT(*) FROM stock").fetchone()[0]
+        cur.execute("DELETE FROM stock")
+        cur.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('legacy_stock_cleared', '1')"
+        )
+        db.commit()
+        if removed:
+            logger.info(f"Legacy stock cleared once: {removed} row(s) removed.")
+        return int(removed or 0)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"legacy stock cleanup skipped: {exc}")
+        return 0
+
+
+try:
+    clear_legacy_stock_once()
+except Exception:
+    pass

@@ -33,7 +33,7 @@ from config import (
     logger,
 )
 from database import cur, db, ensure_user, get_user_currency
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, matches_menu
 from utils import temporasms
 from utils.markup import apply_markup, get_markup_config, describe_markup
 from utils import mongo_store
@@ -155,16 +155,16 @@ ALL_APPS = [
     ("binance", "\U0001FA99 Binance"),
     ("coinbase", "\U0001F4B0 Coinbase"),
     ("revolut", "\U0001F4B8 Revolut"),
-    ("wise", "\U0001F30D Wise"),
-    ("steam", "\U0001F3AE Steam"),
+    ("wise", "\U0001F4B1 Wise"),
+    ("steam", "\U0001F579\ufe0f Steam"),
     ("twitch", "\U0001F4FA Twitch"),
     ("spotify", "\U0001F3A7 Spotify"),
     ("reddit", "\U0001F4E2 Reddit"),
     ("pinterest", "\U0001F4CC Pinterest"),
-    ("signal", "\U0001F512 Signal"),
-    ("viber", "\U0001F4DE Viber"),
-    ("line", "\U0001F4AC LINE"),
-    ("wechat", "\U0001F4AC WeChat"),
+    ("signal", "\U0001F510 Signal"),
+    ("viber", "\U0001F49C Viber"),
+    ("line", "\U0001F7E2 LINE"),
+    ("wechat", "\U0001F7E9 WeChat"),
     ("okcupid", "\U0001F49D OkCupid"),
     ("grindr", "\U0001F308 Grindr"),
     ("badoo", "\U0001F48B Badoo"),
@@ -176,14 +176,14 @@ ALL_APPS = [
     ("canva", "\U0001F58C\ufe0f Canva"),
     ("notion", "\U0001F4DD Notion"),
     ("zoom", "\U0001F4F9 Zoom"),
-    ("skype", "\U0001F4DE Skype"),
+    ("skype", "\u260E\ufe0f Skype"),
     ("deliveroo", "\U0001F6F5 Deliveroo"),
     ("doordash", "\U0001F355 DoorDash"),
     ("airbnb", "\U0001F3E0 Airbnb"),
     ("booking", "\U0001F3E8 Booking.com"),
     ("alipay", "\U0001F4B5 Alipay"),
-    ("kakao", "\U0001F4AC KakaoTalk"),
-    ("zalo", "\U0001F4AC Zalo"),
+    ("kakao", "\U0001F7E1 KakaoTalk"),
+    ("zalo", "\U0001F537 Zalo"),
 ]
 APP_LABELS = dict(ALL_APPS)
 
@@ -198,11 +198,9 @@ def _app_icon(slug):
 
 
 def _clean_name(name):
-    """Strip a leading flag/emoji from a country or app name."""
-    name = (name or "").strip()
-    while name and (ord(name[0]) > 0x2000):
-        name = name[1:].strip()
-    return name or "Unknown"
+    """Strip a leading flag/emoji (and provider noise) from a name."""
+    from utils.flags import clean_name as _cn
+    return _cn(name)
 
 
 def _filter_apps(query):
@@ -222,16 +220,9 @@ _cache = {}  # key -> {"ts": float, "countries": [...]}
 # helpers
 # --------------------------------------------------------------------------
 def _flag(code: str) -> str:
-    code = (code or "").strip().lower()
-    if len(code) == 2 and code.isalpha():
-        return "".join(chr(0x1F1E6 + ord(ch) - ord("a")) for ch in code)
-    named = {
-        "england": "🇬🇧", "uk": "🇬🇧", "usa": "🇺🇸", "uae": "🇦🇪",
-        "southafrica": "🇿🇦", "saudiarabia": "🇸🇦", "srilanka": "🇱🇰",
-        "newzealand": "🇳🇿", "southkorea": "🇰🇷", "northkorea": "🇰🇵",
-        "czech": "🇨🇿", "czechia": "🇨🇿",
-    }
-    return named.get(code, "🏳️")
+    """Resolve any country identifier (ISO code, slug, name, dial code) to a flag."""
+    from utils.flags import flag_for
+    return flag_for(code)
 
 
 def _user_currency(uid):
@@ -289,12 +280,16 @@ def _service_for(key, uid=None):
     return PANELS[key]["service"]
 
 
-async def _countries_for(key, uid=None):
-    """Cached live country list for a panel, with fallback."""
+async def _countries_for(key, uid=None, force=False):
+    """Cached live country list for a panel, with fallback.
+
+    `force=True` bypasses the cache and re-queries the provider, which is what
+    the Buy flow does when it finds a country without a live price.
+    """
     service = _service_for(key, uid)
     cache_key = f"{key}:{service}"
     cached = _cache.get(cache_key)
-    if cached and time.time() - cached["ts"] < CACHE_TTL and cached["countries"]:
+    if not force and cached and time.time() - cached["ts"] < CACHE_TTL and cached["countries"]:
         return cached["countries"], True
     result = await temporasms.get_countries(service)
     if result.get("ok") and result.get("countries"):
@@ -661,9 +656,25 @@ async def buy(event, key, code):
     cfg = get_markup_config()
     real_price = match.get("price")
     if real_price is None:
-        return await event.answer(
-            "⚠️ Live price for this country is unavailable right now. "
-            "Please refresh or pick another country.", alert=True)
+        # The cached/fallback list had no live price.  Re-query the provider
+        # once (bypassing the cache) before giving up.
+        countries, _live = await _countries_for(key, uid, force=True)
+        match = next((c for c in countries if c["code"] == code), match)
+        real_price = match.get("price")
+    if real_price is None:
+        # Graceful, non-blocking fallback instead of a scary alert popup.
+        name = _clean_name(match.get("name") or code)
+        msg = (
+            f"<blockquote expandable>{_flag(code)} <b>{html.escape(name)}</b>\n\n"
+            "🟡 <b>Live pricing is temporarily unavailable</b> for this country.\n"
+            "The number provider is busy right now. Please tap <b>Refresh</b> in a "
+            "moment — no balance has been deducted.</blockquote>"
+        )
+        btns = [
+            [style_btn("🔄 Refresh Price", f"pp_buy|{key}|{code}", "success", icon=5409320020058584473)],
+            [style_btn("🔙 Back to Countries", f"pp_open|{key}", "primary", icon=6129812419028982717)],
+        ]
+        return await _safe_edit(event, msg, btns)
 
     display_inr = _display_inr(real_price, cfg)
     profit = display_inr - float(real_price)
@@ -946,6 +957,11 @@ def register_product_panels(bot):
                               and not e.text.startswith("/")))
     async def pp_text_router(e):
         uid = e.sender_id
+        # Never treat a persistent-menu tap as a search query.
+        if matches_menu(e.raw_text, "buy account", "deposit", "profile", "my orders",
+                        "balance", "stock", "refer", "support", "start", "close",
+                        "help", "admin panel"):
+            return
         st = panel_state.get(uid) or {}
         mode = st.get("mode")
         if mode not in ("search", "app_search", "country_search_pending"):
