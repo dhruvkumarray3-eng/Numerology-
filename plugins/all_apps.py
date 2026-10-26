@@ -96,12 +96,15 @@ def _build_countries():
         from utils.country_search import resolve_country
     except Exception:
         resolve_country = None
-    for slug, iso2 in _AA_SLUG_ISO:
+    for _slug, iso2 in _AA_SLUG_ISO:
         info = resolve_country(iso2) if resolve_country else None
         if info:
-            out.append((slug, f"{info['flag']} {info['name']}"))
+            # Key by ISO-2, not the slug: the provider (TemporaSMS/5SIM) and
+            # the buy flow both speak ISO codes, and slugs like "england" or
+            # "srilanka" never matched the provider's country rows.
+            out.append((iso2, f"{info['flag']} {info['name']}"))
         else:
-            out.append((slug, slug.title()))
+            out.append((iso2, _slug.title()))
     return out
 
 
@@ -131,7 +134,7 @@ def _ensure_emoji(label):
 def _providers_line():
     provs = available_providers()
     if not provs:
-        return "⚠️ <b>No OTP provider configured.</b> Add <code>FIVESIM_API_KEY</code> (or another provider key) in your host variables."
+        return "⚠️ <b>No OTP provider configured.</b> Add <code>TEMPORASMS_API_KEY</code> (or <code>FIVESIM_API_KEY</code>) in your host variables."
     return "✅ <b>Providers:</b> " + ", ".join(p.upper() for p in provs)
 
 
@@ -260,7 +263,7 @@ async def do_buy(event, app_slug, country_iso):
     uid = event.sender_id
     if not provider_configured():
         return await event.answer(
-            "⚠️ No OTP provider configured. Set FIVESIM_API_KEY in host variables.",
+            "⚠️ No OTP provider configured. Set TEMPORASMS_API_KEY in host variables.",
             alert=True,
         )
     await event.answer("⏳ Requesting number...")
@@ -328,6 +331,21 @@ def register_all_apps(bot):
         if not slug:
             return
         aa_search_state.pop(uid, None)
+        # Mutual exclusion: a pending panel / buy search must not also fire
+        # for this same message (avoids duplicate replies).
+        try:
+            from plugins.product_panels import panel_state as _pp_state
+            if _pp_state.get(uid):
+                _pp_state[uid]["mode"] = None
+        except Exception:
+            pass
+        try:
+            from plugins.buy import search_state as _buy_search, user_states as _buy_states
+            _buy_search[uid] = False
+            if _buy_states.get(uid) == "AWAITING_COUNTRY":
+                _buy_states[uid] = None
+        except Exception:
+            pass
         query = e.text.strip()
         try:
             from utils.country_search import search_country_names, resolve_country
@@ -344,11 +362,18 @@ def register_all_apps(bot):
                 raise events.StopPropagation
         resolved = resolve_country(query) if resolve_country else None
         if resolved:
+            # Match by ISO code first (robust), then fall back to the label.
             iso = None
+            want = str(resolved.get("iso2") or "").lower()
             for i, l in COUNTRIES:
-                if resolved["name"].lower() in l.lower():
+                if want and i.lower() == want:
                     iso = i
                     break
+            if iso is None:
+                for i, l in COUNTRIES:
+                    if resolved["name"].lower() in l.lower():
+                        iso = i
+                        break
             if iso:
                 await show_details(e, slug, iso)
                 raise events.StopPropagation

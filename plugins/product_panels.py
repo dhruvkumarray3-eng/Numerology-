@@ -346,7 +346,14 @@ async def _countries_for(key, uid=None, force=False):
     cached = _cache.get(cache_key)
     if not force and cached and time.time() - cached["ts"] < CACHE_TTL and cached["countries"]:
         return cached["countries"], True
-    result = await temporasms.get_countries(service)
+    try:
+        result = await asyncio.wait_for(temporasms.get_countries(service), timeout=20)
+    except asyncio.TimeoutError:
+        logger.warning(f"TemporaSMS get_countries({service}) timed out")
+        result = {"ok": False, "countries": []}
+    except Exception as exc:
+        logger.warning(f"TemporaSMS get_countries({service}) failed: {exc}")
+        result = {"ok": False, "countries": []}
     if result.get("ok") and result.get("countries"):
         _cache[cache_key] = {"ts": time.time(), "countries": result["countries"]}
         return result["countries"], True
@@ -1182,6 +1189,20 @@ def register_product_panels(bot):
         mode = st.get("mode")
         if mode not in ("search", "app_search", "country_search_pending"):
             return
+        # Mutual exclusion: clear any pending All-Apps / buy search state so a
+        # single message can never trigger two routers (duplicate replies).
+        try:
+            from plugins.all_apps import aa_search_state as _aa_state
+            _aa_state.pop(uid, None)
+        except Exception:
+            pass
+        try:
+            from plugins.buy import search_state as _buy_search, user_states as _buy_states
+            _buy_search[uid] = False
+            if _buy_states.get(uid) == "AWAITING_COUNTRY":
+                _buy_states[uid] = None
+        except Exception:
+            pass
         key = st.get("panel")
         if key not in PANELS:
             return

@@ -273,18 +273,30 @@ async def admin_actions(event):
         # accounts actually come back (and why not, if they don't).
         extra = ""
         try:
-            items = await lzt_client.search_items("India", mode="nonspam", limit=5)
+            items = await asyncio.wait_for(
+                lzt_client.search_items("India", mode="nonspam", limit=5),
+                timeout=35,
+            )
             err = getattr(lzt_client, "last_error", None)
             if items:
                 cheapest = min(float(it.get("price_rub") or 0) for it in items)
                 extra = (f"\n\n\U0001F50E <b>Market Search Test (India):</b> "
                          f"\u2705 {len(items)} item(s) found \u2014 cheapest "
                          f"{cheapest:.0f} RUB")
+            elif err:
+                # A real failure (rate limit / auth / timeout / 402) — show the
+                # honest reason instead of a misleading "0 items".
+                extra = ("\n\n\U0001F50E <b>Market Search Test (India):</b> "
+                         f"\u26a0\ufe0f could not complete\n<i>{html.escape(str(err))}</i>")
             else:
                 extra = ("\n\n\U0001F50E <b>Market Search Test (India):</b> "
-                         "\u26a0\ufe0f 0 items")
-                if err:
-                    extra += f"\n<i>{html.escape(str(err))}</i>"
+                         "\u2139\ufe0f 0 non-spam items right now "
+                         "(India may genuinely be out of stock \u2014 try "
+                         "another country or mode).")
+        except asyncio.TimeoutError:
+            extra = ("\n\n\U0001F50E <b>Market Search Test:</b> "
+                     "\u23f1\ufe0f timed out \u2014 LZT is slow right now, "
+                     "please retry.")
         except Exception as exc:
             extra = (f"\n\n\U0001F50E <b>Market Search Test:</b> "
                      f"\u274c {html.escape(str(exc))}")

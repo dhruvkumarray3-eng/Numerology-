@@ -168,6 +168,24 @@ ISO2_TO_ISO3 = {
 }
 ISO3_TO_ISO2 = {v: k for k, v in ISO2_TO_ISO3.items()}
 
+# The exact ISO-3166 alpha-3 codes LZT accepts for the ``country[]`` filter
+# (taken from the official OpenAPI spec, component ``country``).  Sending a
+# code outside this set makes the API return an empty list instead of an
+# error, which used to look like "this country has no stock".  When a country
+# resolves to a code that is NOT in here we omit the server-side filter and
+# rely on the tolerant client-side country check instead.
+LZT_SUPPORTED_ISO3 = set("""
+ABW AGO ALB AND ANT ARE ARG ATA AUS AUT BDI BEL BFA BGD BGR BHR BHS BIH BLR
+BLZ BOL BRA BRB BRN BTN BWA CAN CHE CHL CIV CMR COD COG COL CRI CUB CYP CZE
+DEU DNK DOM DZA ECU EGY ESP EST ETH FIN FJI FRA GAB GBR GEO GHA GIB GLP GRC
+GRD GTM GUF GUM GUY HKG HND HRV HTI HUN IDN IMN IND IRL IRN IRQ ISL ISR ITA
+JAM JEY JOR JPN KAZ KEN KHM KWT LAO LBN LBY LKA LTU LUX LVA MAC MAR MCO MDG
+MDV MEX MKD MLI MLT MMR MNE MNG MRT MTQ MUS MYS NAM NCL NGA NIC NLD NOR NPL
+NZL OMN PAK PAN PCN PER PHL POL PRI PRT PRY PSE QAT REU ROU RUS SAU SEN SGP
+SLV SRB SUR SVK SVN SWE TGO THA TTO TUN TUR TWN UKR UMI URY USA VEN VIR VNM
+ZAF ZMB ZWE
+""".split())
+
 
 def get_lzt_code3(country_name):
     """Resolve any country name / dial code / ISO-2 / ISO-3 to an ISO-3 code.
@@ -302,8 +320,7 @@ class LZTClient:
     async def get_available_countries(self):
         url = f"{LZT_BASE_URL}/telegram"
         params = {
-            "order_by": "price_to_up",
-            "parse_sticky_items": "0"
+            "order_by": "price_to_up"
         }
         try:
             async with aiohttp.ClientSession() as session:
@@ -330,7 +347,7 @@ class LZTClient:
         counts = {}
         after = None
         for _ in range(max_pages):
-            params = {"order_by": "price_to_up", "parse_sticky_items": "0"}
+            params = {"order_by": "price_to_up"}
             if after:
                 params["after"] = after
             data = await self._get_telegram_page(params)
@@ -351,14 +368,29 @@ class LZTClient:
                 break
         return counts
 
-    async def get_balance_info(self):
+    async def get_balance_info(self, max_age=600):
+        """Return (balance_id, balance_rub, balance_usd).
+
+        The result is cached for ``max_age`` seconds (default 10 min) so the
+        hot search path does not make an extra /user request on every call.
+        Pass ``max_age=0`` to force a refresh.
+        """
+        now = time.monotonic()
+        if (
+            self._balance_id is not None
+            and max_age
+            and (now - self._balance_cache_ts) < max_age
+        ):
+            return self._balance_id, self._balance_rub, self._balance_usd
+
         url = f"{LZT_BASE_URL}/user"
 
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     url,
-                    headers=self.get_headers()
+                    headers=self.get_headers(),
+                    timeout=aiohttp.ClientTimeout(total=15),
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -382,10 +414,16 @@ class LZTClient:
                             balance_usd = float(user.get("balance", 0))
                             balance_rub = balance_usd * 84.0
 
+                        self._balance_id = balance_id
+                        self._balance_rub = balance_rub
+                        self._balance_usd = balance_usd
+                        self._balance_cache_ts = time.monotonic()
                         return balance_id, balance_rub, balance_usd
 
         except Exception as e:
             logger.error(f"LZT balance info error: {e}")
+            if self._balance_id is not None:
+                return self._balance_id, self._balance_rub, self._balance_usd
             return None, 0.0, 0.0
 
     async def get_balance_rub(self):
@@ -393,14 +431,20 @@ class LZTClient:
         return bal_rub
 
     async def _throttle(self):
-        """Enforce a global 3s gap between Category Search calls (20 req/min)."""
+        """Reserve the next 3s slot for a Category Search call (20 req/min).
+
+        The lock is only held while computing/reserving the slot, never during
+        the sleep.  Holding it during the sleep serialised every concurrent
+        user and made the bot look frozen when several people searched at once.
+        """
         global _LZT_LAST_CALL
         async with _LZT_SEARCH_LOCK:
             now = time.monotonic()
-            wait = _LZT_MIN_INTERVAL - (now - _LZT_LAST_CALL)
-            if wait > 0:
-                await asyncio.sleep(wait)
-            _LZT_LAST_CALL = time.monotonic()
+            slot = max(now, _LZT_LAST_CALL + _LZT_MIN_INTERVAL)
+            _LZT_LAST_CALL = slot
+        wait = slot - time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
 
     async def _get_telegram_page(self, params, retries=3):
         """GET /telegram with 429 handling. Returns parsed JSON or None."""
@@ -543,6 +587,10 @@ class LZTClient:
           * password / premium / dc_id[] / min_stars for the matching filters
         Pages through `after` cursors (respecting the 20 req/min limit) so year
         filtering and stock counts see real data instead of only page 1.
+
+        The whole search is wrapped in a hard timeout so a slow/looping API can
+        never freeze a handler, and the country filter is only sent when LZT
+        actually supports the code (unsupported codes silently return []).
         """
         c3 = get_lzt_code3(country_name)
         c2 = get_lzt_code(country_name)
@@ -558,14 +606,19 @@ class LZTClient:
             logger.error("LZT search aborted: no API key")
             return []
 
-        if not c3:
-            logger.warning(
-                f"LZT search: could not resolve '{country_name}' to ISO-3, "
-                "sending request without a country filter"
+        # Only send country[] when LZT supports the resolved code.  Unknown or
+        # unsupported codes make the API return an empty list, which used to
+        # look like "this country has no stock".  In that case we omit the
+        # server-side filter and rely on the tolerant client-side check.
+        send_country_filter = bool(c3 and c3 in LZT_SUPPORTED_ISO3)
+        if c3 and not send_country_filter:
+            logger.info(
+                f"LZT search: '{country_name}' -> {c3} is not in LZT's country "
+                "enum; omitting country[] and filtering client-side"
             )
 
-        base_params = {"order_by": "price_to_up", "parse_sticky_items": "0"}
-        if c3:
+        base_params = {"order_by": "price_to_up"}
+        if send_country_filter:
             base_params["country[]"] = c3
 
         if mode == 'spam':
@@ -589,78 +642,90 @@ class LZTClient:
 
         balance_id, _, _ = await self.get_balance_info()
 
-        results = []
-        after = None
-        pages = 0
-        while pages < max_pages:
-            params = dict(base_params)
-            if after:
-                params["after"] = after
+        async def _run():
+            results = []
+            after = None
+            pages = 0
+            while pages < max_pages:
+                params = dict(base_params)
+                if after:
+                    params["after"] = after
 
-            data = await self._get_telegram_page(params)
-            if not data:
-                break
+                data = await self._get_telegram_page(params)
+                if not data:
+                    break
 
-            items = data.get("items") or []
-            if not items:
-                break
+                items = data.get("items") or []
+                if not items:
+                    break
 
-            for raw in items:
-                parsed = self._parse_item(raw, balance_id)
-                if not parsed:
-                    continue
-
-                # Country safety check (only when the item reports a country).
-                # LZT may report the country as an ISO-2 ("in"), ISO-3 ("IND")
-                # or a full name ("India"), so compare through the universal
-                # resolver instead of a strict string match.  The old strict
-                # check silently discarded every item and was a big reason
-                # "market search" appeared broken.
-                if c2 and parsed["country"]:
-                    try:
-                        from utils.country_search import country_matches
-                        ok_country = country_matches(
-                            parsed["country"], c2, c3 or "", country_name
-                        )
-                    except Exception:
-                        item_c = str(parsed["country"]).lower()
-                        ok_country = item_c in {c2, (c3 or "").lower()}
-                    if not ok_country:
+                for raw in items:
+                    parsed = self._parse_item(raw, balance_id)
+                    if not parsed:
                         continue
 
-                if year is not None and str(parsed["year"]) != str(year):
-                    continue
+                    # Tolerant country check.  LZT may report the country as
+                    # ISO-2 ("in"), ISO-3 ("IND") or a name ("India"), and the
+                    # exact format is undocumented.  We only DROP an item when
+                    # its country resolves to a *different* known country;
+                    # unknown/unparseable values are kept so we never silently
+                    # discard real stock.
+                    if c2 and parsed["country"]:
+                        try:
+                            from utils.country_search import (
+                                country_matches,
+                                resolve_country,
+                            )
+                            item_c = str(parsed["country"]).strip()
+                            if not country_matches(item_c, c2, c3 or "", country_name):
+                                resolved_item = resolve_country(item_c)
+                                if resolved_item and resolved_item.get("iso2"):
+                                    continue
+                        except Exception:
+                            item_c = str(parsed["country"]).lower()
+                            if item_c not in {c2, (c3 or "").lower()}:
+                                continue
 
-                # Client-side safety for filters the API may not have applied.
-                if mode == 'nonspam' and parsed["spam_known"] and parsed["is_spam"]:
-                    continue
-                if mode == 'spam' and parsed["spam_known"] and not parsed["is_spam"]:
-                    continue
-                if mode == 'no_email' and parsed["has_email"]:
-                    continue
-                if mode == 'with_email' and not parsed["has_email"]:
-                    continue
-                if mode == 'premium' and not parsed["is_premium"]:
-                    continue
-                if mode == 'stars' and parsed["stars"] <= 0:
-                    continue
-                if mode == 'dc5' and str(parsed["dc_id"]) != '5':
-                    continue
-                if mode == 'no_2fa' and parsed["has_2fa"]:
-                    continue
-                if mode == 'with_2fa' and not parsed["has_2fa"]:
-                    continue
+                    if year is not None and str(parsed["year"]) != str(year):
+                        continue
 
-                results.append(parsed)
-                if len(results) >= limit:
-                    return results
+                    # Client-side safety for filters the API may not have applied.
+                    if mode == 'nonspam' and parsed["spam_known"] and parsed["is_spam"]:
+                        continue
+                    if mode == 'spam' and parsed["spam_known"] and not parsed["is_spam"]:
+                        continue
+                    if mode == 'no_email' and parsed["has_email"]:
+                        continue
+                    if mode == 'with_email' and not parsed["has_email"]:
+                        continue
+                    if mode == 'premium' and not parsed["is_premium"]:
+                        continue
+                    if mode == 'stars' and parsed["stars"] <= 0:
+                        continue
+                    if mode == 'dc5' and str(parsed["dc_id"]) != '5':
+                        continue
+                    if mode == 'no_2fa' and parsed["has_2fa"]:
+                        continue
+                    if mode == 'with_2fa' and not parsed["has_2fa"]:
+                        continue
 
-            pages += 1
-            after = data.get("nextCursor") or data.get("after")
-            if not data.get("hasNextPage") or not after:
-                break
+                    results.append(parsed)
+                    if len(results) >= limit:
+                        return results
 
-        return results
+                pages += 1
+                after = data.get("nextCursor") or data.get("after")
+                if not data.get("hasNextPage") or not after:
+                    break
+
+            return results
+
+        try:
+            return await asyncio.wait_for(_run(), timeout=30)
+        except asyncio.TimeoutError:
+            self.last_error = "LZT search timed out. Please try again in a moment."
+            logger.warning("LZT search_items hard timeout (30s)")
+            return []
 
     async def fast_buy(self, item_id, price_str, balance_id=None):
         url = f"{LZT_BASE_URL}/{item_id}/fast-buy"
