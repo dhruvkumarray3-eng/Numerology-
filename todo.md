@@ -79,3 +79,27 @@
 - [x] Help card documents new role syntax
 - [x] Verified: compile clean, 19/19 plugins import, 129 handlers register, pack-link parsing + role args tested
 - [x] Commit on new branch + push + PR + merge
+
+## 13. Country fetch fix + LZT/TemporaSMS hardening (Request F)
+- [x] Root cause: `utils/temporasms.py` used invented REST paths (`/api/countries/...`) that do not exist -> every panel returned 0 countries
+- [x] Rewrote `utils/temporasms.py` to the real SMS-Activate-compatible protocol: `stubs/handler_api.php?api_key=&action=`
+- [x] Implemented actions: getBalance, getCountries, getServices, getPrices/V2/V3, getNumber/V2, getStatus, setStatus
+- [x] Tolerant parsers for mixed plain-text (`ACCESS_BALANCE:`, `ACCESS_NUMBER:`, `STATUS_OK:`) and JSON payloads
+- [x] Service alias map (telegram->tg, whatsapp->wa, google->go, ...) so config defaults work
+- [x] Country resolution: provider numeric id <-> ISO-2/ISO-3/name/dial code (`_resolve_country_id`)
+- [x] `get_countries()` returns priced/in-stock rows, deduped by ISO-2, cheapest first
+- [x] `utils/otp_providers.py`: TemporaSMS is now the primary provider for All Apps OTP (was 5SIM-only)
+- [x] `plugins/all_apps.py`: `_build_countries()` now keys by ISO-2 instead of slug (buy/stock never matched before)
+- [x] `plugins/all_apps.py`: text router matches by ISO-2 first, then label fallback
+- [x] `plugins/product_panels.py`: `_countries_for()` wrapped in 20s timeout + graceful fallback
+- [x] `utils/lzt.py`: added `LZT_SUPPORTED_ISO3` (155-code enum) and only send `country[]` when supported
+- [x] `utils/lzt.py`: removed invalid `parse_sticky_items` params (3 places)
+- [x] `utils/lzt.py`: `_throttle()` releases the global lock before sleeping (no more serialised hangs)
+- [x] `utils/lzt.py`: `search_items()` has a 30s timeout and tolerant client-side country filter
+- [x] `utils/lzt.py`: `get_balance_info()` 10-min cache + timeout + last-known-good (413 shows correctly)
+- [x] `plugins/admin_actions.py`: `lzttest` 35s timeout, honest error messaging (no misleading "0 items")
+- [x] Text routers cross-clear each other's state so one message can never trigger two replies
+- [x] Verified with mocked transport: balance 413.0, countries ru/jp, buy by ISO + by name, OTP, cancel
+- [x] Verified OTP provider layer: providers=['temporasms'], stock/price/buy/otp all OK
+- [x] `python3 -m compileall` clean; no `parse_sticky_items` / invented REST paths remain
+- [ ] Commit on new branch + push + PR
