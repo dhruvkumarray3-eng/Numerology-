@@ -59,3 +59,68 @@ def get_keypad():
         [style_btn("Del", b"kp_del", style_type="danger", icon=6129731974291527294), style_btn("0", b"kp_0", style_type="primary", icon=6203982793379154737), style_btn("Confirm", b"kp_done", style_type="success", icon=6129399728506412489)],
         [style_btn("𝐂ᴀɴᴄᴇʟ", b"cancel_action", style_type="danger", icon=6064310143380625195)]
     ]
+
+
+# ---------------------------------------------------------------------------
+# Stylised-text matching
+#
+# The reply keyboard uses "fancy" Unicode glyphs (mathematical bold capitals
+# plus Latin small-capital letters) so the menu looks premium, e.g.
+#   "🛒 𝗕ᴜʏ 𝗔ᴄᴄᴏᴜɴᴛ"  instead of  "🛒 Buy Account"
+# Telegram sends back the *rendered* label, so plain ASCII regexes never
+# match.  `normalise_menu_text()` folds every such glyph back to ASCII so a
+# handler can reliably detect which button was tapped.
+# ---------------------------------------------------------------------------
+_MENU_FOLD = {}
+
+
+def _build_menu_fold():
+    # Mathematical bold / italic / script / fraktur / double-struck / sans
+    # and monospace letter ranges all sit in contiguous 26-letter blocks.
+    blocks = [
+        0x1D400, 0x1D434, 0x1D468, 0x1D49C, 0x1D4D0, 0x1D504, 0x1D538,
+        0x1D56C, 0x1D5A0, 0x1D5D4, 0x1D608, 0x1D63C, 0x1D670,
+    ]
+    for base in blocks:
+        for i in range(26):
+            _MENU_FOLD[chr(base + i)] = chr(ord("A") + i)
+            _MENU_FOLD[chr(base + 26 + i)] = chr(ord("a") + i)
+    # Latin small capitals and common look-alikes used in the menu.
+    small_caps = {
+        "ᴀ": "a", "ʙ": "b", "ᴄ": "c", "ᴅ": "d", "ᴇ": "e", "ꜰ": "f",
+        "ɢ": "g", "ʜ": "h", "ɪ": "i", "ᴊ": "j", "ᴋ": "k", "ʟ": "l",
+        "ᴍ": "m", "ɴ": "n", "ᴏ": "o", "ᴘ": "p", "ǫ": "q", "ʀ": "r",
+        "ꜱ": "s", "ᴛ": "t", "ᴜ": "u", "ᴠ": "v", "ᴡ": "w", "ʏ": "y",
+        "ᴢ": "z", "ꜱ": "s", "ꜰ": "f", "ᴠ": "v", "ᴢ": "z",
+        "ᵢ": "i", "ᵣ": "r", "ᵤ": "u", "ᵥ": "v",
+        "ꜱ": "s", "ᴏ": "o", "ᴇ": "e", "ᴅ": "d", "ᴄ": "c",
+    }
+    _MENU_FOLD.update(small_caps)
+    # Cyrillic / IPA look-alikes that appear in some labels.
+    _MENU_FOLD.update({
+        "ӏ": "l", "ѕ": "s", "ԁ": "d", "ԛ": "q", "ԝ": "w",
+        "\u0493": "f",  # Cyrillic ghe with stroke, used for "f"
+        "\u0274": "n",  # Latin small capital N
+        "\u0280": "r",  # Latin small capital R
+        "\u0299": "b",  # Latin small capital B
+        "\u1d1c": "u",  # Latin small capital U
+        "\u028f": "y",  # Latin small capital Y
+        "\u026a": "i",  # Latin small capital I
+        "\u029f": "l",  # Latin small capital L
+    })
+
+
+_build_menu_fold()
+
+
+def normalise_menu_text(value) -> str:
+    """Fold stylised Unicode letters to plain ASCII and strip decoration."""
+    text = str(value or "")
+    folded = "".join(_MENU_FOLD.get(ch, ch) for ch in text)
+    return "".join(ch for ch in folded.lower() if ch.isalnum())
+
+
+def matches_menu(value, *keys) -> bool:
+    """True when `value` (a button label) contains any of the given keys."""
+    norm = normalise_menu_text(value)
+    return any(normalise_menu_text(k) in norm for k in keys)

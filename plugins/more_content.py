@@ -16,10 +16,13 @@ from config import (
     PE_CHECK,
     PE_LIGHTNING,
     UPDATES_URL,
+    SUPPORT_URL,
+    OWNER_URL,
+    MAIN_CHANNEL_URL,
     logger,
 )
 from database import cur, db, redeem_code_for_user, get_user_currency, create_redeem_code, list_redeem_codes, is_admin
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, style_url
 from utils.session_gen import generate_session_from_string, read_session_file
 
 # uid -> {"mode": "redeem"|"session"}
@@ -42,7 +45,11 @@ async def show_more_content(event):
         [style_btn("🧩 Read & Generate Sessions", b"mc_sessions", "primary", icon=5409320020058584473)],
         [style_btn("🎟 Redeem", b"mc_redeem", "success", icon=5409098988156629257)],
         [style_btn("🎁 Refer & Earn", b"view_referrals", "success", icon=5354889508674360491)],
-        [Button.url("🤖 Get your own Bots ↗️", UPDATES_URL)],
+        # ---- Get your own Bots (colourful link hub) ----
+        [style_url("🤖 Get your own Bots ↗️", UPDATES_URL, "success", icon=5409320020058584473)],
+        [style_url("🧩 Buy Source Codes ↗️", OWNER_URL, "primary", icon=5409098988156629257),
+         style_url("📢 Updates Channel ↗️", MAIN_CHANNEL_URL, "primary", icon=6129732880529628243)],
+        [style_url("🛠 Bot Setup Support ↗️", SUPPORT_URL, "danger", icon=6129812419028982717)],
         [style_btn("🔙 Back", b"dashboard_main", "danger", icon=6129812419028982717)],
     ]
     if isinstance(event, events.CallbackQuery.Event):

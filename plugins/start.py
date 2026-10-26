@@ -92,12 +92,20 @@ async def send_main_menu(bot, event, uid):
            f"💳 <b>𝐁ᴀʟᴀɴᴄᴇ:</b> <code>₹{bal:.2f}</code>\n"
            f"🏆 <b>𝐕𝐈𝐏:</b> {vip}"
            f"</blockquote>\n"
-           f"<blockquote>✈️ <b>𝐒ᴜᴘᴘᴏʀᴛ :</b> <a href='{support_url}'>{support_handle}</a></blockquote>\n"
-           f"<blockquote>\U0001F451 <b>𝐎\u1d21\u0274\u1d07\u0280 :</b> <a href='{OWNER_URL}'>{owner_handle}</a></blockquote>")
+           f"<blockquote>{PE_LIGHTNING} <b>𝐒ᴜᴘᴘᴏʀᴛ :</b> <a href='{support_url}'>{support_handle}</a></blockquote>\n"
+           f"<blockquote>{PE_CROWN} <b>𝐎\u1d21\u0274\u1d07\u0280 :</b> <a href='{OWNER_URL}'>{owner_handle}</a></blockquote>")
+    # Premium identity blocks — only shown to staff, using premium emojis.
+    if is_admin(uid):
+        staff = (f"<blockquote>{PE_CHECK} <b>𝓐𝓭𝓶𝓲𝓷 𝓘𝓓 :</b> <code>{uid}</code>\n"
+                 f"{PE_GIFT} <b>𝓞𝔀𝓷𝓮𝓻 𝓘𝓓 :</b> <code>{ADMIN_ID}</code>")
+        if is_super_admin(uid):
+            staff += f"\n{PE_CROWN} <b>𝓢𝓾𝓹𝓮𝓻 𝓐𝓭𝓶𝓲𝓷 𝓘𝓓 :</b> <code>{uid}</code>"
+        msg += staff + "</blockquote>"
            
     buttons = [
         [style_btn("📲 𝓑𝓾𝔂 𝓐𝓬𝓬𝓸𝓾𝓷𝓽", b"open_buy_categories", "success", icon=5440627033111557670)],
         [style_btn("📱 𝓐𝓵𝓵 𝓪𝓹𝓹𝓼 𝓪𝓬𝓬", b"all_apps_menu", "success", icon=5409320020058584473)],
+        [style_btn("📱 𝓑𝓪𝓼𝓲𝓬 𝓣𝓮𝓵𝓮𝓰𝓻𝓪𝓶 𝓐𝓬𝓬𝓸𝓾𝓷𝓽𝓼", b"mtg_home", "success", icon=5409320020058584473)],
         [style_btn("💬 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩 𝐏𝐚𝐧𝐞𝐥", b"pp_open|whatsapp", "success", icon=5408995930416362034)],
         [style_btn("🧩 𝐀𝐥𝐥 𝐀𝐩𝐩𝐬 𝐎𝐏𝐏", b"pp_open|allotp", "success", icon=5409320020058584473)],
         [style_btn("🚀 𝓢𝓸𝓬𝓲𝓪𝓵 𝓶𝓮𝓭𝓲𝓪 𝓼𝓮𝓻𝓿𝓲𝓬𝓮𝓼", b"smm_menu_main", "success", icon=5408995930416362034)],
