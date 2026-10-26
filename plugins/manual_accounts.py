@@ -34,6 +34,7 @@ from utils.keyboards import style_btn
 from utils.markup import format_dual_from_inr
 from utils.helpers import get_bot_instance
 from utils import manual_stock as ms
+from utils import stock_details as stock_card
 
 PAGE_SIZE = 8
 
@@ -189,16 +190,32 @@ async def show_confirm(event, account_id):
     bal = _balance(uid)
     price = float(acct["price"] or 0)
     enough = bal >= price
-    msg = (
-        f"<blockquote expandable>{flag_for(acct['country'])} <b>Confirm Purchase</b>\n\n"
-        f"🌍 <b>Country:</b> {html.escape(clean_name(acct['country']))}\n"
-        f"📱 <b>Number:</b> <code>+{html.escape(acct['phone'])}</code>\n"
-        f"💵 <b>Price:</b> {_price(price, uid)}\n"
-        f"👛 <b>Your balance:</b> {_price(bal, uid)}\n\n"
-        + ("✅ You have enough balance. Tap <b>Pay & Buy</b> to get the account instantly."
-           if enough else "❌ Insufficient balance. Please top up first.")
-        + "</blockquote>"
+    # Live stock for this country + honest quality notes before paying.
+    try:
+        same_country = ms.list_manual_accounts(
+            available_only=True, country=acct["country"], limit=500)
+        stock_count = len(same_country)
+    except Exception:
+        stock_count = 1
+
+    extra_block = f"\U0001F4F1 <b>Number:</b> <code>+{html.escape(acct['phone'])}</code>"
+    if acct.get("twofa") and str(acct["twofa"]).lower() not in ("none", "", "0"):
+        extra_block += "\n\U0001F510 <b>2FA:</b> enabled (password included)"
+    else:
+        extra_block += "\n\U0001F513 <b>2FA:</b> not set (1-click login)"
+
+    msg = stock_card.details_message(
+        title="Basic Telegram Account \u2014 Stock Details",
+        country_label=f"{flag_for(acct['country'])} <b>{html.escape(clean_name(acct['country']))}</b>",
+        stock_text=stock_card.stock_text(stock_count, "accounts"),
+        rate_text=_price(price, uid),
+        kind=stock_card.KIND_MANUAL,
+        extra_block=extra_block,
+        balance_text=_price(bal, uid),
     )
+    if not enough:
+        msg += "\n\u274c <b>Insufficient balance</b> \u2014 please top up first."
+
     btns = []
     if enough:
         btns.append([style_btn("✅ Pay & Buy", f"mtg_pay|{account_id}", "success", icon=5409320020058584473)])

@@ -41,6 +41,7 @@ from utils.markup import (
 )
 from utils import mongo_store
 from utils import stickers as sticker_engine
+from utils import stock_details as stock_card
 
 PAGE_SIZE = 12
 CACHE_TTL = 240
@@ -124,7 +125,8 @@ PANELS = {
             "<b>How to use the All Apps OTP panel</b>\n\n"
             "1\ufe0f\u20e3 Tap <b>Browse All Apps</b> or <b>Search App</b> and pick the app.\n"
             "2\ufe0f\u20e3 Pick the country (or use <b>Search Country</b>).\n"
-            "3\ufe0f\u20e3 Tap the country button \u2014 a number is reserved for you.\n"
+            "3\ufe0f\u20e3 Tap the country \u2014 live <b>stock, rate & quality "
+            "details</b> appear first. Then tap <b>Buy Now</b>.\n"
             "4\ufe0f\u20e3 Enter that number in the app's signup screen.\n"
             "5\ufe0f\u20e3 Tap <b>Get OTP</b> here \u2014 the code arrives in this chat.\n"
             "6\ufe0f\u20e3 No SMS? Tap <b>Cancel & Refund</b> and try another country."
@@ -709,6 +711,86 @@ async def handle_search_text(event, key, text, mode=None):
     await show_countries(event, key, 1, query=text)
 
 
+async def show_stock_details(event, key, code):
+    """Country tapped -> LIVE stock details, never an instant purchase.
+
+    Stock + rate are fetched live from the panel (cache is bypassed) and the
+    card shows 2-3 quality lines plus the honest "not real Premium" note.
+    """
+    uid = event.sender_id
+    p = PANELS[key]
+    await event.answer("\u23f3 Fetching live stock\u2026")
+
+    countries, live = await _countries_for(key, uid, force=True)
+    match = next((c for c in countries if c["code"] == code), None)
+    if not match:
+        countries, live = await _countries_for(key, uid)
+        match = next((c for c in countries if c["code"] == code), None)
+    if not match:
+        return await _safe_edit(
+            event,
+            f"<blockquote>{_flag(code)} <b>{html.escape(code.upper())}</b>\n\n"
+            "\u26a0\ufe0f This country is not available on the panel right now. "
+            "Please pick another one.</blockquote>",
+            [[style_btn("\U0001F519 Back to Countries", f"pp_open|{key}", "danger",
+                        icon=6129812419028982717)]],
+        )
+
+    cfg = get_markup_config()
+    name = _clean_name(match.get("name") or code)
+    real_price = match.get("price")
+    stock = match.get("stock") or 0
+
+    if real_price is None:
+        rate_text = "\U0001F7E1 Live rate unavailable \u2014 tap Refresh"
+    else:
+        rate_text = format_dual_price(real_price, cfg)
+
+    extra_block = ""
+    if p.get("dynamic_apps"):
+        app = _selected_app(uid)
+        if app:
+            extra_block = (f"{_app_icon(app)} <b>App:</b> "
+                           f"{html.escape(_clean_name(_app_label(app)))}")
+    if not live:
+        extra_block = (extra_block + "\n" if extra_block else "") + \
+            "\U0001F7E1 <i>Cached rates (panel busy) \u2014 tap Refresh for live.</i>"
+
+    # Never claim "out of stock" when the provider simply did not report a
+    # count - that would block a purchase that actually works.
+    if stock:
+        stock_txt = stock_card.stock_text(stock)
+    elif real_price is None:
+        stock_txt = "\U0001F7E1 Live stock unavailable \u2014 tap Refresh"
+    else:
+        stock_txt = "\U0001F7E2 In stock (live count not reported)"
+
+    msg = stock_card.details_message(
+        title=f"{p['title']} \u2014 Stock Details",
+        country_label=f"{_flag(code)} <b>{html.escape(name)}</b>",
+        stock_text=stock_txt,
+        rate_text=rate_text,
+        kind=stock_card.KIND_OTP,
+        extra_block=extra_block,
+        balance_text=format_dual_from_inr(_balance(uid)),
+    )
+    btns = [
+        [style_btn("\u2705 Buy Now", f"pp_confirm|{key}|{code}", "success",
+                   icon=5409320020058584473)],
+        [style_btn("\U0001F504 Refresh Stock", f"pp_buy|{key}|{code}", "primary",
+                   icon=5409320020058584473),
+         style_btn("\U0001F519 Back", f"pp_open|{key}", "danger",
+                   icon=6129812419028982717)],
+    ]
+    await _safe_edit(event, msg, btns)
+
+    # premium flag emoji for the country being viewed
+    try:
+        await sticker_engine.send_for_event(event, code, role="flags")
+    except Exception as _sk_ex:
+        logger.debug(f"premium flag emoji skipped: {_sk_ex}")
+
+
 async def buy(event, key, code):
     uid = event.sender_id
     ensure_user(uid)
@@ -967,11 +1049,17 @@ def register_product_panels(bot):
     async def cb_csearch(e):
         await start_country_search(e, "allotp")
 
+    @bot.on(events.CallbackQuery(pattern=r"^pp_confirm\|(\w+)\|([\w-]+)$"))
+    async def cb_pp_confirm(e):
+        key = e.pattern_match.group(1).decode()
+        code = e.pattern_match.group(2).decode()
+        await buy(e, key, code)
+
     @bot.on(events.CallbackQuery(pattern=r"^pp_buy\|(\w+)\|([\w-]+)$"))
     async def cb_buy(e):
         key = e.pattern_match.group(1).decode()
         code = e.pattern_match.group(2).decode()
-        await buy(e, key, code)
+        await show_stock_details(e, key, code)
 
     @bot.on(events.CallbackQuery(pattern=r"^pp_getotp$"))
     async def cb_getotp(e):

@@ -96,6 +96,39 @@ async def get_price(app_slug, country_iso="any"):
     return None, None, None
 
 
+async def get_stock(app_slug, country_iso="any"):
+    """Live stock count for an app/country. Returns (count, price, provider).
+
+    ``count`` is the number of activations the provider has in stock right now
+    (0 when unknown).  Used by the pre-purchase stock-details card.
+    """
+    service = APP_SERVICE_MAP.get(app_slug, {}).get("5sim", app_slug)
+    country = country_iso if country_iso not in (None, "", "any") else "russia"
+    if not FIVESIM_API_KEY:
+        return 0, None, None
+    url = f"https://5sim.net/v1/guest/prices?product={service}&country={country}"
+    headers = {"Authorization": f"Bearer {FIVESIM_API_KEY}", "Accept": "application/json"}
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get(url, headers=headers, timeout=20) as r:
+                if r.status != 200:
+                    return 0, None, "5sim"
+                data = await r.json(content_type=None)
+                products = data[service][country]
+                total = 0
+                cheapest = None
+                for _op, info in products.items():
+                    count = int(info.get("count", 0) or 0)
+                    cost = float(info.get("cost", 0) or 0)
+                    total += count
+                    if count > 0 and (cheapest is None or cost < cheapest):
+                        cheapest = cost
+                return total, cheapest, "5sim"
+    except Exception as ex:
+        logger.warning(f"OTP stock lookup failed: {ex}")
+        return 0, None, None
+
+
 async def buy_number(app_slug, country_iso="any"):
     """Buys a number. Returns dict {ok, phone, order_id, provider, error}."""
     service = APP_SERVICE_MAP.get(app_slug, {}).get("5sim", app_slug)

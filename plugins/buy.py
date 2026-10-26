@@ -29,6 +29,7 @@ from utils.keyboards import style_btn, matches_menu
 from utils.markup import format_dual_from_inr, format_dual_price
 from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code
+from utils import stock_details as stock_card
 
 search_state = {}
 change_number_state = {}
@@ -449,6 +450,33 @@ async def show_years(event, mode, country):
     
     await event.edit(f"<blockquote expandable>{flag} <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐘𝐞𝐚𝐫 & 𝐏𝐫𝐢𝐜𝐞 𝐟𝐨𝐫 {country}{cat_label}:</b></blockquote>", buttons=btns)
 
+async def _live_stock_count(country, year, mode):
+    """Live stock for a country/year, from local DB first then the panel."""
+    count = 0
+    try:
+        rows = cur.execute(
+            "SELECT COUNT(*) FROM stock WHERE country_name=? AND available=1",
+            (country,),
+        ).fetchone()
+        count = int(rows[0]) if rows and rows[0] is not None else 0
+    except Exception:
+        count = 0
+
+    if count == 0:
+        bot_mode = get_bot_mode()
+        if bot_mode in ("panel", "hybrid") and get_lzt_key():
+            try:
+                items = await lzt_client.search_items(country, mode=mode)
+                if year:
+                    count = sum(1 for itm in items
+                                if str(itm.get("year")) == str(year))
+                else:
+                    count = len(items)
+            except Exception as exc:
+                logger.debug(f"live stock lookup failed for {country}: {exc}")
+    return count
+
+
 async def confirm_purchase(event, mode, country, year, price):
     if "|" in country:
         parts = country.split("|")
@@ -463,12 +491,17 @@ async def confirm_purchase(event, mode, country, year, price):
     elif mode == 'spam': cat_badge = "🟡 𝐒𝐩𝐚𝐦 / 𝐔𝐬𝐞𝐝 (𝐂𝐡𝐞𝐚𝐩)"
     else: cat_badge = "🌍 𝐒𝐭𝐚𝐧𝐝𝐚𝐫𝐝"
 
-    msg = (f"<blockquote expandable><tg-emoji emoji-id=\"5408995930416362034\">🎁</tg-emoji> <b>𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐔𝐑𝐂𝐇𝐀𝐒𝐄</b> <tg-emoji emoji-id=\"5409320020058584473\">💎</tg-emoji>\n\n"
-           f"🏳 <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {flag} {country}\n"
-           f"🏷️ <b>𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲:</b> {cat_badge}\n"
-           f"📆 <b>𝐘𝐞𝐚𝐫:</b> {badge}\n"
-           f"💵 <b>𝐏𝐫𝐢𝐜𝐞:</b> {format_dual_from_inr(price)}\n\n"
-           f"<b><tg-emoji emoji-id=\"5409320020058584473\">✨</tg-emoji> 𝐀𝐫𝐞 𝐲𝐨𝐮 𝐬𝐮𝐫𝐞 𝐲𝐨𝐮 𝐰𝐚𝐧𝐭 𝐭𝐨 𝐛𝐮𝐲?</b></blockquote>")
+    # LIVE stock details fetched before the user can buy anything.
+    stock_count = await _live_stock_count(country, year, mode)
+    msg = stock_card.details_message(
+        title="Telegram Account \u2014 Stock Details",
+        country_label=f"{flag} <b>{html.escape(str(country))}</b>",
+        stock_text=(stock_card.stock_text(stock_count, "accounts")
+                    if stock_count else "\U0001F7E2 In stock (live count not reported)"),
+        rate_text=format_dual_from_inr(price),
+        kind=stock_card.KIND_TG,
+        extra_block=(f"{cat_badge}\n\U0001F4C6 <b>Year:</b> {badge}"),
+    )
     btns = [
         [style_btn("✅ 𝐂𝐨𝐧𝐟𝐢𝐫𝐦 𝐁𝐮𝐲", f"buy_cf|{mode}|{country}|{year}|{price}", "success", icon=5409320020058584473)],
         [style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129888444245089008)]
