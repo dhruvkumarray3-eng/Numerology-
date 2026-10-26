@@ -132,3 +132,20 @@
 - [x] `aged` filter now sends `session_age=6` + `session_age_period=month` (period is required by the API)
 - [x] Verified: fresh client has balance attrs, returns 3-tuple, search survives balance failure, all 11 filters send the correct params, `telegram_spam_block=False` is not spam
 - [x] Commit on new branch + push + PR + merge (PR #13)
+
+## 16. LZT official OpenAPI spec compliance (Request I)
+- [x] Audited `utils/lzt.py` against the official Market OpenAPI (`market.json`, `Market.md`) and the Forum spec (`forum.json` — confirmed the bot correctly uses the Market host `api.lzt.market`, not the Forum host `api.lolz.team`)
+- [x] Confirmed `/telegram` list items use the enriched 109-field inline schema (has `telegram_country`, `telegram_session_created_at`, `telegram_spam_block`, `telegram_stars_count`, `telegram_email`, `telegram_dc_id`) so the search parser is valid
+- [x] `get_otp_code()` read `data["code"]` but the documented `TgCodeModel` is `{"codes": {"code": ...}}` -> LZT OTP never resolved; now reads `codes.code` with fallbacks
+- [x] `fast_buy()` now implements the documented `retry_request` loop (up to 100 attempts) and handles 429 the same way
+- [x] `fast_buy()` sends `price` as a JSON number (spec type is `number`, not string)
+- [x] `fast_buy()` reads the phone from `login` and 2FA from `loginData.password` (the old `telegram_phone`/`telegram_password_value` fields do not exist on the BuyItem response)
+- [x] `extract_telethon_string_session()` no longer uses `loginData.password` as the DC id (bug forced every purchased session onto DC 2); DC now comes from `loginData.raw` (`keyhex:dc_id`) or `telegram_dc_id`
+- [x] `get_balance_info()` now calls the documented `GET /me` first and falls back to legacy `/user`
+- [x] `_parse_item()` no longer hard-codes `year=2026`; it uses the real `telegram_session_created_at` and adds a `year_known` flag
+- [x] `search_items()` only rejects an item on the year filter when its year is actually known, so unknown-year items are not silently dropped
+- [x] `_parse_item()` detects email via `telegram_email` as well as `email_type`
+- [x] Verified all 11 filters send valid params against the 77-param `/telegram` spec (`spam`/`password`/`premium`/`email` = yes|no|nomatter, `dc_id[]` int array, `session_age_period` = day|month|year)
+- [x] Mocked regression suite passes: OTP `codes.code`, fast-buy retry loop + numeric price + phone/2FA + DC 4, year/email/spam/stars parsing, unknown-year item kept
+- [x] `python3 -m compileall` clean
+- [ ] Commit on new branch + push + PR + merge

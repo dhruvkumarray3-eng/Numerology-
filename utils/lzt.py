@@ -230,12 +230,30 @@ def extract_telethon_string_session(item_dict):
         dc_id = None
         
         login_val = str(login_data.get('login') or '').strip()
+
+        # Resolve the DC id from `raw` ("keyhex:dc_id") or telegram_dc_id.
+        # The old code used loginData.password (the 2FA password!) as the DC id,
+        # which forced every purchased session onto DC 2 and made it fail to
+        # connect.  Never use the password here.
+        raw_dc = None
+        if raw:
+            raw_clean = raw.replace('%3A', ':')
+            if ':' in raw_clean:
+                _, d_str = raw_clean.split(':', 1)
+                try:
+                    raw_dc = int(d_str.strip())
+                except (TypeError, ValueError):
+                    raw_dc = None
+        dc_hint = raw_dc or item_dict.get('telegram_dc_id') or 2
+        try:
+            dc_hint = int(str(dc_hint).strip())
+        except (TypeError, ValueError):
+            dc_hint = 2
+
         if len(login_val) == 512:
             auth_key_hex = login_val
-            dc_val = login_data.get('password') or item_dict.get('telegram_dc_id') or 2
-            try: dc_id = int(str(dc_val).strip())
-            except: dc_id = 2
-            
+            dc_id = dc_hint
+
         if not auth_key_hex and raw:
             raw_clean = raw.replace('%3A', ':')
             if ':' in raw_clean:
@@ -243,7 +261,7 @@ def extract_telethon_string_session(item_dict):
                 if len(k_hex.strip()) == 512:
                     auth_key_hex = k_hex.strip()
                     try: dc_id = int(d_str.strip())
-                    except: dc_id = 2
+                    except: dc_id = dc_hint
                     
         if not auth_key_hex:
             return None
@@ -400,17 +418,27 @@ class LZTClient:
         ):
             return self._balance_id, self._balance_rub, self._balance_usd
 
-        url = f"{LZT_BASE_URL}/user"
+        # The official OpenAPI spec exposes the profile at GET /me (UserModel).
+        # /user is a legacy alias that is not documented, so try /me first and
+        # fall back to /user only if /me is unavailable.
+        urls = [f"{LZT_BASE_URL}/me", f"{LZT_BASE_URL}/user"]
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url,
-                    headers=self.get_headers(),
-                    timeout=aiohttp.ClientTimeout(total=15),
-                ) as resp:
+                resp = None
+                for url in urls:
+                    resp = await session.get(
+                        url,
+                        headers=self.get_headers(),
+                        timeout=aiohttp.ClientTimeout(total=15),
+                    )
+                    if resp.status != 404:
+                        break
+                    # Release the 404 response before trying the next URL.
+                    resp.release()
+                async with resp:
                     if resp.status == 200:
-                        data = await resp.json()
+                        data = await resp.json(content_type=None)
                         user = data.get("user", {})
                         balances = user.get("balances", [])
 
@@ -448,7 +476,7 @@ class LZTClient:
                         pass
                     self.last_status = resp.status
                     logger.error(
-                        f"LZT /user returned HTTP {resp.status}: {body[:200]}"
+                        f"LZT profile endpoint returned HTTP {resp.status}: {body[:200]}"
                     )
                     if self._balance_id is not None:
                         return (
@@ -553,6 +581,7 @@ class LZTClient:
 
             has_mail = bool(
                 item.get("mail")
+                or item.get("telegram_email")
                 or item.get("email_type") in ("native", "domain", "temporary")
             )
             is_prem = bool(item.get("telegram_premium") or item.get("premium"))
@@ -586,14 +615,25 @@ class LZTClient:
                 or item.get("register_date")
                 or 0
             )
-            item_year = 2026
-            if created_ts and created_ts > 1000000:
+            # Never fabricate a specific year (the old code hard-coded 2026,
+            # which mis-grouped every account whose creation date was absent).
+            # Use the real timestamp when present, otherwise fall back to the
+            # current year so the item is still shown under a sane bucket.
+            item_year = datetime.datetime.now().year
+            year_known = False
+            try:
+                created_ts = int(created_ts or 0)
+            except (TypeError, ValueError):
+                created_ts = 0
+            if created_ts > 1000000:
                 try:
-                    item_year = datetime.datetime.fromtimestamp(int(created_ts)).year
+                    item_year = datetime.datetime.fromtimestamp(created_ts).year
+                    year_known = True
                 except Exception:
-                    item_year = 2026
-            elif created_ts and 1900 < created_ts < 2100:
-                item_year = int(created_ts)
+                    item_year = datetime.datetime.now().year
+            elif 1900 < created_ts < 2100:
+                item_year = created_ts
+                year_known = True
 
             return {
                 "item_id": item.get("item_id"),
@@ -603,6 +643,7 @@ class LZTClient:
                 "balance_id": balance_id,
                 "phone": item.get("telegram_phone") or item.get("phone") or "Hidden",
                 "year": item_year,
+                "year_known": year_known,
                 "title": item.get("title", ""),
                 "has_2fa": has_pwd,
                 "twofa_pass": str(pwd_val) if has_pwd else "None",
@@ -748,7 +789,15 @@ class LZTClient:
                             if item_c not in {c2, (c3 or "").lower()}:
                                 continue
 
-                    if year is not None and str(parsed["year"]) != str(year):
+                    # Only reject an item when we actually know its year and it
+                    # differs from the requested one.  Dropping items whose year
+                    # is unknown (missing telegram_session_created_at) silently
+                    # emptied whole searches.
+                    if (
+                        year is not None
+                        and parsed.get("year_known")
+                        and str(parsed["year"]) != str(year)
+                    ):
                         continue
 
                     # Client-side safety for filters the API may not have applied.
@@ -790,6 +839,18 @@ class LZTClient:
             return []
 
     async def fast_buy(self, item_id, price_str, balance_id=None):
+        """Buy an item via POST /{item_id}/fast-buy.
+
+        Official spec notes implemented here:
+          * ``price`` is a JSON *number* (current price in your currency), not
+            a string.
+          * "If you receive a ``retry_request`` error, you should repeat the
+            same request (up to a maximum of 100 times)."  We honour that loop.
+          * The successful ``BuyItem`` payload exposes the login as ``login``
+            and the 2FA password as ``loginData.password`` -- NOT
+            ``telegram_phone`` / ``telegram_password_value`` (those only exist
+            on the search list, never on the purchase response).
+        """
         url = f"{LZT_BASE_URL}/{item_id}/fast-buy"
         if balance_id is None:
             # Never let a balance hiccup block the purchase itself.
@@ -802,31 +863,89 @@ class LZTClient:
                 logger.warning(f"LZT balance lookup before fast-buy failed: {exc}")
                 balance_id = None
 
-        payload = {"price": str(price_str)}
+        # `price` must be a number per the OpenAPI schema.
+        try:
+            price_num = float(price_str)
+        except (TypeError, ValueError):
+            price_num = price_str
+
+        payload = {"price": price_num}
         if balance_id:
             payload["balance_id"] = balance_id
-        
+
+        MAX_RETRIES = 100
+        last_err = "Failed to purchase"
+
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=self.get_headers(), json=payload, timeout=25) as resp:
-                    data_json = await resp.json()
-                    if resp.status == 200 and not data_json.get("errors"):
-                        item = data_json.get("item", {})
-                        phone = item.get("telegram_phone") or item.get("phone") or ""
-                        str_sess = extract_telethon_string_session(item)
-                        
-                        pwd = item.get("telegram_password_value") or item.get("telegram_password") or item.get("password") or item.get("twofa") or "None"
-                        return True, {
-                            "item_id": item_id,
-                            "phone": phone,
-                            "string_session": str_sess,
-                            "twofa": str(pwd) if (pwd and str(pwd) not in ("0", "None", "False")) else "None",
-                            "item_data": item
-                        }
-                    else:
-                        errors = data_json.get("errors", ["Failed to purchase"])
-                        err = errors[0] if isinstance(errors, list) and errors else str(errors)
-                        return False, f"{err}"
+                for attempt in range(MAX_RETRIES):
+                    async with session.post(
+                        url, headers=self.get_headers(), json=payload, timeout=25
+                    ) as resp:
+                        try:
+                            data_json = await resp.json(content_type=None)
+                        except Exception:
+                            data_json = {}
+
+                        errors = data_json.get("errors") or []
+                        if isinstance(errors, str):
+                            errors = [errors]
+                        err_text = " ".join(str(e) for e in errors).lower()
+
+                        # Documented transient condition: repeat the same
+                        # request (up to 100 times).  Back off briefly so we
+                        # do not hammer the API.
+                        if "retry_request" in err_text or (
+                            resp.status == 429
+                        ):
+                            last_err = "retry_request"
+                            if attempt < MAX_RETRIES - 1:
+                                await asyncio.sleep(min(1.0 + attempt * 0.1, 5.0))
+                                continue
+                            break
+
+                        if resp.status == 200 and not errors:
+                            item = data_json.get("item", {}) or {}
+                            login_data = item.get("loginData") or {}
+
+                            # Phone: the purchase response uses `login`.
+                            phone = (
+                                item.get("login")
+                                or item.get("telegram_phone")
+                                or item.get("phone")
+                                or ""
+                            )
+                            str_sess = extract_telethon_string_session(item)
+
+                            # 2FA password lives in loginData.password.
+                            pwd = (
+                                login_data.get("password")
+                                or item.get("telegram_password_value")
+                                or item.get("telegram_password")
+                                or item.get("password")
+                                or "None"
+                            )
+                            pwd_ok = bool(
+                                pwd
+                                and str(pwd).strip().lower()
+                                not in ("0", "none", "false", "")
+                            )
+                            return True, {
+                                "item_id": item_id,
+                                "phone": str(phone).strip(),
+                                "string_session": str_sess,
+                                "twofa": str(pwd) if pwd_ok else "None",
+                                "item_data": item,
+                            }
+
+                        last_err = (
+                            errors[0]
+                            if isinstance(errors, list) and errors
+                            else (f"HTTP {resp.status}" if resp.status != 200 else "Failed to purchase")
+                        )
+                        return False, f"{last_err}"
+
+            return False, f"{last_err}"
         except Exception as e:
             logger.error(f"LZT fast_buy error for {item_id}: {e}")
             return False, f"Network error during purchase: {str(e)}"
@@ -845,8 +964,11 @@ class LZTClient:
                     data = await resp.json(content_type=None)
 
                     if resp.status == 200:
+                        # Official TgCodeModel: {"codes": {"code": "...", "date": ...}, "item": {...}}
+                        codes = data.get("codes") or {}
                         code = (
-                            data.get("code")
+                            (codes.get("code") if isinstance(codes, dict) else None)
+                            or data.get("code")
                             or data.get("sms_code")
                             or data.get("telegram_code")
                         )
