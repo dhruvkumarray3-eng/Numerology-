@@ -66,7 +66,31 @@ async def main():
     print("🚀 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!", flush=True)
     print("==================================================", flush=True)
 
-    # 6. Reconnection Loop
+    # 6. LZT self-check (non-fatal).
+    # A rejected/expired market token used to surface only as
+    # "No live accounts found" inside the shop.  Logging the real status at
+    # boot makes the cause obvious in Railway/Render logs.
+    try:
+        from utils.lzt import lzt_client
+        key = lzt_client.get_token()
+        if not key:
+            logger.warning(
+                "\u26a0\ufe0f LZT_API_KEY is not set \u2014 live market search "
+                "will return nothing. Set it in Admin \u2192 LZT Panel Settings "
+                "or as the LZT_API_KEY env var."
+            )
+        else:
+            ok, msg = await asyncio.wait_for(lzt_client.check_connection(), timeout=45)
+            plain = msg.replace("<b>", "").replace("</b>", "").replace(
+                "<i>", "").replace("</i>", "").replace("<code>", "").replace("</code>", "")
+            if ok:
+                logger.info(f"LZT self-check OK: {plain}")
+            else:
+                logger.error(f"LZT self-check FAILED: {plain}")
+    except Exception as e:
+        logger.warning(f"LZT self-check skipped: {e}")
+
+    # 7. Reconnection Loop
     while True:
         try:
             if not bot.is_connected():

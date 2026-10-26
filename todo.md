@@ -1,23 +1,25 @@
-# Fix: LZT search still empty for USA (round 2)
+# LZT search: real-key diagnosis + actionable errors
 
-## Root causes found in official LZT OpenAPI spec
-- [x] Per-request timeout was 20s; LZT docs recommend 300s+ for category search
-- [x] Missing `allow_geo_spamblock` param -> `spam=no` hid geo-spam-blocked stock
-- [x] No fallback when a filtered search returned 0 items
-- [x] Confirm `USA` is a supported ISO-3 code (it is)
+## Diagnosis with the live token
+- [x] Token is structurally valid (RS512, exp 2031, market scope present)
+- [x] LZT returns 401 "Invalid or expired access token" — identical to a bogus token
+- [x] Country resolution is fine: "Usa" -> USA (supported enum)
+- [x] Conclusion: the token is revoked/regenerated, not a code bug
 
 ## Code changes
-- [x] `utils/lzt.py`: request timeout 75s via `aiohttp.ClientTimeout`
-- [x] `utils/lzt.py`: send `allow_geo_spamblock=true` for `spam=no` searches
-- [x] `utils/lzt.py`: auto-fallback retry (relax spam/price, 2 pages max)
-- [x] `utils/lzt.py`: generous outer budget tied to per-request timeout
-- [x] `utils/search_settings.py`: `allow_geo_spam()` + `auto_fallback()` + defaults
-- [x] `plugins/admin_actions.py`: two new toggles on Search & Quality page
+- [x] `utils/lzt.py`: `check_connection()` rewritten — /me first, 30s timeout,
+      actionable 401/402/403/429 messages, shows user + balance on success
+- [x] `utils/lzt.py`: `/telegram` 401/403 message now explains token regeneration
+- [x] `plugins/buy.py`: new `_lzt_key_invalid_card` — an expired key no longer
+      renders as "No live accounts found"
+- [x] `plugins/admin_actions.py`: "Set API Key" validates the token immediately
+      and reports the verdict in chat
+- [x] `main.py`: boot-time LZT self-check logged to Railway/Render logs
 
 ## Verification
-- [x] `tests/test_search_settings.py` extended (geo-spam + fallback) -> all pass
-- [x] `tests/test_lzt_spec.py` -> all pass
-- [x] `compileall utils plugins tests` -> clean
+- [x] Live run of `check_connection()` with the real key -> clear 401 guidance
+- [x] `tests/test_lzt_spec.py` + `tests/test_search_settings.py` pass
+- [x] `compileall` clean, no secret in the diff
 
 ## Git
-- [x] Commit on new branch, push, open + merge PR
+- [ ] Commit on new branch, push, PR, merge

@@ -444,6 +444,44 @@ async def _lzt_not_configured_card(event, country=None, mode=None):
     return await event.respond(msg, buttons=btns)
 
 
+async def _lzt_key_invalid_card(event, country=None, mode=None, detail=None):
+    """Shown when LZT rejects the stored token (401/403).
+
+    Without this the bot fell back to "No live accounts found", which made an
+    expired API token look like an empty market.
+    """
+    detail_line = ""
+    if detail:
+        detail_line = (
+            "\n\n<i>" + html.escape(str(detail)[:300]) + "</i>"
+        )
+    msg = (
+        "<blockquote expandable>\U0001F511 <b>Market Key Invalid</b>\n\n"
+        "\u274c LZT Market rejected the saved <b>API key</b>, so live accounts "
+        "cannot be fetched right now.\n\n"
+        "<b>Admin fix:</b>\n"
+        "1. Open lolz.live \u2192 Account \u2192 API \u2192 "
+        "<b>Get Access Token</b>\n"
+        "2. Tick the <b>market</b> scope\n"
+        "3. Copy the fresh token \u2192 Admin Panel \u2192 "
+        "<b>LZT Panel Settings</b> \u2192 <b>Set API Key</b>\n"
+        "4. Press <b>Test / Balance</b> to confirm"
+        f"{detail_line}</blockquote>"
+    )
+    btns = [
+        [style_btn("\U0001F504 Try Again", f"pg_c|{mode or 'bulk'}|1", "primary",
+                   icon=5409320020058584473)],
+        [style_btn("\U0001F519 Back to Menu", "buy_menu_main", "danger",
+                   icon=6129812419028982717)],
+    ]
+    if isinstance(event, events.CallbackQuery.Event):
+        try:
+            return await event.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            return
+    return await event.respond(msg, buttons=btns)
+
+
 async def show_countries_for_year(event, year, page):
     limit = 10
     offset = (page - 1) * limit
@@ -584,6 +622,12 @@ async def show_years(event, mode, country):
         if not _lzt_live():
             return await _lzt_not_configured_card(event, country, mode)
         reason = getattr(lzt_client, "last_error", None)
+        # An expired / wrong-scope token must never look like an empty market.
+        status = getattr(lzt_client, "last_status", None)
+        if status in (401, 403) or (
+            reason and "rejected the API key" in str(reason)
+        ):
+            return await _lzt_key_invalid_card(event, country, mode, reason)
         return await _no_stock_card(event, mode, country=country, reason=reason)
     
     flag = get_flag_by_country_name(country)
