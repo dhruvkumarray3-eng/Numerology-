@@ -31,6 +31,7 @@ from database import (
 )
 from utils.flags import flag_for, clean_name
 from utils.keyboards import style_btn
+from utils.markup import format_dual_from_inr
 from utils.helpers import get_bot_instance
 from utils import manual_stock as ms
 
@@ -61,7 +62,8 @@ def _currency(uid):
 
 
 def _price(value, uid):
-    return format_price(float(value or 0), _currency(uid))
+    """Manual-stock price is already the final selling price -> show INR + USDT."""
+    return format_dual_from_inr(float(value or 0))
 
 
 def _balance(uid):
