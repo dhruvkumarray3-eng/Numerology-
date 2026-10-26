@@ -119,4 +119,4 @@
 - [x] Verified with mocked LZT transport: `GET /telegram?country[]=KAZ&order_by=price_to_up` plus spam/password/premium/dc_id[]/min_stars/email/session_age for each filter
 - [x] Verified with mocked TemporaSMS transport: balance 413.0, countries ru/jp with real price+stock, buy, OTP, cancel, honest error for an unsold service
 - [x] `python3 -m compileall` clean
-- [ ] Commit on new branch + push + PR + merge
+- [x] Commit on new branch + push + PR + merge (PR #12)
