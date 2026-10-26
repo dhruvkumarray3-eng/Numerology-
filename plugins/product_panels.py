@@ -356,9 +356,23 @@ async def _countries_for(key, uid=None, force=False):
 
 
 def _filter_countries(countries, query):
+    """Fuzzy country filter shared by every OTP panel.
+
+    Accepts a country name ("Japan"), ISO-2 ("jp"), ISO-3 ("JPN"), dial code
+    ("+81" / "81") or an alias ("uk", "usa", "dubai").  Falls back to a plain
+    substring test so provider-specific slugs still match.
+    """
     if not query:
         return countries
-    q = query.strip().lower()
+    try:
+        from utils.country_search import search_country_dicts
+        matched = search_country_dicts(countries, query)
+        if matched:
+            return matched
+    except Exception as _cs_ex:
+        logger.debug(f"country_search failed, falling back: {_cs_ex}")
+
+    q = str(query).strip().lower()
     out = []
     for c in countries:
         if q in str(c.get("code", "")).lower() or q in str(c.get("name", "")).lower():
@@ -577,14 +591,9 @@ async def start_country_search(event, key="allotp"):
     """Country search. In the All Apps panel an app must be picked first."""
     uid = event.sender_id
     if PANELS[key].get("dynamic_apps") and not _selected_app(uid):
-        panel_state.setdefault(uid, {})["mode"] = "country_search_pending"
-        msg = (
-            "<blockquote expandable>\U0001F30D <b>Search Country</b>\n\n"
-            "First pick the app you want a number for \u2014 then you can search "
-            "countries for it.</blockquote>"
-        )
-        btns = [[style_btn("\U0001F4DA Browse All Apps", b"pp_apps|1", "success", icon=5409320020058584473)]]
-        return await _safe_edit(event, msg, btns)
+        # Never dead-end: default to Telegram so country search always works,
+        # and let the user change the app afterwards.
+        panel_state.setdefault(uid, {})["app"] = "telegram"
     panel_state.setdefault(uid, {})["mode"] = "search"
     panel_state[uid]["panel"] = key
     app_line = ""
@@ -592,8 +601,9 @@ async def start_country_search(event, key="allotp"):
         app_line = f" \u2014 {_app_icon(_selected_app(uid))} {html.escape(_clean_name(_app_label(_selected_app(uid))))}"
     msg = (
         f"<blockquote expandable>\U0001F50D <b>Search Country{app_line}</b>\n\n"
-        "Send the country name or dial code (e.g. <code>India</code>, "
-        "<code>+91</code>, <code>usa</code>).</blockquote>"
+        "Send a country name, ISO code or dial code \u2014 e.g. <code>Japan</code>, "
+        "<code>JP</code>, <code>JPN</code>, <code>+81</code>, <code>India</code>, "
+        "<code>+91</code>.</blockquote>"
     )
     btns = [[style_btn("\U0001F519 Back", f"pp_open|{key}", "danger", icon=6129812419028982717)]]
     await _safe_edit(event, msg, btns)
@@ -610,7 +620,15 @@ async def show_countries(event, key, page=1, query=None):
         return await show_allotp_hub(event)
 
     countries, live = await _countries_for(key, uid)
-    countries = _filter_countries(countries, query)
+    filtered = _filter_countries(countries, query)
+    if query and not filtered:
+        # The cached list may be stale or empty - force a live refresh once
+        # before telling the user the country is not available.
+        fresh, live = await _countries_for(key, uid, force=True)
+        if fresh:
+            countries = fresh
+            filtered = _filter_countries(fresh, query)
+    countries = filtered
     cfg = get_markup_config()
 
     total = len(countries)
@@ -620,15 +638,34 @@ async def show_countries(event, key, page=1, query=None):
     chunk = countries[start:start + PAGE_SIZE]
 
     if not chunk:
-        msg = (
-            f"<blockquote expandable>{p['icon']} <b>{p['title']}</b>\n\n"
-            f"😕 No country matched <b>{html.escape(query or '')}</b>.\n"
-            "Try another name, or tap Refresh.</blockquote>"
-        )
+        resolved = None
+        if query:
+            try:
+                from utils.country_search import resolve_country
+                resolved = resolve_country(query)
+            except Exception:
+                resolved = None
+        if resolved:
+            dial_line = f" \u00b7 <code>+{resolved['dial']}</code>" if resolved.get('dial') else ""
+            msg = (
+                f"<blockquote expandable>{p['icon']} <b>{p['title']}</b>\n\n"
+                f"{resolved['flag']} <b>{html.escape(resolved['name'])}</b> "
+                f"(<code>{resolved['iso3'] or resolved['iso2'].upper()}</code>{dial_line})\n\n"
+                "\U0001F7E1 <b>This country is not available on the panel right now.</b>\n"
+                "The provider returned no numbers for it. Please pick another "
+                "country or tap Refresh in a moment.</blockquote>"
+            )
+        else:
+            msg = (
+                f"<blockquote expandable>{p['icon']} <b>{p['title']}</b>\n\n"
+                f"\U0001F615 No country matched <b>{html.escape(query or '')}</b>.\n"
+                "Try a name (<code>Japan</code>), ISO code (<code>JP</code> / "
+                "<code>JPN</code>) or dial code (<code>+81</code>).</blockquote>"
+            )
         btns = [
-            [style_btn("🔍 Search Country", f"pp_search|{key}", "primary", icon=5409098988156629257)],
-            [style_btn("🔄 Refresh", f"pp_open|{key}", "success", icon=5409320020058584473)],
-            [style_btn("🔙 Back", b"pp_hub", "danger", icon=6129812419028982717)],
+            [style_btn("\U0001F50D Search Country", f"pp_search|{key}", "primary", icon=5409098988156629257)],
+            [style_btn("\U0001F504 Refresh", f"pp_open|{key}", "success", icon=5409320020058584473)],
+            [style_btn("\U0001F519 Back", b"pp_hub", "danger", icon=6129812419028982717)],
         ]
         return await _safe_edit(event, msg, btns)
 
@@ -694,8 +731,9 @@ async def start_search(event, key):
     panel_state[uid]["panel"] = key
     msg = (
         f"<blockquote expandable>🔍 <b>Search Country — {PANELS[key]['title']}</b>\n\n"
-        "Send the country name or dial code (e.g. <code>India</code>, "
-        "<code>+91</code>, <code>usa</code>).</blockquote>"
+        "Send a country name, ISO code or dial code \u2014 e.g. <code>Japan</code>, "
+        "<code>JP</code>, <code>JPN</code>, <code>+81</code>, <code>India</code>, "
+        "<code>+91</code>.</blockquote>"
     )
     btns = [[style_btn("🔙 Back", f"pp_open|{key}", "danger", icon=6129812419028982717)]]
     await _safe_edit(event, msg, btns)
@@ -746,12 +784,23 @@ async def show_stock_details(event, key, code):
     else:
         rate_text = format_dual_price(real_price, cfg)
 
-    extra_block = ""
+    # Show the user ONE total price: panel cost + owner profit combined.
+    total_line = ""
+    if real_price is not None:
+        try:
+            bd = price_breakdown(real_price, cfg)
+            total_line = (f"\U0001F4B5 <b>Your total price:</b> "
+                          f"{format_dual_from_inr(bd['inr'])} <i>(all-inclusive)</i>")
+        except Exception as _pb_ex:
+            logger.debug(f"price breakdown failed: {_pb_ex}")
+
+    extra_block = total_line
     if p.get("dynamic_apps"):
         app = _selected_app(uid)
         if app:
-            extra_block = (f"{_app_icon(app)} <b>App:</b> "
-                           f"{html.escape(_clean_name(_app_label(app)))}")
+            app_line = (f"{_app_icon(app)} <b>App:</b> "
+                        f"{html.escape(_clean_name(_app_label(app)))}")
+            extra_block = (extra_block + "\n" if extra_block else "") + app_line
     if not live:
         extra_block = (extra_block + "\n" if extra_block else "") + \
             "\U0001F7E1 <i>Cached rates (panel busy) \u2014 tap Refresh for live.</i>"

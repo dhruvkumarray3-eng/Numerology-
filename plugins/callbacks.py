@@ -11,82 +11,68 @@ from utils.keyboards import style_btn, style_url
 from utils.lzt import COUNTRY_TO_LZT
 
 async def send_stock_page(event, page=1):
-    bot_mode = get_bot_mode()
+    """Live stock list with REAL counts (never a fake "40+").
+
+    Uses the same honest country list as the buy flow, so a country with no
+    accounts shows "no stock" instead of a made-up number.
+    """
+    from plugins.buy import get_countries_list
+
     limit = 10
     offset = (page - 1) * limit
 
-    if bot_mode == 'manual':
-        rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name ORDER BY country_name").fetchall()
-        if not rows:
-            msg = f"<blockquote>{PE_LOCATION} <b>𝐒ᴛᴏᴄᴋ</b></blockquote>\n\n<blockquote>𝐍ᴏ sᴛᴏᴄᴋ ᴀᴠᴀɪʟᴀʙʟᴇ ʀɪɢʜᴛ ɴᴏᴡ.</blockquote>"
-            if isinstance(event, events.CallbackQuery.Event):
-                try: return await event.edit(msg)
-                except MessageNotModifiedError: return
-            return await event.respond(msg)
-        
-        total_countries = len(rows)
-        total_stock = sum(c for _, c in rows)
-        page_items = rows[offset:offset+limit]
-        total_pages = (total_countries + limit - 1) // limit
+    try:
+        rows = await get_countries_list()
+    except Exception:
+        rows = []
 
-        msg = f"<blockquote>{PE_LOCATION} <b>𝐀ᴠᴀɪʟᴀʙʟᴇ 𝐒ᴛᴏᴄᴋ</b> ({total_stock} ᴛᴏᴛᴀʟ) — 𝐏ᴀɢᴇ {page}/{total_pages}</blockquote>\n\n"
-        for cn, cnt in page_items:
-            flag = get_flag_by_country_name(cn)
-            msg += f"<blockquote>{flag} <b>{cn}</b> — {cnt} ᴀᴄᴄᴏᴜɴᴛs</blockquote>\n"
+    if not rows:
+        msg = (f"<blockquote>{PE_LOCATION} <b>\U0001F4E6 \u1d12\u026a\u1d20\u1d07 "
+               f"\u1d12\u1d1b\u1d0f\u1d04\u1d0b</b>\n\n\u26a0\ufe0f No stock available "
+               f"right now. Please check back shortly.</blockquote>")
+        if isinstance(event, events.CallbackQuery.Event):
+            try:
+                return await event.edit(msg)
+            except MessageNotModifiedError:
+                return
+        return await event.respond(msg)
 
-    elif bot_mode == 'panel':
-        all_c = sorted(list(COUNTRY_TO_LZT.keys()))
-        try:
-            customs = cur.execute("SELECT name FROM custom_countries").fetchall()
-            for (c,) in customs:
-                if c not in all_c: all_c.append(c)
-        except: pass
-        all_c.sort()
+    total_countries = len(rows)
+    total_stock = sum(c for _, c in rows)
+    total_pages = max(1, (total_countries + limit - 1) // limit)
+    page = max(1, min(page, total_pages))
+    page_items = rows[offset:offset + limit]
 
-        total_countries = len(all_c)
-        page_items = all_c[offset:offset+limit]
-        total_pages = (total_countries + limit - 1) // limit
-
-        msg = f"<blockquote>{PE_LOCATION} <b>𝐀ᴠᴀɪʟᴀʙʟᴇ 𝐒ᴛᴏᴄᴋ</b> (2,000+ ᴛᴏᴛᴀʟ) — 𝐏ᴀɢᴇ {page}/{total_pages}</blockquote>\n\n"
-        for cn in page_items:
-            flag = get_flag_by_country_name(cn)
-            msg += f"<blockquote>{flag} <b>{cn}</b> — 40+ ᴀᴄᴄᴏᴜɴᴛs</blockquote>\n"
-
-    else: # Hybrid mode
-        all_c = sorted(list(COUNTRY_TO_LZT.keys()))
-        try:
-            customs = cur.execute("SELECT name FROM custom_countries").fetchall()
-            for (c,) in customs:
-                if c not in all_c: all_c.append(c)
-        except: pass
-        all_c.sort()
-
-        local_counts = dict(cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall())
-        total_countries = len(all_c)
-        page_items = all_c[offset:offset+limit]
-        total_pages = (total_countries + limit - 1) // limit
-
-        msg = f"<blockquote>{PE_LOCATION} <b>𝐀ᴠᴀɪʟᴀʙʟᴇ 𝐒ᴛᴏᴄᴋ</b> (2,000+ ᴛᴏᴛᴀʟ) — 𝐏ᴀɢᴇ {page}/{total_pages}</blockquote>\n\n"
-        for cn in page_items:
-            flag = get_flag_by_country_name(cn)
-            if cn in local_counts and local_counts[cn] > 0:
-                msg += f"<blockquote>{flag} <b>{cn}</b> — {local_counts[cn]} ᴀᴄᴄᴏᴜɴᴛs</blockquote>\n"
-            else:
-                msg += f"<blockquote>{flag} <b>{cn}</b> — 40+ ᴀᴄᴄᴏᴜɴᴛs</blockquote>\n"
+    msg = (f"<blockquote>{PE_LOCATION} <b>\U0001F4E6 \u1d00\u1d20\u1d00\u026a\u029f\u1d00\u0299\u029f\u1d07 "
+           f"\u1d1b\u1d0f\u1d04\u1d0b</b> \u2014 {total_stock} \u1d1b\u1d0f\u1d1b\u1d00\u029f "
+           f"\u00b7 \u1d18\u1d00\u0262\u1d07 {page}/{total_pages}</blockquote>\n\n")
+    for cn, cnt in page_items:
+        flag = get_flag_by_country_name(cn)
+        if cnt and int(cnt) > 0:
+            msg += f"<blockquote>{flag} <b>{cn}</b> \u2014 {cnt} \u1d00\u1d04\u1d04\u1d0f\u1d1c\u0274\u1d1bs</blockquote>\n"
+        else:
+            msg += f"<blockquote>{flag} <b>{cn}</b> \u2014 \u26aa no stock</blockquote>\n"
 
     nav = []
     if page > 1:
-        nav.append(style_btn("⬅️ 𝐏ʀᴇᴠ", f"stk_pg|{page-1}", "primary", icon=6129627894349045589))
+        nav.append(style_btn("\u2b05\ufe0f \u1d18\u0280\u1d07\u1d20", f"stk_pg|{page-1}", "primary", icon=6129627894349045589))
     if offset + limit < total_countries:
-        nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"stk_pg|{page+1}", "primary", icon=6129732880529628243))
+        nav.append(style_btn("\u1d0d\u1d07x\u1d1b \u27a1\ufe0f", f"stk_pg|{page+1}", "primary", icon=6129732880529628243))
 
-    btns = [nav] if nav else None
+    btns = []
+    if nav:
+        btns.append(nav)
+    btns.append([style_btn("\U0001F50D Search Country", "search_country_btn", "primary", icon=5409098988156629257)])
+    btns.append([style_btn("\U0001F519 Back", "dashboard_main", "danger", icon=6129812419028982717)])
 
     if isinstance(event, events.CallbackQuery.Event):
-        try: await event.edit(msg, buttons=btns)
-        except MessageNotModifiedError: pass
+        try:
+            await event.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            pass
     else:
         await event.respond(msg, buttons=btns)
+
 
 async def show_more_menu(event):
     pct_row = cur.execute("SELECT value FROM settings WHERE key='ref_percent'").fetchone()

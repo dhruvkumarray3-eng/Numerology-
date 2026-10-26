@@ -142,7 +142,16 @@ async def _confirm(event, what, arg=None):
         "src_all": "delete ALL source codes",
     }
     if what == "stock_old":
-        desc = f"delete stock older than {arg} days"
+        try:
+            n = cur.execute(
+                "SELECT COUNT(*) FROM stock "
+                "WHERE datetime(COALESCE(added_date, '1970-01-01')) "
+                "< datetime('now', ?)",
+                (f"-{int(arg or 7)} days",),
+            ).fetchone()[0]
+        except Exception:
+            n = 0
+        desc = f"delete stock older than {arg} days ({n} row(s))"
     else:
         desc = labels.get(what, what)
     msg = (
@@ -165,8 +174,13 @@ async def _execute(event, what, arg=None):
     try:
         if what == "stock_old":
             days = int(arg or 7)
+            # COALESCE handles rows with a NULL added_date (they are treated as
+            # ancient and removed too).  datetime() normalises any stored
+            # format so the comparison is reliable.
             cur.execute(
-                "DELETE FROM stock WHERE added_date < datetime('now', ?)",
+                "DELETE FROM stock "
+                "WHERE datetime(COALESCE(added_date, '1970-01-01')) "
+                "< datetime('now', ?)",
                 (f"-{days} days",),
             )
             removed = cur.rowcount
@@ -183,6 +197,19 @@ async def _execute(event, what, arg=None):
             cur.execute("DELETE FROM source_codes")
             removed = cur.rowcount
         db.commit()
+        # Drop any cached country/stock lists so the deleted rows stop showing
+        # immediately instead of lingering for the cache TTL.
+        try:
+            from plugins.buy import _LIVE_COUNTRY_CACHE
+            _LIVE_COUNTRY_CACHE["ts"] = 0.0
+            _LIVE_COUNTRY_CACHE["counts"] = {}
+        except Exception:
+            pass
+        try:
+            from plugins.product_panels import _cache as _pp_cache
+            _pp_cache.clear()
+        except Exception:
+            pass
     except Exception as exc:
         logger.error(f"cleanup execute failed ({what}): {exc}", exc_info=True)
         return await event.answer(f"❌ Delete failed: {exc}", alert=True)

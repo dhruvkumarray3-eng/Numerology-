@@ -65,31 +65,34 @@ for _dial, (_cname, _flag) in COUNTRY_CODES.items():
 
 def country_matches_query(query, country_name):
     """
-    Return True if a free-text query (country name, alias, or dial code)
-    matches the given country name. Robust against +91 / 91 / India / IND etc.
+    Return True if a free-text query (country name, alias, ISO-2/ISO-3 or dial
+    code) matches the given country name.
+
+    Delegates to the universal resolver in ``utils.country_search`` so that
+    ``Japan``, ``JP``, ``JPN``, ``+81`` and ``81`` all match the same country.
     """
+    try:
+        from utils.country_search import country_matches
+        return bool(country_matches(query, country_name))
+    except Exception:
+        pass
+
+    # --- defensive fallback (never expected to run) ---
     raw_query = str(query or "").strip()
     q = _normalize_country_text(raw_query)
     n = _normalize_country_text(country_name)
     if not q or not n:
         return False
-
-    # 1. Direct name substring match (both directions)
     if q in n or n in q:
         return True
-
-    # 2. Alias resolution (e.g. "us" -> "USA", "uk" -> "UK")
     alias = COUNTRY_MAP.get(raw_query.lower())
     if alias and _normalize_country_text(alias) == n:
         return True
-
-    # 3. Dial-code match (e.g. "+91", "91", "1")
     q_digits = re.sub(r"\D", "", raw_query)
     if q_digits:
         dial = COUNTRY_NAME_TO_DIAL.get(n)
         if dial and (dial == q_digits or dial.startswith(q_digits) or q_digits.startswith(dial)):
             return True
-
     return False
 
 
@@ -173,17 +176,37 @@ async def _live_country_counts():
 
 
 async def get_countries_list():
+    """Every country the bot can sell, with an honest live/local count.
+
+    The list is always populated (all 198 ISO countries) so country search
+    never dead-ends just because one mode/panel has no stock right now.  The
+    count next to each country is the real number available (0 = none).
+    """
     bot_mode = get_bot_mode()
 
-    if bot_mode == 'manual':
-        rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall()
-        return sorted(rows, key=lambda x: x[0])
+    # Canonical country names (deduplicated, no aliases).
+    try:
+        from utils.country_search import all_countries
+        base_names = [c["name"] for c in all_countries()]
+    except Exception:
+        base_names = sorted(set(COUNTRY_TO_LZT.keys()))
 
-    all_c = set(COUNTRY_TO_LZT.keys())
+    if bot_mode == 'manual':
+        rows = cur.execute(
+            "SELECT country_name, COUNT(*) FROM stock WHERE available=1 "
+            "GROUP BY country_name"
+        ).fetchall()
+        if rows:
+            return sorted(rows, key=lambda x: x[0])
+        # No local stock at all -> still let users search/browse any country.
+        return [(name, 0) for name in base_names]
+
+    all_c = list(base_names)
     try:
         customs = cur.execute("SELECT name FROM custom_countries").fetchall()
         for (c,) in customs:
-            all_c.add(c)
+            if c and c not in all_c:
+                all_c.append(c)
     except Exception:
         pass
 
@@ -195,7 +218,10 @@ async def get_countries_list():
         country_dict[c_name] = live.get(code, 0) if code else 0
 
     if bot_mode == 'hybrid':
-        local_rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall()
+        local_rows = cur.execute(
+            "SELECT country_name, COUNT(*) FROM stock WHERE available=1 "
+            "GROUP BY country_name"
+        ).fetchall()
         for c_name, count in local_rows:
             country_dict[c_name] = max(country_dict.get(c_name, 0), count)
 
@@ -310,19 +336,56 @@ async def show_years_catalog(event):
     else:
         await event.respond(msg, buttons=btns)
 
-async def _no_stock_card(event, mode=None):
-    """Friendly empty-state instead of a dead-end warning."""
+async def _no_stock_card(event, mode=None, country=None, reason=None):
+    """Friendly, HONEST empty-state instead of a dead-end or fake stock."""
+    country_line = ""
+    if country:
+        try:
+            flag = get_flag_by_country_name(country)
+        except Exception:
+            flag = "\U0001F30D"
+        country_line = f"{flag} <b>{html.escape(str(country))}</b>\n\n"
+
+    reason_line = ""
+    if reason:
+        reason_line = f"\n\n\u26a0\ufe0f <i>{html.escape(str(reason))}</i>"
+
     msg = (
-        "<blockquote expandable>📦 <b>Stock Update</b>\n\n"
-        "🕓 <b>No accounts in this section right now.</b>\n\n"
-        "✅ Fresh <b>Basic Telegram Accounts</b> are added manually by the admin "
-        "and appear here instantly. You can also try the live OTP panels for a "
-        "number right now.</blockquote>"
+        "<blockquote expandable>\U0001F4E6 <b>Stock Update</b>\n\n"
+        f"{country_line}"
+        "\U0001F533 <b>No live accounts found for this filter right now.</b>\n\n"
+        "\u2705 We only show real, currently-available accounts \u2014 no fake "
+        "counts. Try another filter, another country, or check back shortly."
+        f"{reason_line}</blockquote>"
     )
     btns = [
-        [style_btn("📱 Basic Telegram Accounts", "mtg_home", "success", icon=5409320020058584473)],
-        [style_btn("🧩 All Panels", "pp_hub", "primary", icon=5409320020058584473)],
-        [style_btn("🔙 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)],
+        [style_btn("\U0001F50D Search Country", "search_country_btn", "primary", icon=5409098988156629257)],
+        [style_btn("\u2705 Good Quality Accounts", "pg_c|nonspam|1", "success", icon=5409320020058584473),
+         style_btn("\U0001F4B0 Cheap Accounts", "pg_c|spam|1", "primary", icon=5408995930416362034)],
+        [style_btn("\U0001F4F1 Basic Telegram Accounts", "mtg_home", "success", icon=5409320020058584473)],
+        [style_btn("\U0001F519 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)],
+    ]
+    if isinstance(event, events.CallbackQuery.Event):
+        try:
+            return await event.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            return
+    return await event.respond(msg, buttons=btns)
+
+
+async def _lzt_not_configured_card(event, country=None, mode=None):
+    """Shown when the LZT market key is missing, so the admin knows why."""
+    msg = (
+        "<blockquote expandable>\U0001F511 <b>Market Key Missing</b>\n\n"
+        "\u26a0\ufe0f The <b>LZT Market API key</b> is not configured, so live "
+        "accounts cannot be fetched.\n\n"
+        "<b>Admin fix:</b> open the admin panel \u2192 <b>LZT API Key</b> and save "
+        "a key with <code>market</code> scope, or set the <code>LZT_API_KEY</code> "
+        "environment variable.</blockquote>"
+    )
+    btns = [
+        [style_btn("\U0001F504 Try Again", f"pg_c|{mode or 'bulk'}|1", "primary", icon=5409320020058584473)],
+        [style_btn("\U0001F519 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)],
     ]
     if isinstance(event, events.CallbackQuery.Event):
         try:
@@ -354,6 +417,8 @@ async def show_countries_for_year(event, year, page):
     if page > 1: nav.append(style_btn("⬅️ 𝐏𝐫𝐞𝐯", f"c_by_yr|{year}|{page-1}", "primary", icon=6129627894349045589))
     if offset + limit < total: nav.append(style_btn("𝐍𝐞𝐱𝐭 ➡️", f"c_by_yr|{year}|{page+1}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
+    f_btns.append([style_btn("\U0001F50D Search Country", "search_country_btn",
+                              "primary", icon=5409098988156629257)])
     
     f_btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐘𝐞𝐚𝐫𝐬", "by_years_menu", "danger", icon=6129812419028982717)])
     
@@ -454,14 +519,12 @@ async def show_years(event, mode, country):
             logger.error(f"Error fetching LZT years for {country}: {e}")
 
     if not year_options:
-        # If the panel was queried and genuinely has nothing, be honest instead
-        # of showing fake "40+" stock.
-        if lzt_used:
-            return await _no_stock_card(event, mode)
-        for y in [2026, 2025, 2024, 2023, 2022, 2021]:
-            year_options.append({
-                'year': y, 'count': '40+', 'price': get_panel_price(country, y, mode=mode), 'source': 'lzt'
-            })
+        # Be honest: never fabricate "40+" stock.  If the live panel returned
+        # nothing (or LZT is not configured) show a clear empty-state card.
+        if bot_mode in ('panel', 'hybrid') and not get_lzt_key():
+            return await _lzt_not_configured_card(event, country, mode)
+        reason = getattr(lzt_client, "last_error", None)
+        return await _no_stock_card(event, mode, country=country, reason=reason)
     
     flag = get_flag_by_country_name(country)
     btns = []
@@ -889,7 +952,7 @@ async def cb_search_country_btn(event):
     uid = event.sender_id
     search_state[uid] = True
     user_states[uid] = "AWAITING_COUNTRY"
-    msg = "<blockquote expandable>🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b>\n\nPlease type the country name or dial code (e.g., <code>India</code> or <code>+91</code>) in chat below.</blockquote>"
+    msg = "<blockquote expandable>🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b>\n\nSend a country name, ISO code or dial code \u2014 e.g. <code>Japan</code>, <code>JP</code>, <code>JPN</code>, <code>+81</code>, <code>India</code>, <code>+91</code>.</blockquote>"
     btns = [[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]]
     await event.edit(msg, buttons=btns)
 
@@ -933,9 +996,28 @@ async def process_combined_text_input(event):
 
         matches = search_countries(countries_all, raw_query)
 
+        # Universal fallback: if the panel list did not contain the country,
+        # resolve the query (name / ISO-2 / ISO-3 / dial code) anyway so the
+        # user still reaches the country and sees an honest "no live stock"
+        # card instead of a dead-end "invalid country" error.
         if not matches:
-            return await event.respond(f"❌ No country found matching '<code>{html.escape(event.text)}</code>'. Please try again with a valid country or code (e.g. India, +91, +1).", buttons=[[style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐌𝐞𝐧𝐮", "buy_menu_main", "danger", icon=6129812419028982717)]])
-            
+            try:
+                from utils.country_search import resolve_country
+                resolved = resolve_country(raw_query)
+            except Exception:
+                resolved = None
+            if resolved:
+                matches = [(resolved["name"], 0)]
+            else:
+                return await event.respond(
+                    f"\u274c No country found matching '<code>{html.escape(event.text)}</code>'.\n\n"
+                    "Try a country name (<code>Japan</code>), a 2-letter code "
+                    "(<code>JP</code>), a 3-letter code (<code>JPN</code>) or a "
+                    "dial code (<code>+81</code>).",
+                    buttons=[[style_btn("\U0001F50D Search Again", "search_country_btn", "primary", icon=5409098988156629257)],
+                             [style_btn("\U0001F519 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)]],
+                )
+
         btns = []
         for c_name, count in matches[:10]:
             flag = get_flag_by_country_name(c_name)

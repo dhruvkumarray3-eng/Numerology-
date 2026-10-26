@@ -55,16 +55,58 @@ from utils import stock_details as stock_card
 # uid -> {"app": slug, "country": iso, "order_id":..., "provider":...}
 otp_state = {}
 
-COUNTRIES = [
-    ("any", "🌍 Any"),
-    ("russia", "🇷🇺 Russia"),
-    ("india", "🇮🇳 India"),
-    ("indonesia", "🇮🇩 Indonesia"),
-    ("usa", "🇺🇸 USA"),
-    ("england", "🇬🇧 UK"),
-    ("philippines", "🇵🇭 Philippines"),
-    ("vietnam", "🇻🇳 Vietnam"),
+# uid -> app slug while the user is typing a country search query
+aa_search_state = {}
+
+# Curated 5sim country slugs.  The first 16 are shown as buttons; the whole
+# list is used by the country search so any supported country can be found.
+_AA_SLUG_ISO = [
+    ("russia", "ru"), ("india", "in"), ("indonesia", "id"), ("usa", "us"),
+    ("england", "gb"), ("philippines", "ph"), ("vietnam", "vn"),
+    ("japan", "jp"), ("china", "cn"), ("germany", "de"), ("france", "fr"),
+    ("italy", "it"), ("spain", "es"), ("netherlands", "nl"), ("poland", "pl"),
+    ("ukraine", "ua"), ("kazakhstan", "kz"), ("malaysia", "my"),
+    ("thailand", "th"), ("turkey", "tr"), ("brazil", "br"), ("mexico", "mx"),
+    ("canada", "ca"), ("nigeria", "ng"), ("kenya", "ke"), ("pakistan", "pk"),
+    ("bangladesh", "bd"), ("srilanka", "lk"), ("uae", "ae"),
+    ("saudiarabia", "sa"), ("egypt", "eg"), ("morocco", "ma"),
+    ("argentina", "ar"), ("colombia", "co"), ("peru", "pe"), ("chile", "cl"),
+    ("romania", "ro"), ("czech", "cz"), ("sweden", "se"), ("norway", "no"),
+    ("denmark", "dk"), ("finland", "fi"), ("portugal", "pt"),
+    ("greece", "gr"), ("hungary", "hu"), ("bulgaria", "bg"),
+    ("serbia", "rs"), ("croatia", "hr"), ("slovakia", "sk"),
+    ("slovenia", "si"), ("lithuania", "lt"), ("latvia", "lv"),
+    ("estonia", "ee"), ("belarus", "by"), ("moldova", "md"),
+    ("georgia", "ge"), ("armenia", "am"), ("azerbaijan", "az"),
+    ("uzbekistan", "uz"), ("kyrgyzstan", "kg"), ("mongolia", "mn"),
+    ("nepal", "np"), ("myanmar", "mm"), ("cambodia", "kh"), ("laos", "la"),
+    ("singapore", "sg"), ("hongkong", "hk"), ("taiwan", "tw"),
+    ("southkorea", "kr"), ("australia", "au"), ("newzealand", "nz"),
+    ("southafrica", "za"), ("ghana", "gh"), ("uganda", "ug"),
+    ("tanzania", "tz"), ("ethiopia", "et"), ("tunisia", "tn"),
+    ("algeria", "dz"), ("iraq", "iq"), ("iran", "ir"), ("israel", "il"),
+    ("jordan", "jo"), ("kuwait", "kw"), ("qatar", "qa"), ("bahrain", "bh"),
+    ("oman", "om"), ("lebanon", "lb"), ("afghanistan", "af"),
 ]
+
+
+def _build_countries():
+    out = [("any", "🌍 Any")]
+    try:
+        from utils.country_search import resolve_country
+    except Exception:
+        resolve_country = None
+    for slug, iso2 in _AA_SLUG_ISO:
+        info = resolve_country(iso2) if resolve_country else None
+        if info:
+            out.append((slug, f"{info['flag']} {info['name']}"))
+        else:
+            out.append((slug, slug.title()))
+    return out
+
+
+COUNTRIES = _build_countries()
+COUNTRIES_VISIBLE = 16
 
 
 _EMOJI_FALLBACK = "📱"
@@ -127,19 +169,24 @@ async def show_countries_for_app(event, app_slug):
     app_label = dict(APP_CATALOG).get(app_slug, app_slug)
     btns = []
     row = []
-    for iso, label in COUNTRIES:
+    for iso, label in COUNTRIES[:COUNTRIES_VISIBLE]:
         row.append(style_btn(label, f"aa_c|{app_slug}|{iso}", "primary", icon=_app_icon(app_slug)))
         if len(row) == 2:
             btns.append(row)
             row = []
     if row:
         btns.append(row)
+    btns.append([
+        style_btn("🔍 Search Country", f"aa_search|{app_slug}", "primary",
+                  icon=5409098988156629257),
+    ])
     btns.append([style_btn("🔙 Back", b"all_apps_menu", "danger", icon=6129812419028982717)])
 
     msg = (
         f"<blockquote expandable>{PE_LOCATION} <b>{pe('globe', '🌍')} {html.escape(app_label)} — Select Country</b>\n\n"
         f"{_providers_line()}\n\n"
-        f"<i>Pick the country for the number you want.</i></blockquote>"
+        f"<i>Pick the country for the number you want, or tap Search Country "
+        f"and type a name / ISO code / dial code (e.g. Japan, JP, JPN, +81).</i></blockquote>"
     )
     if isinstance(event, events.CallbackQuery.Event):
         try:
@@ -169,6 +216,16 @@ async def show_details(event, app_slug, country_iso):
         rate_text = "\U0001F7E1 Live rate unavailable \u2014 tap Refresh"
 
     extra_block = f"{_ensure_emoji(app_label)} <b>App:</b> {html.escape(app_label)}"
+    if price is not None:
+        try:
+            from utils.markup import price_breakdown, format_dual_from_inr
+            bd = price_breakdown(price * 100.0)
+            extra_block += (
+                f"\n💰 <b>Your total price:</b> "
+                f"{format_dual_from_inr(bd['inr'])} <i>(all-inclusive)</i>"
+            )
+        except Exception as _pb_ex:
+            logger.debug(f"price breakdown failed: {_pb_ex}")
     if not provider_configured():
         extra_block += "\n\u26a0\ufe0f <i>No OTP provider configured on the host.</i>"
 
@@ -243,6 +300,84 @@ def register_all_apps(bot):
     @bot.on(events.CallbackQuery(pattern=r"^all_apps_menu$"))
     async def cb_all_apps(e):
         await show_all_apps(e)
+
+    @bot.on(events.CallbackQuery(pattern=r"^aa_search\|(\w+)$"))
+    async def cb_aa_search(e):
+        raw = e.pattern_match.group(1)
+        slug = raw.decode() if isinstance(raw, bytes) else raw
+        aa_search_state[e.sender_id] = slug
+        app_label = dict(APP_CATALOG).get(slug, slug)
+        msg = (
+            f"<blockquote expandable>🔍 <b>Search Country — {html.escape(app_label)}</b>\n\n"
+            "Send a country name, ISO code or dial code — e.g. <code>Japan</code>, "
+            "<code>JP</code>, <code>JPN</code>, <code>+81</code>, <code>India</code>, "
+            "<code>+91</code>.</blockquote>"
+        )
+        btns = [[style_btn("🔙 Back", f"aa_app|{slug}", "danger",
+                           icon=6129812419028982717)]]
+        try:
+            await e.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            pass
+
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
+                              and bool(e.text) and not e.text.startswith("/")))
+    async def aa_text_router(e):
+        uid = e.sender_id
+        slug = aa_search_state.get(uid)
+        if not slug:
+            return
+        aa_search_state.pop(uid, None)
+        query = e.text.strip()
+        try:
+            from utils.country_search import search_country_names, resolve_country
+        except Exception:
+            search_country_names = None
+            resolve_country = None
+        labels = [label for _iso, label in COUNTRIES]
+        matches = search_country_names(labels, query) if search_country_names else []
+        if matches:
+            label = matches[0]
+            iso = next((i for i, l in COUNTRIES if l == label), None)
+            if iso:
+                await show_details(e, slug, iso)
+                raise events.StopPropagation
+        resolved = resolve_country(query) if resolve_country else None
+        if resolved:
+            iso = None
+            for i, l in COUNTRIES:
+                if resolved["name"].lower() in l.lower():
+                    iso = i
+                    break
+            if iso:
+                await show_details(e, slug, iso)
+                raise events.StopPropagation
+            app_label = dict(APP_CATALOG).get(slug, slug)
+            msg = (
+                f"<blockquote expandable>{resolved['flag']} <b>{html.escape(resolved['name'])}</b> "
+                f"(<code>{resolved['iso3'] or resolved['iso2'].upper()}</code>) — "
+                f"<b>{html.escape(app_label)}</b>\n\n"
+                "🟡 <b>This country is not available on the panel right now.</b>\n"
+                "The provider returned no numbers for it. Try another country.</blockquote>"
+            )
+        else:
+            msg = (
+                f"<blockquote expandable>😕 No country matched "
+                f"<b>{html.escape(query)}</b>.\nTry a name (<code>Japan</code>), "
+                "ISO code (<code>JP</code> / <code>JPN</code>) or dial code "
+                "(<code>+81</code>).</blockquote>"
+            )
+        btns = [
+            [style_btn("🔍 Search Again", f"aa_search|{slug}", "primary",
+                       icon=5409098988156629257)],
+            [style_btn("🔙 Back", f"aa_app|{slug}", "danger",
+                       icon=6129812419028982717)],
+        ]
+        try:
+            await e.respond(msg, buttons=btns)
+        except Exception:
+            pass
+        raise events.StopPropagation
 
     @bot.on(events.CallbackQuery(pattern=r"^aa_app\|(\w+)$"))
     async def cb_aa_app(e):

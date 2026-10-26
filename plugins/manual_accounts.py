@@ -41,6 +41,9 @@ PAGE_SIZE = 8
 # uid -> {"step": str, "data": {...}}
 mtg_wizard = {}
 
+# uid -> True while the user is typing a country search query
+mtg_search_state = {}
+
 
 # --------------------------------------------------------------------------
 # helpers
@@ -106,6 +109,8 @@ async def show_home(event, page=1):
             "soon, or browse the other panels meanwhile.</blockquote>"
         )
         btns = [
+            [style_btn("🔍 Search Country", b"mtg_search", "primary",
+                       icon=5409098988156629257)],
             [style_btn("🧩 All Panels", b"pp_hub", "primary", icon=5409320020058584473)],
             [style_btn("🔙 Back to Buy Menu", b"buy_menu_main", "danger", icon=6129812419028982717)],
         ]
@@ -129,9 +134,12 @@ async def show_home(event, page=1):
         nav.append(style_btn("Next ➡️", f"mtg_pg|{page + 1}", "primary", icon=6129732880529628243))
     btns.append(nav)
     btns.append([
+        style_btn("🔍 Search Country", b"mtg_search", "primary",
+                  icon=5409098988156629257),
         style_btn("🔄 Refresh", b"mtg_home", "success", icon=5409320020058584473),
-        style_btn("🔙 Back", b"buy_menu_main", "danger", icon=6129812419028982717),
     ])
+    btns.append([style_btn("🔙 Back", b"buy_menu_main", "danger",
+                           icon=6129812419028982717)])
 
     msg = (
         "<blockquote expandable>📱 <b>Basic Telegram Accounts</b>\n\n"
@@ -372,6 +380,17 @@ async def admin_clear_old_stock(event):
             product_panels._cache.clear()
         except Exception:
             pass
+        try:
+            from plugins.buy import _LIVE_COUNTRY_CACHE
+            _LIVE_COUNTRY_CACHE["ts"] = 0.0
+            _LIVE_COUNTRY_CACHE["counts"] = {}
+        except Exception:
+            pass
+        try:
+            from plugins.buy import _PRICE_CACHE
+            _PRICE_CACHE.clear()
+        except Exception:
+            pass
         await event.reply(
             f"🧹 <b>Old stock cleared.</b>\n\n"
             f"Removed <b>{before}</b> old account(s) from the legacy stock table.\n"
@@ -521,6 +540,17 @@ def register_manual_accounts(bot):
         ensure_user(uid)
         if data == "mtg_home":
             return await show_home(e, 1)
+        if data == "mtg_search":
+            mtg_search_state[uid] = True
+            msg = (
+                "<blockquote expandable>🔍 <b>Search Country \u2014 Basic Telegram Accounts</b>\n\n"
+                "Send a country name, ISO code or dial code \u2014 e.g. <code>Japan</code>, "
+                "<code>JP</code>, <code>JPN</code>, <code>+81</code>, <code>India</code>, "
+                "<code>+91</code>.</blockquote>"
+            )
+            btns = [[style_btn("🔙 Back", b"mtg_home", "danger",
+                               icon=6129812419028982717)]]
+            return await _safe_edit(e, msg, btns)
         if data.startswith("mtg_pg|"):
             try:
                 return await show_home(e, int(data.split("|", 1)[1]))
@@ -545,6 +575,59 @@ def register_manual_accounts(bot):
                 return await deliver_account(e, int(data.split("|", 1)[1]))
             except ValueError:
                 return await e.answer("Invalid account.", alert=True)
+
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
+                              and bool(e.text) and not e.text.startswith("/")))
+    async def mtg_text_router(e):
+        uid = e.sender_id
+        if not mtg_search_state.get(uid):
+            return
+        mtg_search_state.pop(uid, None)
+        query = e.text.strip()
+        rows = ms.manual_countries()
+        try:
+            from utils.country_search import search_country_names, resolve_country
+        except Exception:
+            search_country_names = None
+            resolve_country = None
+        names = [clean_name(r[0]) for r in rows]
+        matches = search_country_names(names, query) if search_country_names else []
+        if matches:
+            target = matches[0]
+            for r in rows:
+                if clean_name(r[0]) == target:
+                    await show_country(e, r[0])
+                    raise events.StopPropagation
+        resolved = resolve_country(query) if resolve_country else None
+        if resolved:
+            for r in rows:
+                if resolved["name"].lower() in clean_name(r[0]).lower():
+                    await show_country(e, r[0])
+                    raise events.StopPropagation
+            msg = (
+                f"<blockquote expandable>{resolved['flag']} <b>{html.escape(resolved['name'])}</b> "
+                f"(<code>{resolved['iso3'] or resolved['iso2'].upper()}</code>)\n\n"
+                "🟡 <b>No Basic Telegram accounts for this country right now.</b>\n"
+                "The admin has not added any stock here yet. Try another country.</blockquote>"
+            )
+        else:
+            msg = (
+                f"<blockquote expandable>😕 No country matched "
+                f"<b>{html.escape(query)}</b>.\nTry a name (<code>Japan</code>), "
+                "ISO code (<code>JP</code> / <code>JPN</code>) or dial code "
+                "(<code>+81</code>).</blockquote>"
+            )
+        btns = [
+            [style_btn("🔍 Search Again", b"mtg_search", "primary",
+                       icon=5409098988156629257)],
+            [style_btn("🔙 Back", b"mtg_home", "danger",
+                       icon=6129812419028982717)],
+        ]
+        try:
+            await e.respond(msg, buttons=btns, parse_mode="html")
+        except Exception:
+            pass
+        raise events.StopPropagation
 
     @bot.on(events.NewMessage(pattern=r"(?i)^/basictg(?:@\w+)?$"))
     async def cmd_basictg(e):
