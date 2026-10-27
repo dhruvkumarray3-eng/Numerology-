@@ -65,29 +65,29 @@ async def send_main_menu(bot, event, uid):
     msg = (f"<a href='{start_img}'>&#8203;</a>💬 <b>{html.escape(styled_name)}</b>\n\n"
            f"<blockquote expandable>"
            f"{PE_USER} <b>\U0001D40D\U0001D41A\U0001D426\U0001D41E:</b> {html.escape(first_name)}\n"
-           f"{PE_ID} <b>\U0001D414s\U0001D407\U0001D404\U0001D411 \U0001D408\U0001D403:</b> <code>{uid}</code>\n"
-           f"{PE_TARGET} <b>\U0001D414s\U0001D404\U0001D411\U0001D40D\U0001D400\U0001D426\U0001D404:</b> {username}\n"
+           f"{PE_ID} <b>\U0001D414\U0001D412\U0001D404\U0001D411 \U0001D408\U0001D403:</b> <code>{uid}</code>\n"
+           f"{PE_TARGET} <b>\U0001D414\U0001D412\U0001D404\U0001D411\U0001D40D\U0001D400\U0001D40C\U0001D404:</b> {username}\n"
            f"{PE_TAG} <b>\U0001D411\U0001D403\U0001D417 \U0001D408\U0001D403:</b> <code>{rdx_id}</code>\n"
            f"{PE_CARD} <b>\U0001D401\U0001D41A\U0001D425\U0001D41A\U0001D427\U0001D41C\U0001D41E:</b> <code>\u20b9{bal:.2f}</code>\n"
            f"{PE_TROPHY} <b>\U0001D415\U0001D408\U0001D40F:</b> {vip}{vip_progress}"
            f"</blockquote>\n"
-           f"<blockquote>{PE_LIGHTNING} <b>\U0001D412\U0001D42E\U0001D429\U0001D429\U0001D428\U0001D42B\U0001D42D :</b> <a href='{support_url}'>{support_handle}</a></blockquote>\n"
-           f"<blockquote>{PE_CROWN} <b>\U0001D40E\u1d21\u0274\u1d07\u0280 :</b> <a href='{OWNER_URL}'>{owner_handle}</a></blockquote>")
+           f"<blockquote>{PE_LIGHTNING} <b>\U0001D412\U0001D42E\U0001D429\U0001D429\U0001D428\U0001D42B\U0001D42D:</b> <a href='{support_url}'>{support_handle}</a></blockquote>\n"
+           f"<blockquote>{PE_CROWN} <b>\U0001D40E\U0001D416\U0001D40D\U0001D404\U0001D411:</b> <a href='{OWNER_URL}'>{owner_handle}</a></blockquote>")
     # Premium identity blocks — only shown to staff, using premium emojis.
     if is_admin(uid):
-        staff = (f"<blockquote>{PE_CHECK} <b>𝓐𝓭𝓶𝓲𝓷 𝓘𝓓 :</b> <code>{uid}</code>\n"
-                 f"{PE_GIFT} <b>𝓞𝔀𝓷𝓮𝓻 𝓘𝓓 :</b> <code>{ADMIN_ID}</code>")
+        staff = (f"<blockquote>{PE_CHECK} <b>𝓐𝓭𝓶𝓲𝓷 𝓘𝓓:</b> <code>{uid}</code>\n"
+                 f"{PE_GIFT} <b>𝓞𝔀𝓷𝓮𝓻 𝓘𝓓:</b> <code>{ADMIN_ID}</code>")
         if is_super_admin(uid):
-            staff += f"\n{PE_CROWN} <b>𝓢𝓾𝓹𝓮𝓻 𝓐𝓭𝓶𝓲𝓷 𝓘𝓓 :</b> <code>{uid}</code>"
+            staff += f"\n{PE_CROWN} <b>𝓢𝓾𝓹𝓮𝓻 𝓐𝓭𝓶𝓲𝓷 𝓘𝓓:</b> <code>{uid}</code>"
         msg += staff + "</blockquote>"
            
     buttons = [
-        [style_btn("\U0001F4F2 \U0001D411\U0001D42E\U0001D432 \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D", b"open_buy_categories", "success", icon=5796209712009581332)],
-        [style_btn("\U0001F4F1 \U0001D400\U0001D425\U0001D425 \U0001D41A\U0001D429\U0001D429\U0001D42C \U0001D41A\U0001D41C\U0001D41C", b"all_apps_menu", "primary", icon=5373130604147654226)],
-        [style_btn("\U0001F4F1 \U0001D411\U0001D41E\U0001D425\U0001D41E\U0001D420\U0001D42B\U0001D41A\U0001D426 \U0001D401\U0001D41A\U0001D42C\U0001D422\U0001D41C \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D\U0001D42C", b"mtg_home", "success", icon=5330237710655306682)],
+        [style_btn("\U0001F4F2 \U0001D401\U0001D42E\U0001D432 \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D", b"open_buy_categories", "success", icon=5796209712009581332)],
+        [style_btn("\U0001F4F1 \U0001D400\U0001D425\U0001D425 \U0001D400\U0001D429\U0001D429\U0001D42C \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D\U0001D42C", b"all_apps_menu", "primary", icon=5373130604147654226)],
+        [style_btn("\U0001F4F1 \U0001D413\U0001D41E\U0001D425\U0001D41E\U0001D420\U0001D42B\U0001D41A\U0001D426 \U0001D401\U0001D41A\U0001D42C\U0001D422\U0001D41C \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D\U0001D42C", b"mtg_home", "success", icon=5330237710655306682)],
         [style_btn("\U0001F4AC \U0001D416\U0001D421\U0001D41A\U0001D42D\U0001D42C\U0001D400\U0001D429\U0001D429 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425", b"pp_open|whatsapp", "success", icon=5334998226636390258)],
         [style_btn("\U0001F9E9 \U0001D400\U0001D425\U0001D425 \U0001D400\U0001D429\U0001D429\U0001D42C \U0001D40E\U0001D413\U0001D40F", b"pp_open|allotp", "primary", icon=5373130604147654226)],
-        [style_btn("\U0001F680 \U0001D412\U0001D426\U0001D426 \U0001D426\U0001D41E\U0001D41D\U0001D422\U0001D41A \U0001D42C\U0001D41E\U0001D42B\U0001D42F\U0001D422\U0001D41C\U0001D41E\U0001D42C", b"smm_menu_main", "success", icon=5408995930416362034)],
+        [style_btn("\U0001F680 \U0001D412\U0001D40C\U0001D40C & \U0001D40C\U0001D41E\U0001D41D\U0001D422\U0001D41A \U0001D412\U0001D41E\U0001D42B\U0001D42F\U0001D422\U0001D41C\U0001D41E\U0001D42C", b"smm_menu_main", "success", icon=5408995930416362034)],
         [style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D412\U0001D428\U0001D42E\U0001D42B\U0001D41C\U0001D41E \U0001D402\U0001D428\U0001D41D\U0001D41E\U0001D42C", b"src_code_menu", "danger", icon=5951663025336356427)],
         [style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425\U0001D42C", b"panels_menu", "primary", icon=5409098988156629257)],
         [style_btn("\U0001F5A5 \U0001D412\U0001D41E\U0001D42B\U0001D42F\U0001D41E\U0001D42B\U0001D42C", b"servers_menu", "primary", icon=5981035310241288157)],

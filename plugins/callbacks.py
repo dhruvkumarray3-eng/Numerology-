@@ -27,8 +27,8 @@ async def send_stock_page(event, page=1):
         rows = []
 
     if not rows:
-        msg = (f"<blockquote>{PE_LOCATION} <b>\U0001F4E6 \u1d12\u026a\u1d20\u1d07 "
-               f"\u1d12\u1d1b\u1d0f\u1d04\u1d0b</b>\n\n\u26a0\ufe0f No stock available "
+        msg = (f"<blockquote>{PE_LOCATION} <b>\U0001F4E6 \u029f\u026a\u1d20\u1d07 "
+               f"\ua731\u1d1b\u1d0f\u1d04\u1d0b</b>\n\n\u26a0\ufe0f No stock available "
                f"right now. Please check back shortly.</blockquote>")
         if isinstance(event, events.CallbackQuery.Event):
             try:
@@ -43,9 +43,8 @@ async def send_stock_page(event, page=1):
     page = max(1, min(page, total_pages))
     page_items = rows[offset:offset + limit]
 
-    msg = (f"<blockquote>{PE_LOCATION} <b>\U0001F4E6 \u1d00\u1d20\u1d00\u026a\u029f\u1d00\u0299\u029f\u1d07 "
-           f"\u1d1b\u1d0f\u1d04\u1d0b</b> \u2014 {total_stock} \u1d1b\u1d0f\u1d1b\u1d00\u029f "
-           f"\u00b7 \u1d18\u1d00\u0262\u1d07 {page}/{total_pages}</blockquote>\n\n")
+    msg = (f"<blockquote>{PE_LOCATION} <b>\U0001F4E6 \u1d00\u1d20\u1d00\u026a\u029f\u1d00\u0299\u029f\u1d07 \ua731\u1d1b\u1d0f\u1d04\u1d0b</b> \u2014 {total_stock} \u1d1b\u1d0f\u1d1b\u1d00\u029f "
+           f"\ua731\u1d1b\u1d0f\u1d04\u1d0b \u00b7 \u1d18\u1d00\u0262\u1d07 {page}/{total_pages}</blockquote>\n\n")
     for cn, cnt in page_items:
         flag = get_flag_by_country_name(cn)
         if cnt and int(cnt) > 0:
@@ -244,7 +243,7 @@ def register_callbacks(bot):
                f"\U0001F465 <b>Support Group:</b> {SUPPORT_USERNAME}\n"
                f"\U0001F451 <b>Owner:</b> {OWNER_USERNAME}</blockquote>")
         btns = [
-            [Button.url("\U0001F465 𝐒\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b 𝐆\u1d1b\u1d0f\u1d1c\u1d18", url)],
+            [Button.url("\U0001F465 𝐒\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b 𝐆\u0280\u1d0f\u1d1c\u1d18", url)],
             [Button.url("\U0001F451 𝐎\u1d21\u0274\u1d07\u0280", OWNER_URL)],
         ]
         await e.respond(msg, buttons=btns)

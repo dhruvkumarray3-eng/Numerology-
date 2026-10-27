@@ -579,7 +579,7 @@ async def admin_actions(event):
     elif action_data == "upi" and has_perm(uid, 'p_settings'):
         upi_res = cur.execute("SELECT value FROM settings WHERE key='upi_id'").fetchone()
         active_upi = upi_res[0] if upi_res and upi_res[0] else "vinit-godara@fam"
-        msg = (f"<blockquote>🏦 <b>ᴜᴘɪ ᴘᴀʏᴍᴇɴᴛ ꜱᴇᴛᴛɪɴɢꜱ</b>\n\n"
+        msg = (f"<blockquote>\U0001f3e6 <b>\U0001D414\U0001D40F\U0001D408 \U0001D40F\u1d00\u028f\u1d0d\u1d07\u0274\u1d1b \U0001D412\u1d07\u1d1b\u1d1b\u026a\u0274\u0262\ua731</b>\\n\\n"
                f"🆔 <b>ᴄᴜʀʀᴇɴᴛ ᴜᴘɪ ɪᴅ:</b> <code>{active_upi}</code>\n\n"
                f"<i>💡 This UPI ID is shown to every user on the deposit screen. "
                f"Change it anytime — it updates instantly, no restart needed.</i></blockquote>")
