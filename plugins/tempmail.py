@@ -1,12 +1,15 @@
 """Free Temp Mail section (MTempMail API).
 
 Users get a disposable inbox, can create fresh addresses, refresh, and read
-incoming verification mails / OTPs right inside the bot.
+incoming verification mails / OTPs right inside the bot. Each inbox lives for
+50 minutes, with a live countdown, Copy Email / Refresh Inbox / Cancel Mail
+controls.
 """
 from __future__ import annotations
 
 import html
 import re
+import time
 from typing import Dict, List
 
 from telethon import events
@@ -17,8 +20,10 @@ from database import cur, db
 from utils.keyboards import style_btn
 from utils import tempmail as tm
 
-# uid -> {"email": str, "domain": str, "created": str}
-_tm_state: Dict[int, Dict[str, str]] = {}
+# uid -> {"email": str, "domain": str, "expires": int}
+_tm_state: Dict[int, Dict[str, object]] = {}
+
+MAIL_TTL = 50 * 60  # 50 minutes, matching the reference UI
 
 
 def _ensure_table() -> None:
@@ -30,23 +35,46 @@ def _ensure_table() -> None:
                    email TEXT NOT NULL,
                    domain TEXT,
                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                   expires_at INTEGER,
                    UNIQUE(user_id, email)
                )"""
         )
+        # Older installs may not have expires_at yet.
+        cols = [r[1] for r in cur.execute("PRAGMA table_info(tempmail_inboxes)").fetchall()]
+        if "expires_at" not in cols:
+            cur.execute("ALTER TABLE tempmail_inboxes ADD COLUMN expires_at INTEGER")
         db.commit()
     except Exception as exc:  # pragma: no cover
         logger.debug(f"tempmail table init failed: {exc}")
 
 
-def _save_inbox(uid: int, email: str, domain: str = "") -> None:
+def _save_inbox(uid: int, email: str, domain: str = "", expires: int | None = None) -> None:
     try:
+        expires = int(expires or (time.time() + MAIL_TTL))
         cur.execute(
-            "INSERT OR IGNORE INTO tempmail_inboxes (user_id, email, domain) VALUES (?,?,?)",
-            (uid, email, domain),
+            "INSERT OR IGNORE INTO tempmail_inboxes (user_id, email, domain, expires_at) VALUES (?,?,?,?)",
+            (uid, email, domain, expires),
+        )
+        cur.execute(
+            "UPDATE tempmail_inboxes SET expires_at=? WHERE user_id=? AND email=?",
+            (expires, uid, email),
         )
         db.commit()
     except Exception as exc:
         logger.debug(f"tempmail save failed: {exc}")
+
+
+def _expires_for(uid: int, email: str) -> int:
+    try:
+        row = cur.execute(
+            "SELECT expires_at FROM tempmail_inboxes WHERE user_id=? AND email=?",
+            (uid, email),
+        ).fetchone()
+        if row and row[0]:
+            return int(row[0])
+    except Exception:
+        pass
+    return int(time.time() + MAIL_TTL)
 
 
 def _user_inboxes(uid: int) -> List[str]:
@@ -58,6 +86,22 @@ def _user_inboxes(uid: int) -> List[str]:
         return [r[0] for r in rows if r and r[0]]
     except Exception:
         return []
+
+
+def _delete_inbox(uid: int, email: str) -> None:
+    try:
+        cur.execute("DELETE FROM tempmail_inboxes WHERE user_id=? AND email=?", (uid, email))
+        db.commit()
+    except Exception:
+        pass
+    _tm_state.pop(uid, None)
+
+
+def _countdown(expires: int) -> tuple[str, bool]:
+    left = int(expires - time.time())
+    if left <= 0:
+        return "00:00", True
+    return f"{left // 60:02d}:{left % 60:02d}", False
 
 
 def _short(text: str, limit: int = 60) -> str:
@@ -75,32 +119,81 @@ async def _edit_or_send(event, msg: str, buttons):
         await event.respond(msg, buttons=buttons)
 
 
+def _home_text() -> str:
+    return (
+        f"<blockquote expandable>{PE_GIFT} <b>FREE TEMP MAIL</b>\n\n"
+        "Generate a temporary disposable email and receive incoming messages "
+        "directly here.\n\n"
+        "📬 <b>Instant mailbox</b>\n"
+        "✈️ <b>Receive emails in Telegram</b>\n"
+        "⏳ <b>50-minute mailbox</b>\n\n"
+        "<i>No signup, no password — your address is ready in one tap.</i></blockquote>"
+    )
+
+
 async def show_home(event):
+    btns = [
+        [style_btn("📧 Get Temp Mail", b"tm_new", "success", icon=5796209712009581332)],
+    ]
     uid = event.sender_id
     inboxes = _user_inboxes(uid)
-    current = _tm_state.get(uid, {}).get("email") or (inboxes[0] if inboxes else "")
-    body = (
-        f"<blockquote expandable>{PE_GIFT} <b>📧 Free Temp Mail</b>\n\n"
-        "Create a disposable email address instantly — perfect for receiving "
-        "verification codes, OTPs and confirmation links without exposing your "
-        "real inbox.\n\n"
-        f"🟢 <b>Free</b> · ⚡ <b>Instant</b> · 🔒 <b>Private</b>\n"
-        "Messages usually arrive within a few seconds — tap <b>Refresh</b> to check."
-    )
-    if current:
-        body += f"\n\n📬 <b>Current inbox:</b> <code>{html.escape(current)}</code>"
-    body += "</blockquote>"
-
-    btns = [
-        [style_btn("➕ Create New Email", b"tm_new", "success", icon=5796209712009581332)],
-    ]
-    if current:
-        btns.append([style_btn("📥 Check Inbox", f"tm_inbox|{current}", "primary", icon=5373130604147654226)])
-        btns.append([style_btn("🔄 Refresh", f"tm_inbox|{current}", "success", icon=5409320020058584473)])
     if inboxes:
         btns.append([style_btn("🗂 My Inboxes", b"tm_list", "primary", icon=5409098988156629257)])
     btns.append([style_btn("🔙 Back", b"dashboard_main", "danger", icon=6129812419028982717)])
-    await _edit_or_send(event, body, btns)
+    await _edit_or_send(event, _home_text(), btns)
+
+
+def _inbox_text(email: str, expires: int, messages: List[dict]) -> str:
+    left, expired = _countdown(expires)
+    head = (
+        f"<blockquote expandable>📧 <b>YOUR TEMP MAIL</b>\n\n"
+        f"📮 <b>Email:</b>\n<code>{html.escape(email)}</code>\n\n"
+        f"⏳ <b>Time Remaining:</b> <b>{left}</b>\n\n"
+    )
+    if expired:
+        head += "🔴 <b>This mailbox has expired.</b> Generate a new one.\n"
+    elif messages:
+        head += f"🟢 <b>{len(messages)} message(s)</b> received.\n"
+    else:
+        head += "🟡 <b>Waiting for incoming mail.</b>\n"
+        head += "QuickCodes is monitoring your temporary inbox for new messages.\n"
+
+    head += (
+        "\n⚠️ <b>IMPORTANT:</b>\n"
+        "• This mailbox is temporary.\n"
+        "• You can receive emails while it is active.\n"
+        "• The mailbox automatically expires.\n"
+        "• After expiration you can generate a new mailbox.\n"
+    )
+    if messages:
+        head += "\n──────────────\n"
+        for m in messages[:6]:
+            otp = tm.extract_otp(m.get("body") or "")
+            badge = f" 🔑 <code>{otp}</code>" if otp else ""
+            head += (
+                f"• <b>{html.escape(_short(m.get('subject') or '(no subject)', 45))}</b> "
+                f"<i>from {html.escape(_short(m.get('from') or '?', 22))}</i>{badge}\n"
+            )
+    head += "</blockquote>"
+    return head
+
+
+def _inbox_buttons(email: str, messages: List[dict]) -> list:
+    btns = []
+    for m in messages[:5]:
+        mid = m.get("id")
+        label = _short(m.get("subject") or "(no subject)", 30)
+        btns.append([style_btn(f"📩 {label}", f"tm_msg|{email}|{mid}", "primary", icon=5373130604147654226)])
+    btns.append([
+        style_btn("📋 Copy Email", f"tm_copy|{email}", "success", icon=5409098988156629257),
+        style_btn("🔄 Refresh Inbox", f"tm_inbox|{email}", "success", icon=5409320020058584473),
+    ])
+    btns.append([
+        style_btn("❌ Cancel Mail", f"tm_cancel|{email}", "danger", icon=6129888444245089008),
+        style_btn("➕ New Mail", b"tm_new", "primary", icon=5796209712009581332),
+    ])
+    btns.append([style_btn("🔙 Back", b"tm_home", "danger", icon=6129812419028982717)])
+    return btns
 
 
 async def create_inbox(event):
@@ -132,25 +225,13 @@ async def create_inbox(event):
 
     email = str(data.get("email") or "").strip()
     domain = str(data.get("domain") or "").strip()
-    expire = str(data.get("expire_at") or "").strip()
-    _tm_state[uid] = {"email": email, "domain": domain, "created": str(data.get("created_at") or "")}
-    _save_inbox(uid, email, domain)
-
-    body = (
-        f"<blockquote expandable>{PE_CHECK} <b>Your temp email is ready!</b>\n\n"
-        f"📧 <b>Address:</b>\n<code>{html.escape(email)}</code>\n\n"
-        f"🌐 <b>Domain:</b> {html.escape(domain or 'auto')}\n"
-        f"⏳ <b>Expires:</b> {html.escape(expire or 'in ~10 minutes')}\n\n"
-        "Use this address on the site you are signing up for. When the mail "
-        "arrives, tap <b>Check Inbox</b> below.</blockquote>"
-    )
-    btns = [
-        [style_btn("📥 Check Inbox", f"tm_inbox|{email}", "success", icon=5373130604147654226)],
-        [style_btn("➕ New Email", b"tm_new", "primary", icon=5796209712009581332),
-         style_btn("🗂 My Inboxes", b"tm_list", "primary", icon=5409098988156629257)],
-        [style_btn("🔙 Back", b"tm_home", "danger", icon=6129812419028982717)],
-    ]
-    await _edit_or_send(event, body, btns)
+    if not email:
+        await show_home(event)
+        return
+    expires = int(time.time() + MAIL_TTL)
+    _tm_state[uid] = {"email": email, "domain": domain, "expires": expires}
+    _save_inbox(uid, email, domain, expires)
+    await _edit_or_send(event, _inbox_text(email, expires, []), _inbox_buttons(email, []))
 
 
 async def show_list(event):
@@ -161,13 +242,16 @@ async def show_list(event):
         return
     lines = [f"<blockquote expandable>{PE_LIGHTNING} <b>🗂 Your Temp Inboxes</b>\n"]
     for i, email in enumerate(inboxes, 1):
-        lines.append(f"{i}. <code>{html.escape(email)}</code>")
+        exp = _expires_for(uid, email)
+        left, expired = _countdown(exp)
+        state = "🔴 expired" if expired else f"⏳ {left}"
+        lines.append(f"{i}. <code>{html.escape(email)}</code> — {state}")
     lines.append("</blockquote>")
     btns = [
         [style_btn(f"📥 {email}", f"tm_inbox|{email}", "primary", icon=5373130604147654226)]
         for email in inboxes[:6]
     ]
-    btns.append([style_btn("➕ Create New Email", b"tm_new", "success", icon=5796209712009581332)])
+    btns.append([style_btn("➕ Get Temp Mail", b"tm_new", "success", icon=5796209712009581332)])
     btns.append([style_btn("🔙 Back", b"tm_home", "danger", icon=6129812419028982717)])
     await _edit_or_send(event, "\n".join(lines), btns)
 
@@ -178,14 +262,14 @@ async def show_inbox(event, email: str):
         await show_home(event)
         return
     _tm_state.setdefault(uid, {})["email"] = email
-    _save_inbox(uid, email)
+    expires = _expires_for(uid, email)
     try:
         messages = await tm.get_messages(email)
     except tm.TempMailError as exc:
         await _edit_or_send(
             event,
             f"<blockquote>❌ <b>Could not load inbox</b>\n\n{html.escape(str(exc))}</blockquote>",
-            [[style_btn("🔄 Refresh", f"tm_inbox|{email}", "success", icon=5409320020058584473)],
+            [[style_btn("🔄 Refresh Inbox", f"tm_inbox|{email}", "success", icon=5409320020058584473)],
              [style_btn("🔙 Back", b"tm_home", "danger", icon=6129812419028982717)]],
         )
         return
@@ -193,40 +277,30 @@ async def show_inbox(event, email: str):
         logger.exception(f"tempmail inbox failed: {exc}")
         messages = []
 
-    if not messages:
-        body = (
-            f"<blockquote expandable>📭 <b>Inbox is empty</b>\n\n"
-            f"📧 <code>{html.escape(email)}</code>\n\n"
-            "No messages yet. Mails can take a few seconds to arrive — "
-            "tap <b>Refresh</b> after the site sends the code.</blockquote>"
-        )
-        btns = [
-            [style_btn("🔄 Refresh", f"tm_inbox|{email}", "success", icon=5409320020058584473)],
-            [style_btn("➕ New Email", b"tm_new", "primary", icon=5796209712009581332)],
-            [style_btn("🔙 Back", b"tm_home", "danger", icon=6129812419028982717)],
-        ]
-        await _edit_or_send(event, body, btns)
-        return
+    await _edit_or_send(event, _inbox_text(email, expires, messages), _inbox_buttons(email, messages))
 
-    lines = [
-        f"<blockquote expandable>📥 <b>Inbox</b> · <code>{html.escape(email)}</code>\n",
-        f"🟢 <b>{len(messages)}</b> message(s)\n",
-    ]
-    for m in messages[:8]:
-        otp = tm.extract_otp(m.get("body") or "")
-        badge = f" 🔑 <code>{otp}</code>" if otp else ""
-        lines.append(f"• <b>{html.escape(_short(m.get('subject') or '(no subject)', 45))}</b> "
-                     f"<i>from {html.escape(_short(m.get('from') or '?', 25))}</i>{badge}")
-    lines.append("</blockquote>")
-    btns = []
-    for m in messages[:6]:
-        mid = m.get("id")
-        label = _short(m.get("subject") or "(no subject)", 32)
-        btns.append([style_btn(f"📩 {label}", f"tm_msg|{email}|{mid}", "primary", icon=5373130604147654226)])
-    btns.append([style_btn("🔄 Refresh", f"tm_inbox|{email}", "success", icon=5409320020058584473),
-                 style_btn("➕ New Email", b"tm_new", "primary", icon=5796209712009581332)])
-    btns.append([style_btn("🔙 Back", b"tm_home", "danger", icon=6129812419028982717)])
-    await _edit_or_send(event, "\n".join(lines), btns)
+
+async def copy_email(event, email: str):
+    try:
+        await event.answer("📋 Email sent below — tap it to copy.", alert=False)
+    except Exception:
+        pass
+    try:
+        await event.respond(
+            f"📋 <b>Tap to copy your temp email:</b>\n<code>{html.escape(email)}</code>"
+        )
+    except Exception as exc:
+        logger.debug(f"tempmail copy failed: {exc}")
+
+
+async def cancel_mail(event, email: str):
+    uid = event.sender_id
+    _delete_inbox(uid, email)
+    try:
+        await event.answer("❌ Mailbox cancelled.", alert=False)
+    except Exception:
+        pass
+    await show_home(event)
 
 
 async def show_message(event, email: str, message_id: str):
@@ -278,6 +352,16 @@ def register_tempmail(bot):
     async def cb_tm_inbox(e):
         email = e.data.decode(errors="ignore").split("|", 1)[1]
         await show_inbox(e, email)
+
+    @bot.on(events.CallbackQuery(pattern=r"^tm_copy\|"))
+    async def cb_tm_copy(e):
+        email = e.data.decode(errors="ignore").split("|", 1)[1]
+        await copy_email(e, email)
+
+    @bot.on(events.CallbackQuery(pattern=r"^tm_cancel\|"))
+    async def cb_tm_cancel(e):
+        email = e.data.decode(errors="ignore").split("|", 1)[1]
+        await cancel_mail(e, email)
 
     @bot.on(events.CallbackQuery(pattern=r"^tm_msg\|"))
     async def cb_tm_msg(e):
