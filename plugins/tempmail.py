@@ -18,6 +18,7 @@ from telethon.errors import MessageNotModifiedError
 from config import logger, PE_CHECK, PE_LIGHTNING, PE_GIFT
 from database import cur, db
 from utils.keyboards import style_btn
+from utils.livecount import register_live, unregister_live
 from utils import tempmail as tm
 
 # uid -> {"email": str, "domain": str, "expires": int}
@@ -110,13 +111,16 @@ def _short(text: str, limit: int = 60) -> str:
 
 
 async def _edit_or_send(event, msg: str, buttons):
+    """Send or edit the message and return the resulting Message object."""
     if isinstance(event, events.CallbackQuery.Event):
         try:
-            await event.edit(msg, buttons=buttons)
+            return await event.edit(msg, buttons=buttons)
         except MessageNotModifiedError:
-            pass
-    else:
-        await event.respond(msg, buttons=buttons)
+            try:
+                return await event.get_message()
+            except Exception:
+                return None
+    return await event.respond(msg, buttons=buttons)
 
 
 def _home_text() -> str:
@@ -196,6 +200,42 @@ def _inbox_buttons(email: str, messages: List[dict]) -> list:
     return btns
 
 
+# ---------------------------------------------------------------------------
+# Live countdown + auto inbox refresh
+# ---------------------------------------------------------------------------
+def _start_live_inbox(event, sent_msg, email: str, expires: int, messages: List[dict]) -> None:
+    """Keep the inbox card ticking every 5s and auto-poll for new mail.
+
+    The countdown is recomputed from `expires` on every tick, so it always shows
+    the true remaining time even if the bot restarts or the worker lags.
+    """
+    try:
+        chat_id = event.chat_id
+        msg_id = sent_msg.id
+    except Exception:
+        return
+
+    cache = {"messages": list(messages or []), "poll_at": time.time() + 12.0}
+    key = f"tm:{email}"
+
+    async def _render():
+        now = time.time()
+        # Re-fetch the mailbox roughly every 12 seconds so new OTPs appear by
+        # themselves, without hammering the Temp Mail API.
+        if now >= cache["poll_at"]:
+            cache["poll_at"] = now + 12.0
+            try:
+                fresh = await tm.get_messages(email)
+                if fresh is not None:
+                    cache["messages"] = fresh
+            except Exception:
+                pass
+        left, expired = _countdown(expires)
+        text = _inbox_text(email, expires, cache["messages"])
+        return text, _inbox_buttons(email, cache["messages"]), expired
+
+    register_live(key, event.client, chat_id, msg_id, _render, interval=5.0)
+
 async def create_inbox(event):
     uid = event.sender_id
     try:
@@ -231,7 +271,9 @@ async def create_inbox(event):
     expires = int(time.time() + MAIL_TTL)
     _tm_state[uid] = {"email": email, "domain": domain, "expires": expires}
     _save_inbox(uid, email, domain, expires)
-    await _edit_or_send(event, _inbox_text(email, expires, []), _inbox_buttons(email, []))
+    sent = await _edit_or_send(event, _inbox_text(email, expires, []), _inbox_buttons(email, []))
+    if sent is not None:
+        _start_live_inbox(event, sent, email, expires, [])
 
 
 async def show_list(event):
@@ -277,17 +319,27 @@ async def show_inbox(event, email: str):
         logger.exception(f"tempmail inbox failed: {exc}")
         messages = []
 
-    await _edit_or_send(event, _inbox_text(email, expires, messages), _inbox_buttons(email, messages))
+    sent = await _edit_or_send(event, _inbox_text(email, expires, messages), _inbox_buttons(email, messages))
+    if sent is not None:
+        _start_live_inbox(event, sent, email, expires, messages)
 
 
 async def copy_email(event, email: str):
+    """Deliver the address as a standalone <code> block.
+
+    Telegram copies a <code> block to the clipboard the moment it is tapped,
+    which is the only one-tap copy that works on every client (inline buttons
+    have no copy action in this MTProto library version).
+    """
     try:
-        await event.answer("📋 Email sent below — tap it to copy.", alert=False)
+        await event.answer("📋 Tap the code below to copy — done!", alert=False)
     except Exception:
         pass
     try:
         await event.respond(
-            f"📋 <b>Tap to copy your temp email:</b>\n<code>{html.escape(email)}</code>"
+            f"<blockquote>📋 <b>𝐓𝐚𝐩 𝐭𝐨 𝐂𝐨𝐩𝐲</b>\n\n"
+            f"<code>{html.escape(email)}</code>\n\n"
+            f"<i>✨ One tap on the address copies it to your clipboard.</i></blockquote>"
         )
     except Exception as exc:
         logger.debug(f"tempmail copy failed: {exc}")
