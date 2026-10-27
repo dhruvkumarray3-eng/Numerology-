@@ -31,3 +31,50 @@
 
 ## Git
 - [x] Branch, commit, push, PR, merge to main
+
+---
+
+# LZT Purchase Fix + Real README (Round 8)
+
+## Problem
+- Buyers could not complete a purchase: the bot refunded and showed
+  "Error initializing account" even though the LZT purchase succeeded.
+- `README.md` was fake (described a "Vibe Music Bot" with /play, /pause, PyTgCalls).
+
+## Root cause (purchase)
+- `process_purchase()` post-buy filter: `post_sb is not None and post_sb != -1`
+  treated a **clean** account (`telegram_spam_block == 0`) as spam and discarded
+  every successful non-spam purchase. All 5 attempts were thrown away -> refund.
+- `_parse_item()` invented `price_str = "0.1"` when `price` was missing, and used
+  the wrong field as a fallback -> fast-buy could send a bad price.
+- `balance_id` was not coerced to int (schema requires integer) and could be a string.
+- LZT error codes were shown raw (`retry_request`, etc.) with no guidance.
+
+## Fixes
+- [x] `utils/lzt.py`: new `post_buy_spam_ok(mode, post_sb)` — accepts clean (0),
+      unknown (-1/-4/None); rejects only real spam (-3, >0) in nonspam mode.
+- [x] `plugins/buy.py`: uses `post_buy_spam_ok()`; clearer failure message.
+- [x] `utils/lzt.py`: `_parse_item()` derives `price_str` from `price` (fallback
+      `rub_price`), never fabricates 0.1.
+- [x] `utils/lzt.py`: `fast_buy()` coerces `balance_id` to int, omits `price`
+      when unknown, requires an `item` in the success payload, handles dict errors.
+- [x] `utils/lzt.py`: new `friendly_buy_error()` maps 400/401/403/404/429 and
+      not-enough-balance / blacklist / daily-limit / sold / deleted to clear text.
+- [x] `tests/test_buy_fixes.py`: 25 regression checks (clean-account case,
+      error mapping, price parsing, fast-buy payload).
+
+## README
+- [x] Replaced the fake music-bot README with accurate docs: what the bot does,
+      architecture, requirements, env vars, LZT purchase flow, troubleshooting,
+      Railway deploy, commands, tests, security notes.
+
+## Verification
+- [x] `tests/test_lzt_spec.py` green
+- [x] `tests/test_lzt_errors.py` green (48 checks)
+- [x] `tests/test_search_settings.py` green
+- [x] `tests/test_buy_fixes.py` green (25 checks)
+- [x] `python3 -m compileall -q .` clean
+
+## Git
+- [x] Create branch `fix/lzt-purchase-and-readme`
+- [x] Commit, push, open PR

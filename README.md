@@ -1,170 +1,303 @@
-<div align="center">
+# Numbott — Telegram Account & Digital Goods Store Bot
 
-# 🎧 VIBE MUSIC BOT 🎧
+Numbott is a modular **Telegram shop bot** built with [Telethon](https://docs.telethon.dev/) (MTProto). It sells Telegram accounts and other digital products, handles a user wallet with USDT (BEP-20) deposits, delivers live account sessions, and gives the owner a full admin panel.
 
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1000&color=00F0FF&center=true&vCenter=true&width=520&lines=Telegram+Music+%26+Voice+Chat+Player;YouTube+%7C+Spotify+%7C+SoundCloud;Queue+System+%2B+Live+Streaming" alt="Typing SVG" />
-</p>
-
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Telethon](https://img.shields.io/badge/Telethon-1.44-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://docs.telethon.dev)
-[![License](https://img.shields.io/badge/License-MIT-red?style=for-the-badge)](LICENSE)
-
-</div>
+> **This is not a music bot.** Earlier versions of this README described a "Vibe Music Bot" with `/play`, `/pause`, `/skip` and PyTgCalls. That was never part of this repository. There is no audio streaming, no yt-dlp, no FFmpeg and no voice-chat code here. The real project is an account marketplace, and this document describes it accurately.
 
 ---
 
-## 🌟 What is this?
+## What the bot actually does
 
-A lightweight, self-hosted Telegram music bot that streams audio straight into your group
-**Voice Chat**. Drop a link, and the bot joins the VC, plays the track, and keeps a clean
-queue for everyone in the group. Built for small friend groups, fan communities and late-night
-listening sessions.
+The shop has two sources of Telegram account stock:
 
-No ads, no watermarks, no forced subscriptions — just music.
+1. **Live LZT Market stock** — accounts are searched and purchased in real time through the [LZT Market API](https://api.lzt.market) (`lolz.guru` / `lzt.market`). This is the primary source and powers the **Buy Account → Good Quality** and **Cheap** panels.
+2. **Local stock** — accounts uploaded by the owner (session files + phone + 2FA) in the admin panel. Local stock is always checked first; if nothing matches, the bot falls back to a live LZT purchase.
 
----
+When a purchase succeeds, the bot builds a Telethon `StringSession` from the LZT auth key, verifies that the session is authorised, and shows the buyer a live order card with the phone number, 2FA password, OTP retrieval and session export (Telethon / tdata / Pyrogram / JSON).
 
-## ✨ Features
+### Core features
 
-* 🎵 **Play from anywhere** — YouTube, YouTube Music, SoundCloud and direct audio links.
-* 🔊 **Voice Chat streaming** — the bot joins the VC and plays in real time.
-* 📜 **Smart queue** — add, skip, pause, resume, loop and shuffle without leaving chat.
-* ⏱ **Live now-playing card** — track title, duration, requester and progress bar.
-* 🔁 **Auto-leave** — the bot leaves the VC automatically when the queue is empty.
-* 👥 **Multi-group support** — one instance can serve several groups at once.
-* 🛡 **Admin controls** — restrict who can add tracks, clear the queue, or stop playback.
-* 🎨 **Clean inline UI** — colour-coded buttons, thumbnails and tidy captions.
-* ⚡ **Async everywhere** — built on Telethon + PyTgCalls, so it stays snappy under load.
-
----
-
-## 🕹 Commands
-
-| Command | What it does |
-| --- | --- |
-| `/start` | Wake the bot up and show the mini player card |
-| `/play <song or link>` | Search and queue a track |
-| `/pause` | Pause the current track |
-| `/resume` | Resume playback |
-| `/skip` | Skip to the next track in queue |
-| `/queue` | Show the current queue |
-| `/loop` | Toggle loop mode |
-| `/shuffle` | Shuffle the queue |
-| `/stop` | Stop playback and clear the queue |
-| `/leave` | Disconnect from the voice chat |
-| `/help` | Show the short command card |
+- **Telegram account marketplace** with country, account-year, price and quality filters. All **249 ISO-3166 countries** resolve to an ISO-2 code and are searchable.
+- **Quality modes**: Good Quality (non-spam), Cheap (spam-blocked), No 2FA, With 2FA, Premium, With/Without email, DC-5, Stars, Aged — all configurable by the admin.
+- **Live LZT purchase flow** with `retry_request` handling (up to 100 retries), numeric price payload, integer `balance_id`, and human-readable failure reasons.
+- **Automatic OTP retrieval** for purchased accounts (`telegram-login-code`), plus an IMAP fallback mailbox.
+- **USDT (BEP-20 / BNB Smart Chain) deposits** with an auto-generated QR code and admin approval.
+- **Product panels**: WhatsApp OTP accounts, Telegram number change, All-Apps OTP accounts (51 apps), SMM services, panel resale, source codes.
+- **Wallet, discounts, referrals, gift codes, VIP tiers, order history.**
+- **Admin panel**: stock upload, pricing/markup engine, LZT margin, search settings, user management (ban/balance/broadcast), cleanup/delete centre, premium-emoji packs, live LZT diagnostics.
+- **MongoDB is optional** — full history is mirrored to Mongo when `MONGO_URI` is set; SQLite remains the source of truth.
+- **Railway/Render/Heroku ready** with a health server on `$PORT`.
 
 ---
 
-## 🛠 Tech Stack
-
-* **Python 3.10+**
-* **Telethon** — Telegram client framework
-* **PyTgCalls / pytgcalls** — voice chat streaming engine
-* **yt-dlp** — media extraction
-* **FFmpeg** — audio transcoding
-* **SQLite** — lightweight local storage for queues and preferences
-
----
-
-## 🚀 Quick Start
-
-### 1. Clone
-
-```bash
-git clone https://github.com/dhruvkumarray3-eng/Numerology-.git
-cd Numerology-
-```
-
-### 2. Virtual environment
-
-```bash
-python3 -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-FFmpeg is required on the host:
-
-```bash
-sudo apt update && sudo apt install -y ffmpeg
-```
-
-### 4. Configure
-
-Copy `.env.sample` to `.env` and fill in your own values:
-
-```env
-API_ID=your_api_id
-API_HASH=your_api_hash
-BOT_TOKEN=your_bot_token
-ADMIN_ID=your_telegram_user_id
-```
-
-Get `API_ID` and `API_HASH` from [my.telegram.org](https://my.telegram.org) and the
-`BOT_TOKEN` from [@BotFather](https://t.me/BotFather).
-
-### 5. Run
-
-```bash
-python main.py
-```
-
-The bot logs in, prints a ready message, and starts listening for commands.
-
----
-
-## ☁️ Deploying
-
-The project ships with ready-made configs for the usual suspects:
-
-* **Railway** — `railway.json`
-* **Render** — `render.yaml`
-* **Heroku** — `Procfile` + `app.json`
-* **Docker** — `Dockerfile`
-
-Just connect the repo, paste the environment variables into the dashboard, and deploy.
-A small health endpoint is exposed on `$PORT` so platforms can verify the process is alive.
-
----
-
-## 📁 Project Layout
+## Project structure
 
 ```
 .
-├── main.py              # entry point
-├── config.py            # environment + settings loader
-├── database.py          # SQLite helpers
-├── plugins/             # command handlers (play, queue, admin, ...)
-├── utils/               # keyboards, states, streaming helpers
-├── assets/              # banners and static media
-└── requirements.txt
+├── main.py                  # entrypoint: health server, handler registration, reconnect loop
+├── config.py                # env loading, Telegram client, links, API keys
+├── database.py              # SQLite schema, users/stock/orders/settings, pricing engine
+├── plugins/                 # feature modules (start, buy, deposit, admin, panels, smm, ...)
+│   ├── buy.py               # account marketplace + live LZT purchase flow
+│   ├── admin*.py            # admin panel, actions, cleanup, extras
+│   ├── product_panels.py    # WhatsApp / number change / All-Apps OTP panels
+│   └── ...
+├── utils/
+│   ├── lzt.py               # LZT Market API client (search, fast-buy, OTP, balance)
+│   ├── flags.py             # 249-country flag/ISO helpers
+│   ├── search_settings.py   # admin-tunable search filters
+│   ├── health.py            # aiohttp health server for PaaS probes
+│   └── ...
+├── tests/                   # standalone regression scripts (no pytest required)
+├── Dockerfile
+├── railway.json             # Railway start command
+├── Procfile                 # web/worker process definitions
+├── render.yaml
+├── heroku.yml
+├── app.json
+└── start.sh                 # local venv bootstrap
 ```
 
 ---
 
-## 🤝 Contributing
+## Requirements
 
-Pull requests are welcome. For larger changes, open an issue first so we can talk about
-the direction. Keep the code async, keep the UI tidy, and test in a real group before
-submitting.
+- Python **3.11+**
+- A Telegram **API ID / API HASH** from <https://my.telegram.org>
+- A **bot token** from [@BotFather](https://t.me/BotFather)
+- An **LZT Market API token** with the `market` scope (for live account stock)
+- Optional: a **TemporaSMS** key (All-Apps OTP, number change, WhatsApp panels)
+- Optional: **MongoDB** URI for mirrored history
+
+Install dependencies:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
 
 ---
 
-## 📄 License
+## Quick start (local)
 
-Released under the MIT License. See [LICENSE](LICENSE) for details.
+1. Copy the sample environment file and fill in the required values:
+
+   ```bash
+   cp .env.sample .env
+   ```
+
+2. Set at minimum:
+
+   ```env
+   API_ID=123456
+   API_HASH=your_api_hash
+   BOT_TOKEN=123456:your_bot_token
+   ADMIN_ID=your_telegram_user_id
+   ```
+
+3. Run the bot:
+
+   ```bash
+   python3 main.py
+   ```
+
+   Or use the bootstrap script (creates a venv, installs requirements, checks `.env`):
+
+   ```bash
+   chmod +x start.sh
+   ./start.sh
+   ```
+
+The bot prints `🚀 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!` and then performs a non-fatal LZT self-check. If the market token is missing or invalid, the reason is written to the log at boot.
 
 ---
 
-<div align="center">
+## Environment variables
 
-**Made for people who just want to listen to music together.** 🎶
+### Required
 
-</div>
+| Variable | Description |
+| --- | --- |
+| `API_ID` | Telegram API ID (integer) |
+| `API_HASH` | Telegram API hash |
+| `BOT_TOKEN` | Bot token from BotFather |
+| `ADMIN_ID` | Owner/admin Telegram user ID |
+
+### Telegram & links (optional, sensible defaults)
+
+| Variable | Description |
+| --- | --- |
+| `SUPER_ADMIN_ID` | Second owner ID with full privileges |
+| `LOG_CHANNEL_ID` | Channel where bot events are logged |
+| `LOG_CHANNEL_ID_2` | Secondary log channel |
+| `CHECK_CHANNELS` | Force-join channel(s), comma/space separated |
+| `JOIN_URLS` | Force-join URLs matching `CHECK_CHANNELS` |
+| `SUPPORT_URL` | Support group link |
+| `OWNER_URL` | Owner contact link |
+| `UPDATES_URL` | Updates channel link |
+| `MAIN_CHANNEL_URL` | Main network channel |
+| `TERMS_URL` | Terms & conditions link |
+
+### Payments
+
+| Variable | Description |
+| --- | --- |
+| `TRUST_WALLET_ADDRESS` | USDT BEP-20 receiving address |
+| `TRUST_WALLET_QR` | Optional custom QR image URL/file_id (auto-generated if blank) |
+| `USDT_TO_INR` | USDT→INR rate used for display (default `88.0`) |
+| `ADMIN_PROFIT_INR` | Default flat profit added to panel prices |
+
+### LZT Market
+
+| Variable | Description |
+| --- | --- |
+| `LZT_API_KEY` | LZT Market token with `market` scope. Can also be set in Admin → LZT Panel Settings |
+| `LZT_MARGIN` | Fixed INR markup applied to automatically priced LZT items |
+
+> LZT requires **200 sympathies** or a paid subscription to use the market API. A token without access returns `401/403`; the bot logs this at startup and shows it in the admin diagnostics.
+
+### OTP / SMS providers
+
+| Variable | Description |
+| --- | --- |
+| `TEMPORASMS_API_KEY` | Main key for All-Apps OTP, number change and WhatsApp panels |
+| `TEMPORASMS_BASE_URL` | Default `https://api.temporasms.com` |
+| `FIVESIM_API_KEY`, `SMSACTIVATE_API_KEY`, `SMSPVA_API_KEY`, `SMSMAN_API_KEY`, `TEMPMAIL_API_KEY` | Optional fallbacks |
+| `IMAP_HOST`, `IMAP_PORT`, `IMAP_USER`, `IMAP_PASSWORD` | Mailbox used to auto-read Telegram codes |
+
+### Other
+
+| Variable | Description |
+| --- | --- |
+| `MONGO_URI` | Optional MongoDB URI for mirrored history |
+| `PORT` | Health-server port (Railway/Render set this automatically) |
+| `BOT_HEALTH_PORT` | Override the health-server port |
+| `ALL_APPS_CATALOG_JSON` | JSON override for the All-Apps catalog |
+| `SERVERS_CONFIG` | `name|status|mode` list shown in the Servers screen |
+| `DEFAULT_CURRENCY` | Display currency (default `INR`) |
+
+---
+
+## How the LZT purchase flow works
+
+1. The buyer picks a country, account year and quality mode.
+2. `LZTClient.search_items()` calls `GET /telegram` with `country[]`, `spam`, `allow_geo_spamblock`, `password`, `premium`, `email`, `dc_id[]`, `min_stars`, `session_age` and price bounds. Pages are followed via `nextCursor`/`after`.
+3. Each item is normalised by `_parse_item()`: price, phone, year, 2FA, email, premium, stars, DC and the spam flag (`-3` real spam, `>0` spam days, `0` clean, `-1/-4/None` unknown/geo).
+4. On confirm, `process_purchase()` debits the wallet and calls `LZTClient.fast_buy(item_id, price, balance_id)`.
+5. `fast_buy()` sends `POST /{item_id}/fast-buy` with a **numeric** `price` and an **integer** `balance_id`. If the price is unknown it omits `price` so LZT charges the current listing price. `retry_request` is retried up to 100 times with backoff.
+6. On success, the bot reads `item.login` (phone) and `item.loginData.password` (2FA), builds a `StringSession` from `loginData.raw` / `loginData.login` + `telegram_dc_id`, verifies `is_user_authorized()`, and shows the order card.
+7. Any failure (market error, dead session, mismatch) refunds the buyer's wallet and reports a clear reason.
+
+### Purchase troubleshooting
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| "The shop's LZT balance is too low" | LZT wallet empty | Top up the LZT market balance |
+| "The LZT API key is invalid or expired" | Token missing `market` scope / expired | Regenerate the token and update Admin → LZT Panel Settings or `LZT_API_KEY` |
+| "The seller has blacklisted this shop" | Seller blocked the buyer account | Try another listing/country |
+| "The daily purchase/check limit ... reached" | LZT rate limit | Wait and retry |
+| "This account was just sold" | Listing disappeared between search and buy | The bot automatically tries the next item |
+| "Out of stock (no local stock and no LZT market key)" | No local stock and live search disabled/unconfigured | Set `LZT_API_KEY` and enable live search |
+| "No live accounts found" | Token invalid, filters too strict, or country has no stock | Check Admin → LZT diagnostics; relax filters |
+
+A regression test (`tests/test_buy_fixes.py`) covers the clean-account (`telegram_spam_block == 0`) case that previously caused every non-spam purchase to be discarded with a refund.
+
+---
+
+## Deploying to Railway
+
+The repository is ready for Railway:
+
+1. Create a new Railway project and connect this GitHub repository.
+2. Add the required variables under **Variables** (`API_ID`, `API_HASH`, `BOT_TOKEN`, `ADMIN_ID`, `LZT_API_KEY`, and any optional keys).
+3. Railway uses `railway.json` → `python main.py`. No build command is required beyond installing `requirements.txt`.
+4. The health server listens on `$PORT`; Railway's health check can target `/health` or `/ping`.
+5. Watch the deploy logs for `STARTED SUCCESSFULLY` and the LZT self-check line.
+
+`Procfile`, `render.yaml`, `heroku.yml`, `app.json`, `Dockerfile` and `start.sh` are included for other platforms. On platforms that provide `$PORT`, the health server binds to it automatically; otherwise it defaults to `8080`.
+
+---
+
+## Commands
+
+### User commands
+
+| Command | Description |
+| --- | --- |
+| `/start` | Main menu / dashboard |
+| `/menu` | Reopen the persistent keyboard |
+| `/hide`, `/close` | Close the keyboard |
+| `/rates` | Show panel rates |
+| `/redeem <code>` | Redeem a gift code |
+| `/myhistory` | Own order and payment history |
+| `/myid`, `/id` | Own Telegram ID and chat ID |
+| `/support` | Contact support |
+| `/help` | Help card |
+
+### Product shortcuts
+
+| Command | Description |
+| --- | --- |
+| `/whatsapp`, `/wa` | WhatsApp OTP panel |
+| `/numchange`, `/numberchange` | Telegram number-change panel |
+| `/allotp`, `/otp`, `/apps` | All-Apps OTP panel |
+| `/panels`, `/products` | Product hub |
+| `/smm` | SMM services |
+
+### Admin commands
+
+| Command | Description |
+| --- | --- |
+| `/admin` | Full admin panel (stock, ban, balance, broadcast, cleanup, LZT settings) |
+| `/setmarkup <percent>` | Set percentage profit |
+| `/setprofit <amount> <INR\|USD>` | Set flat profit |
+| `/markup` | Show current profit configuration |
+| `/resetmarkup` | Reset to default profit |
+| `/lztmargin <n>`, `/setlztmargin <n>` | Set per-item LZT markup |
+| `/history <user_id>` | Full user history (SQLite + Mongo) |
+| `/grant <user_id> <amount>` | Credit a user's balance |
+| `/addcode <code> <amount> [uses]` | Create a gift code |
+| `/codes` | List gift codes |
+| `/panelstats` | Orders, revenue, real cost and profit |
+| `/panelsales [n]` | Last *n* panel orders |
+| `/panelbalance` | TemporaSMS wallet balance |
+| `/mongostatus` | MongoDB connection and counts |
+| `/setchangefee <n>` | Number-change fee |
+| `/setsticker`, `/setpack`, `/packsync`, `/pack`, `/packtest`, `/packmode`, `/mapsticker` | Premium-emoji pack management |
+| `/premiumcheck` | Diagnose premium-emoji rendering |
+
+---
+
+## Tests
+
+The tests are standalone scripts (no `pytest` needed) and stub out Telegram/network calls:
+
+```bash
+API_ID=1 API_HASH=x BOT_TOKEN=x python3 tests/test_lzt_spec.py
+API_ID=1 API_HASH=x BOT_TOKEN=x python3 tests/test_lzt_errors.py
+API_ID=1 API_HASH=x BOT_TOKEN=x python3 tests/test_search_settings.py
+API_ID=1 API_HASH=x BOT_TOKEN=x python3 tests/test_buy_fixes.py
+```
+
+They cover the LZT spec compliance, error handling, country resolution (all 249 ISO codes), search settings/fallbacks, and the purchase-flow regressions.
+
+You can also sanity-check the whole tree:
+
+```bash
+python3 -m compileall -q .
+```
+
+---
+
+## Data & security notes
+
+- `otp_bot_final.db` (SQLite) stores users, stock, orders and settings. Back it up before upgrades.
+- `bot_session.session` is the bot's own Telethon session — keep it private.
+- Never commit `.env`, API tokens, wallet keys or purchased account sessions.
+- Purchased account sessions are sensitive credentials; deliver them only to the buyer's private chat and log deliveries to your private log channel.
+- The bot only talks to Telegram, the LZT Market API and the configured OTP providers.
+
+---
+
+## License
+
+See [LICENSE](LICENSE).
