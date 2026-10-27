@@ -133,17 +133,24 @@ async def get_smm_platforms(server=1):
 
 async def get_categories_for_platform(platform, server=1):
     services = await fetch_smm_services(server)
-    cats = []
-    seen = set()
+    # One pass to count services per category, then one pass to build the
+    # ordered list.  The old code re-scanned the whole catalogue for every
+    # category (O(n^2)) which took seconds on the 2000+ service servers.
+    counts = {}
+    order = []
     for s in services:
         cat = s.get('category', '').strip()
-        if not cat or cat in seen:
+        if not cat:
             continue
+        if cat not in counts:
+            counts[cat] = 0
+            order.append(cat)
+        counts[cat] += 1
+
+    cats = []
+    for cat in order:
         if detect_platform(cat) == platform:
-            seen.add(cat)
-            # count services
-            count = sum(1 for item in services if item.get('category', '').strip() == cat)
-            cats.append({'name': cat, 'count': count})
+            cats.append({'name': cat, 'count': counts[cat]})
     return cats
 
 async def get_services_for_category(category_name, server=1):
@@ -215,7 +222,11 @@ async def create_smm_order(service_id, link, quantity, server=1):
         async with aiohttp.ClientSession() as session:
             async with session.post(srv['url'], data=params, timeout=20) as resp:
                 data = await resp.json(content_type=None)
-                return data
+                if isinstance(data, dict):
+                    return data
+                if isinstance(data, list) and data:
+                    return data[0] if isinstance(data[0], dict) else {'error': str(data)}
+                return {'error': 'Unexpected response from SMM server'}
     except Exception as ex:
         logger.error(f"SMM create_order error: {ex}")
         return {'error': str(ex)}
@@ -232,7 +243,9 @@ async def get_smm_order_status(order_id, server=1):
         async with aiohttp.ClientSession() as session:
             async with session.post(srv['url'], data=params, timeout=15) as resp:
                 data = await resp.json(content_type=None)
-                return data
+                if isinstance(data, dict):
+                    return data
+                return {'error': 'Unexpected response from SMM server'}
     except Exception as ex:
         logger.error(f"SMM get_order_status error: {ex}")
         return {'error': str(ex)}

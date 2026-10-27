@@ -159,7 +159,7 @@ The bot prints `🚀 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!` and then 
 
 | Variable | Description |
 | --- | --- |
-| `TEMPORASMS_API_KEY` | Main key for All-Apps OTP, number change and WhatsApp panels |
+| `TEMPORASMS_API_KEY` | Main key for All-Apps OTP, number change and WhatsApp panels. A working key ships as the default in `config.py`; set this to rotate it |
 | `TEMPORASMS_BASE_URL` | Default `https://api.temporasms.com` |
 | `FIVESIM_API_KEY`, `SMSACTIVATE_API_KEY`, `SMSPVA_API_KEY`, `SMSMAN_API_KEY`, `TEMPMAIL_API_KEY` | Optional fallbacks |
 | `IMAP_HOST`, `IMAP_PORT`, `IMAP_USER`, `IMAP_PASSWORD` | Mailbox used to auto-read Telegram codes |
