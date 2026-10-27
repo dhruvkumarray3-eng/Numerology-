@@ -23,7 +23,12 @@ When a purchase succeeds, the bot builds a Telethon `StringSession` from the LZT
 - **Automatic OTP retrieval** for purchased accounts (`telegram-login-code`), plus an IMAP fallback mailbox.
 - **USDT (BEP-20 / BNB Smart Chain) deposits** with an auto-generated QR code and admin approval.
 - **Product panels**: WhatsApp OTP accounts, Telegram number change, All-Apps OTP accounts (51 apps), SMM services, panel resale, source codes.
-- **Wallet, discounts, referrals, gift codes, VIP tiers, order history.**
+- **Free Temp Mail**: built-in disposable inboxes backed by the MTempMail API. Create an address, refresh it, read incoming mail and auto-extract OTP codes \u2014 no external app needed.
+- **Live, honest stock counts**: every stock label shows the real number of listings currently available (from LZT `totalItems` or local stock), never a rounded "50+".
+- **One combined price**: the buyer always sees a single all-inclusive total (panel cost + owner markup). The raw panel cost is never leaked into the UI.
+- **Fuzzy app search**: All-Apps OTP and account search tolerate typos, aliases and free text \u2014 "ninja app", "chatgpt", "insta", "tg", "gogle" all resolve to the right app, and unknown names become custom searchable slugs.
+- **Wallet, discounts, referrals, gift codes, VIP tiers, order history.** VIP tier (Bronze / Silver / Gold / Diamond) is recalculated live from the user's balance and total deposits on every render, with a progress line to the next tier.
+- **Premium emoji everywhere**: buttons and message text use the owner's Telegram custom-emoji IDs, with a balanced mix of red/blue/green button styles across every menu.
 - **Admin panel**: stock upload, pricing/markup engine, LZT margin, search settings, user management (ban/balance/broadcast), cleanup/delete centre, premium-emoji packs, live LZT diagnostics.
 - **MongoDB is optional** — full history is mirrored to Mongo when `MONGO_URI` is set; SQLite remains the source of truth.
 - **Railway/Render/Heroku ready** with a health server on `$PORT`.
@@ -41,11 +46,14 @@ When a purchase succeeds, the bot builds a Telethon `StringSession` from the LZT
 │   ├── buy.py               # account marketplace + live LZT purchase flow
 │   ├── admin*.py            # admin panel, actions, cleanup, extras
 │   ├── product_panels.py    # WhatsApp / number change / All-Apps OTP panels
+│   ├── tempmail.py          # Free Temp Mail UI (create inbox, list, read, OTP)
 │   └── ...
 ├── utils/
 │   ├── lzt.py               # LZT Market API client (search, fast-buy, OTP, balance)
+│   ├── tempmail.py          # MTempMail API client (domains, create, messages, OTP)
 │   ├── flags.py             # 249-country flag/ISO helpers
 │   ├── search_settings.py   # admin-tunable search filters
+│   ├── keyboards.py         # button styling + premium-emoji icon resolver
 │   ├── health.py            # aiohttp health server for PaaS probes
 │   └── ...
 ├── tests/                   # standalone regression scripts (no pytest required)
@@ -261,6 +269,7 @@ The repository is ready for Railway:
 | `/allotp`, `/otp`, `/apps` | All-Apps OTP panel |
 | `/panels`, `/products` | Product hub |
 | `/smm` | SMM services |
+| `/tempmail`, `/tm` | Free Temp Mail (create inbox, read mail, extract OTP) |
 
 ### Admin commands
 

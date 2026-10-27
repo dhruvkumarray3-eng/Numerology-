@@ -623,8 +623,12 @@ def apply_official_links_migration(force=False):
 def get_start_image_url():
     res = cur.execute("SELECT value FROM settings WHERE key='start_image'").fetchone()
     if res and res[0]:
-        return res[0].strip()
-    return "https://yukiapi.site/file/0z3Q9oA9"
+        url = res[0].strip()
+        # Migrate the old placeholder away automatically.
+        if "yukiapi.site" in url:
+            return "https://files.catbox.moe/hjj2jd.png"
+        return url
+    return "https://files.catbox.moe/hjj2jd.png"
 
 def set_start_image_url(url):
     cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('start_image', ?)", (url.strip(),))

@@ -17,6 +17,7 @@ from plugins.admin_extras import register_admin_extras
 from plugins.help_menu import register_help
 from plugins.manual_accounts import register_manual_accounts
 from plugins.stickers import register_stickers
+from plugins.tempmail import register_tempmail
 
 def register_all_handlers(bot):
     # Standard Handler Registrations
@@ -39,6 +40,7 @@ def register_all_handlers(bot):
     register_help(bot)
     register_manual_accounts(bot)
     register_stickers(bot)
+    register_tempmail(bot)
 
     # Buy Plugin safely load karne ke liye
     try:

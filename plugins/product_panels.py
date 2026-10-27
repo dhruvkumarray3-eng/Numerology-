@@ -16,7 +16,9 @@ panel's real cost is never exposed. Profit can be a percentage or a fixed
 amount in INR/USD (see /setmarkup and /setprofit).
 """
 import asyncio
+import difflib
 import html
+import re
 import time
 
 from telethon import events
@@ -254,11 +256,107 @@ def _country_label(code, name, price, uid, cfg=None, limit=60):
     return label[:limit]
 
 
+# Common alternative names / spellings users type.  This is what makes
+# searches like "ninja app", "chat gpt", "wa", "tg", "insta" or "x" resolve
+# to the right provider service instead of returning "no app matched".
+APP_ALIASES = {
+    "ninja": "ninja",
+    "ninja app": "ninja",
+    "ninjaapp": "ninja",
+    "tg": "telegram",
+    "tele": "telegram",
+    "telegram app": "telegram",
+    "wa": "whatsapp",
+    "whats app": "whatsapp",
+    "whatsapp business": "whatsapp",
+    "insta": "instagram",
+    "ig": "instagram",
+    "instgram": "instagram",
+    "fb": "facebook",
+    "meta": "facebook",
+    "x": "twitter",
+    "twitter x": "twitter",
+    "gmail": "google",
+    "google mail": "google",
+    "chatgpt": "openai",
+    "chat gpt": "openai",
+    "gpt": "openai",
+    "open ai": "openai",
+    "yt": "youtube",
+    "ms": "microsoft",
+    "microsoft account": "microsoft",
+    "apple id": "apple",
+    "appleid": "apple",
+    "amazon app": "amazon",
+    "linked in": "linkedin",
+    "tik tok": "tiktok",
+    "snap chat": "snapchat",
+    "kakao talk": "kakao",
+    "kakaotalk": "kakao",
+    "booking com": "booking",
+    "booking.com": "booking",
+    "true caller": "truecaller",
+    "ok cupid": "okcupid",
+    "door dash": "doordash",
+}
+
+
+def _norm(text):
+    return " ".join(str(text or "").lower().replace("_", " ").replace("-", " ").split())
+
+
+def _custom_slug(query):
+    """Turn a free-text app name into a provider-safe service slug."""
+    q = _norm(query)
+    q = re.sub(r"\b(app|application|account|accounts)\b", " ", q)
+    return re.sub(r"[^a-z0-9]", "", q)
+
+
 def _filter_apps(query):
-    if not query:
+    """Fuzzy app search: exact -> alias -> prefix -> token -> similarity.
+
+    Returns a list of ``(slug, label)`` tuples.  Unknown queries are NOT
+    dropped: the caller can offer a "use this app" button so any provider
+    service code (e.g. ``ninja``) still works.
+    """
+    if not query or not str(query).strip():
         return list(ALL_APPS)
-    q = query.strip().lower().lstrip("@")
-    return [a for a in ALL_APPS if q in a[0].lower() or q in a[1].lower()]
+    q = _norm(query).lstrip("@")
+    q_compact = q.replace(" ", "")
+
+    # 1) Direct alias hit.
+    if q in APP_ALIASES:
+        slug = APP_ALIASES[q]
+        return [(s, l) for s, l in ALL_APPS if s == slug] or [(slug, slug.title())]
+
+    scored = []
+    for slug, label in ALL_APPS:
+        s = _norm(slug)
+        l = _norm(re.sub(r"[^\w\s]", " ", label))
+        score = 0.0
+        if q == s or q == l or q_compact == s.replace(" ", ""):
+            score = 100
+        elif l.startswith(q) or s.startswith(q):
+            score = 80
+        elif q in l or q in s:
+            score = 60
+        else:
+            q_tokens = set(q.split())
+            l_tokens = set(l.split()) | set(s.split())
+            overlap = len(q_tokens & l_tokens)
+            if overlap:
+                score = 40 + overlap * 5
+            else:
+                ratio = max(
+                    difflib.SequenceMatcher(None, q, l).ratio(),
+                    difflib.SequenceMatcher(None, q_compact, s).ratio(),
+                )
+                if ratio >= 0.62:
+                    score = ratio * 35
+        if score > 0:
+            scored.append((score, slug, label))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [(slug, label) for _score, slug, label in scored]
 
 
 # uid -> {"panel": key, "country": code, "order_id": str, "phone": str,
@@ -454,7 +552,7 @@ async def show_panel_hub(event):
     btns = [
         [style_btn("💬 WhatsApp Account", b"pp_open|whatsapp", "success", icon=5408995930416362034)],
         [style_btn("🔁 TG Number Change", b"pp_open|numchange", "primary", icon=5409119256107297715)],
-        [style_btn("🧩 All Apps OTP — 8,526+ Apps", b"pp_open|allotp", "success", icon=5409320020058584473)],
+        [style_btn(f"🧩 All Apps OTP — {len(ALL_APPS)} Apps", b"pp_open|allotp", "success", icon=5409320020058584473)],
         [style_btn("🔍 Search All Services", b"all_apps_menu", "success", icon=5409098988156629257)],
         [style_btn("🆘 Help", b"pp_help", "primary", icon=6129732880529628243)],
         [style_btn("🔙 Back", b"dashboard_main", "danger", icon=6129812419028982717)],
@@ -462,7 +560,7 @@ async def show_panel_hub(event):
     status = "✅ Live" if temporasms.configured() else "⚠️ TEMPORASMS_API_KEY missing"
     msg = (
         "<blockquote expandable>💚 <b>VTH PANEL SMS &amp; Virtual Number Activation</b>\n\n"
-        "📱 <b>8,526+ apps &amp; platforms</b>\n"
+        f"📱 <b>{len(ALL_APPS)} curated apps & platforms</b> — any other app on request\n"
         "🌍 Numbers from many countries\n"
         "📊 Live stock &amp; prices\n"
         "💸 Auto refund if no SMS arrives\n"
@@ -533,6 +631,11 @@ async def show_allotp_hub(event, page=1, query=None):
             [style_btn("\U0001F50D Search App", b"pp_appsearch", "primary", icon=5409098988156629257)],
             [style_btn("\U0001F519 Back", b"pp_hub", "danger", icon=6129812419028982717)],
         ]
+        custom = _custom_slug(query)
+        if custom:
+            btns.insert(0, [style_btn(f"\U0001F195 Use \u201c{html.escape(query.strip())}\u201d",
+                                      f"pp_app|{custom}", "success",
+                                      icon=5373130604147654226)])
         return await _safe_edit(event, msg, btns)
 
     btns = []
@@ -562,7 +665,7 @@ async def show_allotp_hub(event, page=1, query=None):
     status = "\u2705 Live" if temporasms.configured() else "\u26a0\ufe0f TEMPORASMS_API_KEY missing"
     search_line = f"\n\U0001F50E Filter: <b>{html.escape(query)}</b>" if query else ""
     msg = (
-        "<blockquote expandable>\U0001F9E9 <b>All Apps OTP \u2014 8,526+ apps & platforms</b>\n\n"
+        f"<blockquote expandable>\U0001F9E9 <b>All Apps OTP \u2014 {len(ALL_APPS)} apps & platforms</b>\n\n"
         "\U0001F4F1 Pick any app, then pick a country \u2014 a fresh number is reserved "
         "and the OTP lands right here in this chat.\n\n"
         "\U0001F30D Numbers from many countries\n"
@@ -575,10 +678,19 @@ async def show_allotp_hub(event, page=1, query=None):
 
 
 async def open_app(event, slug):
-    """User picked an app -> show its country list."""
+    """User picked an app -> show its country list.
+
+    Unknown slugs are allowed on purpose: the All Apps panel is powered by the
+    provider catalogue, so a service code the local list does not know about
+    (e.g. ``ninja``) must still be queryable instead of dead-ending.
+    """
     uid = event.sender_id
-    if slug not in APP_LABELS:
+    slug = (slug or "").strip().lower()
+    if not slug:
         return await event.answer("\u26a0\ufe0f Unknown app, please browse again.", alert=True)
+    if slug not in APP_LABELS:
+        # Register it for this session so labels / icons render sensibly.
+        APP_LABELS[slug] = f"\U0001F50D {slug.title()}"
     panel_state.setdefault(uid, {})["panel"] = "allotp"
     panel_state[uid]["app"] = slug
     panel_state[uid].pop("mode", None)
@@ -865,11 +977,9 @@ async def show_stock_details(event, key, code):
     ]
     await _safe_edit(event, msg, btns)
 
-    # premium flag emoji for the country being viewed
-    try:
-        await sticker_engine.send_for_event(event, code, role="flags")
-    except Exception as _sk_ex:
-        logger.debug(f"premium flag emoji skipped: {_sk_ex}")
+    # NOTE: the country flag is already rendered as a plain emoji inside the
+    # details card.  We intentionally do NOT send a premium country-flag emoji
+    # before purchase (owner request).
 
 
 async def buy(event, key, code):

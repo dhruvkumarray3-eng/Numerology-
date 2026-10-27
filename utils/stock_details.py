@@ -92,6 +92,6 @@ def stock_text(count, unit="numbers"):
         return "🟡 Live stock unavailable — tap Refresh"
     if count <= 0:
         return "🔴 Out of stock right now"
-    if count >= 40:
-        return f"🟢 {count}+ {unit} available"
+    # Always show the EXACT live number.  The old "{count}+" rounding made a
+    # real 137 look like a vague "50+" and users (rightly) called it fake.
     return f"🟢 {count} {unit} available"

@@ -191,7 +191,13 @@ FIVESIM_API_KEY = os.getenv("FIVESIM_API_KEY", "").strip()          # https://5s
 SMSACTIVATE_API_KEY = os.getenv("SMSACTIVATE_API_KEY", "").strip()  # https://sms-activate.org
 SMSPVA_API_KEY = os.getenv("SMSPVA_API_KEY", "").strip()            # https://smspva.com
 SMSMAN_API_KEY = os.getenv("SMSMAN_API_KEY", "").strip()            # https://sms-man.com
-TEMPMAIL_API_KEY = os.getenv("TEMPMAIL_API_KEY", "").strip()        # temp-mail style inbox API
+# --- Temp Mail (mtempmail.com) — free disposable inboxes for users ---
+# Owner's working key is baked in as the default so the feature works out of
+# the box; host env vars still override it.
+TEMPMAIL_API_KEY = os.getenv(
+    "TEMPMAIL_API_KEY", "pub_nRn1hUwpdmZvxQNVWDfoXgKyF7dIm9nRIIIt1qDw"
+).strip()
+TEMPMAIL_BASE_URL = os.getenv("TEMPMAIL_BASE_URL", "https://mtempmail.com/api").strip().rstrip("/")
 
 # --- TEMPORASMS: powers All Apps OTP + TG Number Change + WhatsApp Accounts ---
 # The owner's working key is baked in as the default so the three OTP panels
@@ -314,6 +320,15 @@ PREMIUM_EMOJIS = {
     "card": 5409271925014801629,
     "phone": 5409119256107297715,
     "star": 5409320020058584473,
+    # --- owner-supplied premium emoji ids (verified, premium account required) ---
+    "premium": 5796209712009581332,
+    "whatsapp": 5334998226636390258,
+    "allapps_otp": 5373130604147654226,
+    "telegram_basic": 5330237710655306682,
+    "number_change": 5330237710655306682,
+    "server": 5981035310241288157,
+    "source_codes": 5951663025336356427,
+    "more_content": 5289947142142577318,
 }
 
 CUSTOM_PREMIUM_EMOJIS = {
@@ -340,7 +355,16 @@ CUSTOM_PREMIUM_EMOJIS = {
     "DIAMOND": "6086778246882399112",    # 💎 Diamond
     "PERCENT": "6093421221259514937",    # 100%
     "PINK_PLANE": "6255963511252322252", # Pink Plane
-    "PURPLE_STAR": "6136464120779638846"# Purple Star
+    "PURPLE_STAR": "6136464120779638846",# Purple Star
+    # --- owner-supplied premium emoji ids ---
+    "PREMIUM": "5796209712009581332",
+    "WHATSAPP": "5334998226636390258",
+    "ALLAPPS_OTP": "5373130604147654226",
+    "TELEGRAM_BASIC": "5330237710655306682",
+    "NUMBER_CHANGE": "5330237710655306682",
+    "SERVER": "5981035310241288157",
+    "SOURCE_CODES": "5951663025336356427",
+    "MORE_CONTENT": "5289947142142577318",
 }
 
 def tg_emoji(name: str, fallback: str) -> str:

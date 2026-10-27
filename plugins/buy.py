@@ -343,12 +343,32 @@ async def show_filters_catalog(event, page=1):
         await event.respond(msg, buttons=btns)
 
 async def show_buy_menu(event):
+    # LIVE, honest totals — never a hardcoded "50+".  If the market is busy we
+    # simply omit the number instead of inventing one.
+    live_total = 0
+    live_countries = 0
+    try:
+        _countries = await get_countries_list()
+        live_total = sum(int(c or 0) for _n, c in _countries)
+        live_countries = sum(1 for _n, c in _countries if int(c or 0) > 0)
+    except Exception as _lc_ex:
+        logger.debug(f"live totals for buy menu failed: {_lc_ex}")
+
+    if live_total > 0:
+        live_line = (f"🌍 <b>𝓐𝓵𝓵 𝓒𝓸𝓾𝓷𝓽𝓻𝓲𝓮𝓼:</b> "
+                     f"<b>{live_total:,}</b> live accounts across "
+                     f"<b>{live_countries}</b> countries right now.\n")
+    else:
+        live_line = ("🌍 <b>𝓐𝓵𝓵 𝓒𝓸𝓾𝓷𝓽𝓻𝓲𝓮𝓼:</b> "
+                     "Live stock updates in real time — tap a country to see "
+                     "the exact count.\n")
+
     msg = (f"<blockquote expandable><tg-emoji emoji-id=\"5408995930416362034\">🎁</tg-emoji> <b>𝐒𝐄𝐋𝐄𝐂𝐓 𝐀𝐂𝐂𝐎𝐔𝐍𝐓 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐘</b> <tg-emoji emoji-id=\"5409320020058584473\">💎</tg-emoji>\n\n"
            f"🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> 𝐐𝐮𝐢𝐜𝐤 𝐥𝐨𝐨𝐤𝐮𝐩 𝐛𝐲 𝐧𝐚𝐦𝐞 𝐨𝐫 𝐝𝐢𝐚𝐥 𝐜𝐨𝐝𝐞 (+91, +55...)\n"
            f"🟢 <b>Good Quality:</b> 100% Spam-Block Free (DM & Personal Use).\n"
            f"🟡 <b>Cheap:</b> Budget Accounts (Channel Joiners & Members).\n"
            f"🎯 <b>𝐌𝐨𝐫𝐞 𝐅𝐢𝐥𝐭𝐞𝐫𝐬:</b> 𝐒𝐭𝐚𝐫𝐬, 𝐄𝐦𝐚𝐢𝐥, 2𝐅𝐀, 𝐏𝐫𝐞𝐦𝐢𝐮𝐦, 𝐃𝐂...\n"
-           f"🌍 <b>𝐀𝐥𝐥 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬:</b> 𝐁𝐫𝐨𝐰𝐬𝐞 50+ 𝐜𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬 𝐬𝐭𝐨𝐜𝐤 (𝐅𝐫𝐞𝐬𝐡 & 𝐀𝐥𝐥).\n"
+           f"{live_line}"
            f"🏛 <b>𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> 𝐅𝐢𝐥𝐭𝐞𝐫 𝐛𝐲 𝐒𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐘𝐞𝐚𝐫 (2025, 2024, 2023...).</blockquote>")
     btns = [
         [style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "search_country_btn", "primary", icon=5409098988156629257)],
@@ -711,7 +731,11 @@ async def _live_stock_count(country, year, mode):
             items = await lzt_client.search_items(
                 country, year=year, mode=mode, limit=_ss_int("max_results", 50)
             )
-            count = len(items)
+            # Prefer the market's server-side totalItems over the number of
+            # items we happened to sample: sampling caps at `max_results` and
+            # used to make a 300-account country look like "50".
+            server_total = int(getattr(lzt_client, "last_total", 0) or 0)
+            count = server_total or len(items)
         except Exception as exc:
             logger.debug(f"live stock lookup failed for {country}: {exc}")
     return count
