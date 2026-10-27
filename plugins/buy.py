@@ -26,6 +26,7 @@ from config import (
     OTP_REGEX, bot, logger, API_ID, API_HASH, LZT_API_KEY, USDT_TO_INR
 )
 from utils.keyboards import style_btn, matches_menu
+from utils.livecount import register_live, unregister_live
 from utils.markup import format_dual_from_inr, format_dual_price
 from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code, post_buy_spam_ok
@@ -164,6 +165,35 @@ async def safe_edit_message(event, text, buttons=None):
         logger.error(f"Error editing message: {e}")
         await event.respond(text, buttons=buttons)
 
+def _order_countdown(order) -> str:
+    """MM:SS left before this session auto-cancels and refunds."""
+    started = float(order.get("start_time") or time.time())
+    left = int(AUTO_CANCEL_SECONDS - (time.time() - started))
+    if left <= 0:
+        return "00:00"
+    return f"{left // 60:02d}:{left % 60:02d}"
+
+
+def _start_live_order(bot, chat_id: int, msg_id: int, phone: str) -> None:
+    """Tick the order card's countdown every 5s until paid or expired."""
+    key = f"order:{phone}"
+
+    async def _render():
+        order = active_orders.get(phone)
+        if not order:
+            return "", None, True
+        text, buttons = get_active_order_card(
+            {"c_icon": order.get("c_icon", ""),
+             "country": order.get("country", ""),
+             "twofa": order.get("twofa", "None")},
+            phone,
+            False,
+        )
+        return text, buttons, _order_countdown(order) == "00:00"
+
+    register_live(key, bot, chat_id, msg_id, _render, interval=5.0)
+
+
 def get_active_order_card(order, phone, is_admin_user=False):
     fee = get_change_number_fee()
     fee_badge = f" (+₹{fee})" if fee > 0 else " (FREE)"
@@ -172,6 +202,7 @@ def get_active_order_card(order, phone, is_admin_user=False):
            f"📱 <b>𝐏𝐡𝐨𝐧𝐞:</b> <code>+{phone}</code>\n"
            f"{order['c_icon']} <b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {order['country']}\n"
            f"🔐 <b>𝟐𝐅𝐀 𝐏𝐚𝐬𝐬𝐰𝐨𝐫𝐝:</b> <code>{order['twofa']}</code>\n\n"
+           f"\u23f3 <b>\U0001D412\U0001D41E\U0001D42C\U0001D42C\U0001D422\U0001D428\U0001D427 \U0001D404\U0001D431\U0001D429\U0001D422\U0001D42B\U0001D41E\U0001D42C \U0001D422\U0001D427:</b> <b>{_order_countdown(order)}</b>\n\n"
            f"🔻 <b>𝐈𝐧𝐬𝐭𝐫𝐮𝐜𝐭𝐢𝐨𝐧𝐬:</b>\n"
            f"1. 𝐎𝐩𝐞𝐧 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 & 𝐀𝐝𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 (<code>+{phone}</code>).\n"
            f"2. ⏳ <b>𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭!</b> 𝐓𝐡𝐞 ʙᴏᴛ ɪs ᴀᴄᴛɪᴠᴇʟʏ ʟɪsᴛᴇɴɪɴɢ ғᴏʀ ʏ𝐨𝐮ʀ 𝐎𝐓𝐏.\n\n"
@@ -848,6 +879,7 @@ async def process_purchase(event, mode, country, year, price_str):
         temp_order = {'c_icon': c_icon, 'country': country, 'twofa': twofa_pass}
         msg, active_btns = get_active_order_card(temp_order, phone, is_admin(uid))
         sent_msg = await event.edit(msg, buttons=active_btns)
+        _start_live_order(bot, event.chat_id, sent_msg.id, phone)
         
         active_orders[phone] = {
             'uid': uid, 'client': client, 'sess': sess, 'start_time': time.time(), 
@@ -952,6 +984,7 @@ async def process_purchase(event, mode, country, year, price_str):
             temp_order = {'c_icon': c_icon, 'country': country, 'twofa': twofa_pass}
             msg, active_btns = get_active_order_card(temp_order, phone, is_admin(uid))
             sent_msg = await event.edit(msg, buttons=active_btns)
+            _start_live_order(bot, event.chat_id, sent_msg.id, phone)
 
             active_orders[phone] = {
                 'uid': uid, 'client': client, 'sess': str_sess, 'item_id': item_id,
@@ -1095,6 +1128,7 @@ async def auto_otp_task(phone):
             if client: await client.disconnect()
         except Exception: pass
         
+        unregister_live(f"order:{phone}")
         del active_orders[phone]
         
         msg_text = f"<blockquote expandable>❌ <b>𝐎𝐫𝐝𝐞𝐫 𝐓𝐢𝐦𝐞𝐨𝐮𝐭 / 𝐂𝐚𝐧𝐜𝐞𝐥𝐥𝐞𝐝</b>\n\nNo OTP was received in time. <b>{format_dual_from_inr(ord_info['price'])}</b> has been refunded to your wallet!</blockquote>"
@@ -1347,5 +1381,6 @@ async def cb_finish_order(event):
             if ord_info.get('client'):
                 await ord_info['client'].disconnect()
         except Exception: pass
+        unregister_live(f"order:{phone}")
         del active_orders[phone]
     await event.edit("✅ <b>Order completed successfully! Thank you.</b>")

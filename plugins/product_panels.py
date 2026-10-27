@@ -1091,8 +1091,11 @@ async def _auto_otp(uid, key, order_id, phone, price):
             f"<blockquote expandable>🔢 <b>OTP received — {PANELS[key]['title']}</b>\n\n"
             f"📞 <b>Number:</b> <code>{html.escape(phone)}</code>\n"
             f"🔑 <b>Code:</b> <code>{html.escape(result['otp'])}</code>\n\n"
-            "<i>Enter it on the platform now — it expires quickly.</i></blockquote>",
-            buttons=[[style_btn("✅ Done", b"pp_hub", "success")]],
+            "<i>\u2728 Tap the code to copy it \u2014 then enter it on the platform right away, it expires quickly.</i></blockquote>",
+            buttons=[
+                [style_btn("\U0001F4CB Copy Code", f"copy_otp|{result['otp']}", "success", icon=5409098988156629257)],
+                [style_btn("\u2705 Done", b"pp_hub", "success")],
+            ],
         )
         try:
             await sticker_engine.send_purchase(bot, uid, reply_to=getattr(sent, "id", None))
@@ -1184,6 +1187,23 @@ def register_product_panels(bot):
     @bot.on(events.CallbackQuery(pattern=r"^pp_hub$"))
     async def cb_hub(e):
         await show_panel_hub(e)
+
+    @bot.on(events.CallbackQuery(pattern=r"^copy_otp\|(.+)$"))
+    async def cb_copy_otp(e):
+        """Deliver the OTP as a standalone <code> block -> one tap copies it."""
+        otp = e.pattern_match.group(1).decode()
+        try:
+            await e.answer("\U0001F4CB Tap the code below to copy it!", alert=False)
+        except Exception:
+            pass
+        try:
+            await e.respond(
+                f"<blockquote>\U0001F511 <b>\U0001D402\U0001D428\U0001D429\U0001D432 \U0001D402\U0001D428\U0001D41D\U0001D41E</b>\n\n"
+                f"<code>{html.escape(otp)}</code>\n\n"
+                f"<i>\u2728 One tap on the code copies it to your clipboard.</i></blockquote>"
+            )
+        except Exception as exc:
+            logger.debug(f"copy_otp failed: {exc}")
 
     @bot.on(events.CallbackQuery(pattern=r"^pp_open\|(\w+)$"))
     async def cb_open(e):
