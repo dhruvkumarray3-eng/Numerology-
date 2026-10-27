@@ -67,6 +67,7 @@ async def admin_panel_handler(event):
         btns.append([style_btn("📢 Channels & FSub", "adm_channels_mgr", "success", icon=6129627894349045589), style_btn("Support URL", "adm_supporturl", "primary", icon=5409098988156629257)])
         btns.append([style_btn("💳 Auto-UPI / IMAP", "adm_autoupi", "success", icon=5409271925014801629), style_btn("🌐 LZT Panel Settings", "adm_lzt_settings", "primary", icon=5409166771330494453)])
         btns.append([style_btn("⚙️ Search & Quality Settings", "adm_search_settings", "success", icon=5409320020058584473)])
+        btns.append([style_btn("📧 Temp Mail (API)", "adm_tempmail", "primary", icon=5796209712009581332)])
         btns.append([style_btn(f"🔄 Change Num Fee: ₹{chg_fee}", "adm_setchangefee", "success", icon=5409320020058584473), style_btn("Set USDT Rate", "adm_usdtrate", "primary", icon=5409098988156629257)])
         btns.append([style_btn("Payments", "adm_payments", "primary", icon=5409098988156629257), style_btn("Manage Admins", "adm_manageadmins", "primary", icon=5409098988156629257)])
         btns.append([style_btn("𝐁ᴀᴄᴋup Users", "adm_backupusr", "primary", icon=5409098988156629257), style_btn("Restore Users", "adm_restoreusr", "primary", icon=5409098988156629257)])
@@ -90,6 +91,60 @@ def register_admin(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^([/!]?admin|🔐 𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ|🔐 Admin Panel)$"))
     async def msg_admin(e):
         await admin_panel_handler(e)
+
+    @bot.on(events.CallbackQuery(pattern=r"^adm_tempmail$"))
+    async def cb_adm_tempmail(e):
+        if not is_admin(e.sender_id):
+            return
+        from config import TEMPMAIL_API_KEY, TEMPMAIL_BASE_URL
+        from utils import tempmail as tm
+        status = "🟢 Configured" if TEMPMAIL_API_KEY else "🔴 Missing key"
+        domains = []
+        err = None
+        try:
+            domains = await tm.get_domains(use_cache=False)
+        except Exception as ex:
+            err = str(ex)
+        lines = [
+            "<blockquote expandable>📧 <b>Temp Mail (MTempMail API)</b>\n\n",
+            f"🔑 <b>Status:</b> {status}\n",
+            f"🌐 <b>Base URL:</b> <code>{html.escape(TEMPMAIL_BASE_URL)}</code>\n",
+            f"🗂 <b>Domains:</b> {len(domains)}\n",
+        ]
+        if domains:
+            lines.append("\n<b>Available domains:</b>\n")
+            for d in domains[:8]:
+                lines.append(f"• <code>{html.escape(d['domain'])}</code> <i>({html.escape(d['type'])})</i>\n")
+        if err:
+            lines.append(f"\n⚠️ <b>Last error:</b> {html.escape(err)}\n")
+        lines.append("\nUsers open it from the main menu → <b>Free Temp Mail</b>.</blockquote>")
+        btns = [
+            [style_btn("🧪 Test Create Inbox", "adm_tm_test", "success", icon=5796209712009581332)],
+            [style_btn("🔙 Back", "adm_adminmain", "danger", icon=6129812419028982717)],
+        ]
+        try:
+            await e.edit("".join(lines), buttons=btns)
+        except Exception:
+            pass
+
+    @bot.on(events.CallbackQuery(pattern=r"^adm_tm_test$"))
+    async def cb_adm_tm_test(e):
+        if not is_admin(e.sender_id):
+            return
+        from utils import tempmail as tm
+        try:
+            data = await tm.create_email()
+            email = data.get("email")
+            text = (f"<blockquote>✅ <b>Temp Mail works!</b>\n\n"
+                    f"📧 <code>{html.escape(str(email))}</code>\n"
+                    f"⏳ Expires: {html.escape(str(data.get('expire_at') or 'n/a'))}</blockquote>")
+        except Exception as ex:
+            text = f"<blockquote>❌ <b>Temp Mail test failed</b>\n\n{html.escape(str(ex))}</blockquote>"
+        btns = [[style_btn("🔙 Back", "adm_tempmail", "danger", icon=6129812419028982717)]]
+        try:
+            await e.edit(text, buttons=btns)
+        except Exception:
+            pass
 
     @bot.on(events.NewMessage(pattern=r"(?i)^/(?:lztmargin|setlztmargin)(?:@\w+)?(?:\s+(\S+))?\s*$"))
     async def lzt_margin_command(e):

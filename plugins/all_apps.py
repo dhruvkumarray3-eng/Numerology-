@@ -6,6 +6,8 @@ Flow:
 """
 import html
 import asyncio
+import difflib
+import re
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
 
@@ -57,6 +59,42 @@ otp_state = {}
 
 # uid -> app slug while the user is typing a country search query
 aa_search_state = {}
+# uid -> True while the user is typing an app search query
+aa_appsearch_state = {}
+
+
+def _search_apps(query):
+    """Fuzzy search over the app catalogue (also used by the text router)."""
+    q = " ".join(str(query or "").lower().replace("_", " ").split()).lstrip("@")
+    if not q:
+        return []
+    alias = {
+        "tg": "telegram", "wa": "whatsapp", "insta": "instagram", "ig": "instagram",
+        "fb": "facebook", "x": "twitter", "gmail": "google", "chatgpt": "openai",
+        "gpt": "openai", "yt": "youtube", "ninja": "ninja", "ninja app": "ninja",
+    }
+    if q in alias:
+        slug = alias[q]
+        return [(s, l) for s, l in APP_CATALOG if s == slug] or [(slug, slug.title())]
+    scored = []
+    for slug, label in APP_CATALOG:
+        s = slug.lower()
+        l = re.sub(r"[^\w\s]", " ", label.lower())
+        l = " ".join(l.split())
+        if q == s or q == l:
+            score = 100
+        elif l.startswith(q) or s.startswith(q):
+            score = 80
+        elif q in l or q in s:
+            score = 60
+        else:
+            ratio = max(difflib.SequenceMatcher(None, q, l).ratio(),
+                        difflib.SequenceMatcher(None, q.replace(" ", ""), s).ratio())
+            score = ratio * 35 if ratio >= 0.62 else 0
+        if score > 0:
+            scored.append((score, slug, label))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [(slug, label) for _s, slug, label in scored]
 
 # Curated 5sim country slugs.  The first 16 are shown as buttons; the whole
 # list is used by the country search so any supported country can be found.
@@ -149,6 +187,7 @@ async def show_all_apps(event):
             row = []
     if row:
         btns.append(row)
+    btns.append([style_btn("🔍 Search App", b"aa_appsearch", "primary", icon=5409098988156629257)])
     btns.append([style_btn("🔙 Back", b"buy_menu_main", "danger", icon=6129812419028982717)])
 
     msg = (
@@ -213,22 +252,24 @@ async def show_details(event, app_slug, country_iso):
     await event.answer("\u23f3 Fetching live stock\u2026")
 
     count, price, provider = await get_stock(app_slug, country_iso)
-    if price is not None:
-        rate_text = f"\u20b9{price * 100:.2f} (panel cost) \u00b7 {provider.upper()}"
-    else:
-        rate_text = "\U0001F7E1 Live rate unavailable \u2014 tap Refresh"
-
-    extra_block = f"{_ensure_emoji(app_label)} <b>App:</b> {html.escape(app_label)}"
+    # NEVER expose the raw panel cost.  The only price the buyer sees is
+    # panel cost + owner margin, presented as one all-inclusive total.
+    total_text = None
     if price is not None:
         try:
             from utils.markup import price_breakdown, format_dual_from_inr
             bd = price_breakdown(price * 100.0)
-            extra_block += (
-                f"\n💰 <b>Your total price:</b> "
-                f"{format_dual_from_inr(bd['inr'])} <i>(all-inclusive)</i>"
-            )
+            total_text = format_dual_from_inr(bd["inr"])
         except Exception as _pb_ex:
             logger.debug(f"price breakdown failed: {_pb_ex}")
+    rate_text = total_text or "\U0001F7E1 Live rate unavailable \u2014 tap Refresh"
+
+    extra_block = f"{_ensure_emoji(app_label)} <b>App:</b> {html.escape(app_label)}"
+    if total_text:
+        extra_block += (
+            f"\n\U0001F4B0 <b>Your total price:</b> "
+            f"{total_text} <i>(all-inclusive)</i>"
+        )
     if not provider_configured():
         extra_block += "\n\u26a0\ufe0f <i>No OTP provider configured on the host.</i>"
 
@@ -296,13 +337,31 @@ async def do_buy(event, app_slug, country_iso):
         await event.edit(msg, buttons=btns)
     except MessageNotModifiedError:
         pass
-    await sticker_engine.send_for_event(event, country_iso, mode_required="country")
+    # Plain flag emoji is already shown in the details card.  We deliberately
+    # do NOT send a premium country-flag emoji before purchase.
 
 
 def register_all_apps(bot):
     @bot.on(events.CallbackQuery(pattern=r"^all_apps_menu$"))
     async def cb_all_apps(e):
         await show_all_apps(e)
+
+    @bot.on(events.CallbackQuery(pattern=r"^aa_appsearch$"))
+    async def cb_aa_appsearch(e):
+        aa_appsearch_state[e.sender_id] = True
+        aa_search_state.pop(e.sender_id, None)
+        msg = (
+            "<blockquote expandable>🔍 <b>Search App — All Apps OTP</b>\n\n"
+            "Send the app name — e.g. <code>telegram</code>, <code>whatsapp</code>, "
+            "<code>instagram</code>, <code>chatgpt</code>, <code>ninja app</code>.\n\n"
+            "<i>Any app name works — if it is not in the list we will query the "
+            "provider directly.</i></blockquote>"
+        )
+        btns = [[style_btn("🔙 Back", b"all_apps_menu", "danger", icon=6129812419028982717)]]
+        try:
+            await e.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            pass
 
     @bot.on(events.CallbackQuery(pattern=r"^aa_search\|(\w+)$"))
     async def cb_aa_search(e):
@@ -327,6 +386,46 @@ def register_all_apps(bot):
                               and bool(e.text) and not e.text.startswith("/")))
     async def aa_text_router(e):
         uid = e.sender_id
+        # ---- app search (typed an app name) ----
+        if aa_appsearch_state.pop(uid, None):
+            query = (e.text or "").strip()
+            matches = _search_apps(query)
+            if len(matches) == 1:
+                await show_countries_for_app(e, matches[0][0])
+                raise events.StopPropagation
+            if len(matches) > 1:
+                btns, row = [], []
+                for slug, label in matches[:12]:
+                    row.append(style_btn(_ensure_emoji(label)[:60], f"aa_app|{slug}",
+                                         "primary", icon=_app_icon(slug)))
+                    if len(row) == 2:
+                        btns.append(row); row = []
+                if row:
+                    btns.append(row)
+                btns.append([style_btn("🔍 Search Again", b"aa_appsearch", "primary",
+                                       icon=5409098988156629257)])
+                btns.append([style_btn("🔙 Back", b"all_apps_menu", "danger",
+                                       icon=6129812419028982717)])
+                msg = (f"<blockquote expandable>🔍 <b>Results for</b> "
+                       f"<b>{html.escape(query)}</b>\n\nPick the app you want.</blockquote>")
+                await e.respond(msg, buttons=btns)
+                raise events.StopPropagation
+            # No local match -> let the provider decide (e.g. "ninja app").
+            custom = re.sub(r"\b(app|application|account|accounts)\b", " ", query.lower())
+            custom = re.sub(r"[^a-z0-9]", "", custom)
+            if custom:
+                await show_countries_for_app(e, custom)
+                raise events.StopPropagation
+            await e.respond(
+                f"<blockquote>😕 No app matched <b>{html.escape(query)}</b>.\n"
+                "Try another name.</blockquote>",
+                buttons=[[style_btn("🔍 Search Again", b"aa_appsearch", "primary",
+                                    icon=5409098988156629257)],
+                         [style_btn("🔙 Back", b"all_apps_menu", "danger",
+                                    icon=6129812419028982717)]],
+            )
+            raise events.StopPropagation
+
         slug = aa_search_state.get(uid)
         if not slug:
             return

@@ -40,16 +40,27 @@ async def send_main_menu(bot, event, uid):
     # RDX ID is derived from this bot's own id, so it always matches the bot.
     rdx_id = f"{QC_ID_PREFIX}-{str(me.id)[-8:]}"
 
-    dep_row = cur.execute("SELECT total_deposited FROM users WHERE user_id=?", (uid,)).fetchone()
-    total_dep = float(dep_row[0]) if dep_row and dep_row[0] is not None else 0.0
-    if total_dep >= 5000:
+    # VIP tier is computed LIVE from the user's current balance every time the
+    # dashboard renders, so it rises and falls with real balance changes
+    # (deposits, purchases, refunds) instead of being frozen at signup.
+    if bal >= 5000:
         vip = "💎 Diamond"
-    elif total_dep >= 2000:
+        next_tier, next_at = None, None
+    elif bal >= 2000:
         vip = "🥇 Gold"
-    elif total_dep >= 500:
+        next_tier, next_at = "💎 Diamond", 5000
+    elif bal >= 500:
         vip = "🥈 Silver"
+        next_tier, next_at = "🥇 Gold", 2000
     else:
         vip = "🏆 Bronze"
+        next_tier, next_at = "🥈 Silver", 500
+
+    vip_progress = ""
+    if next_tier and next_at:
+        need = max(0.0, next_at - bal)
+        vip_progress = (f"\n{PE_TROPHY} <b>Next Tier:</b> {next_tier} "
+                        f"<i>(₹{need:,.0f} more)</i>")
 
     msg = (f"<a href='{start_img}'>&#8203;</a>💬 <b>{html.escape(styled_name)}</b>\n\n"
            f"<blockquote expandable>"
@@ -58,7 +69,7 @@ async def send_main_menu(bot, event, uid):
            f"{PE_TARGET} <b>\U0001D414s\U0001D404\U0001D411\U0001D40D\U0001D400\U0001D426\U0001D404:</b> {username}\n"
            f"{PE_TAG} <b>\U0001D411\U0001D403\U0001D417 \U0001D408\U0001D403:</b> <code>{rdx_id}</code>\n"
            f"{PE_CARD} <b>\U0001D401\U0001D41A\U0001D425\U0001D41A\U0001D427\U0001D41C\U0001D41E:</b> <code>\u20b9{bal:.2f}</code>\n"
-           f"{PE_TROPHY} <b>\U0001D415\U0001D408\U0001D40F:</b> {vip}"
+           f"{PE_TROPHY} <b>\U0001D415\U0001D408\U0001D40F:</b> {vip}{vip_progress}"
            f"</blockquote>\n"
            f"<blockquote>{PE_LIGHTNING} <b>\U0001D412\U0001D42E\U0001D429\U0001D429\U0001D428\U0001D42B\U0001D42D :</b> <a href='{support_url}'>{support_handle}</a></blockquote>\n"
            f"<blockquote>{PE_CROWN} <b>\U0001D40E\u1d21\u0274\u1d07\u0280 :</b> <a href='{OWNER_URL}'>{owner_handle}</a></blockquote>")
@@ -71,19 +82,20 @@ async def send_main_menu(bot, event, uid):
         msg += staff + "</blockquote>"
            
     buttons = [
-        [style_btn("📲 𝓑𝓾𝔂 𝓐𝓬𝓬𝓸𝓾𝓷𝓽", b"open_buy_categories", "success", icon=5440627033111557670)],
-        [style_btn("📱 𝓐𝓵𝓵 𝓪𝓹𝓹𝓼 𝓪𝓬𝓬", b"all_apps_menu", "success", icon=5409320020058584473)],
-        [style_btn("📱 𝓑𝓪𝓼𝓲𝓬 𝓣𝓮𝓵𝓮𝓰𝓻𝓪𝓶 𝓐𝓬𝓬𝓸𝓾𝓷𝓽𝓼", b"mtg_home", "success", icon=5409320020058584473)],
-        [style_btn("💬 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩 𝐏𝐚𝐧𝐞𝐥", b"pp_open|whatsapp", "success", icon=5408995930416362034)],
-        [style_btn("🧩 𝐀𝐥𝐥 𝐀𝐩𝐩𝐬 𝐎𝐓𝐏", b"pp_open|allotp", "success", icon=5409320020058584473)],
-        [style_btn("🚀 𝓢𝓸𝓬𝓲𝓪𝓵 𝓶𝓮𝓭𝓲𝓪 𝓼𝓮𝓻𝓿𝓲𝓬𝓮𝓼", b"smm_menu_main", "success", icon=5408995930416362034)],
-        [style_btn("🛒 𝓑𝓾𝔂 𝓢𝓸𝓾𝓻𝓬𝓮 𝓒𝓸𝓭𝓮𝓼", b"src_code_menu", "success", icon=5409320020058584473)],
-        [style_btn("🛒 𝓑𝓾𝔂 𝓟𝓪𝓷𝓮𝓵𝓼", b"panels_menu", "success", icon=5409098988156629257)],
-        [style_btn("🖥 𝓢𝓮𝓻𝓿𝓮𝓻𝓼", b"servers_menu", "primary", icon=5409119256107297715)],
-        [style_btn("📦 𝓜𝓸𝓻𝓮 𝓒𝓸𝓷𝓽𝓮𝓷𝓽", b"more_content", "primary", icon=5409320020058584473)],
-        [style_btn("💳 𝓡𝓮𝓬𝓱𝓪𝓻𝓰𝓮", b"open_deposit_menu", "primary", icon=5409271925014801629), style_btn("🧙 𝓟𝓻𝓸𝓯𝓲𝓵𝓮", b"profile_stats", "primary", icon=6203982793379154737)],
-        [style_btn("⚙️ 𝓢𝓮𝓽𝓽𝓲𝓷𝓰𝓼", b"settings_menu", "primary", icon=5408995930416362034), style_url("📑 𝓕𝓮𝓮𝓭𝓫𝓪𝓬𝓴 ↗️", feedback_link, "primary", icon=6129732880529628243)],
-        [style_btn("🆘 𝐇𝐞𝐥𝐩 𝐂𝐨𝐦𝐦𝐚𝐧𝐝𝐬", b"help_main", "success", icon=6129732880529628243)],
+        [style_btn("\U0001F4F2 \U0001D411\U0001D42E\U0001D432 \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D", b"open_buy_categories", "success", icon=5796209712009581332)],
+        [style_btn("\U0001F4F1 \U0001D400\U0001D425\U0001D425 \U0001D41A\U0001D429\U0001D429\U0001D42C \U0001D41A\U0001D41C\U0001D41C", b"all_apps_menu", "primary", icon=5373130604147654226)],
+        [style_btn("\U0001F4F1 \U0001D411\U0001D41E\U0001D425\U0001D41E\U0001D420\U0001D42B\U0001D41A\U0001D426 \U0001D401\U0001D41A\U0001D42C\U0001D422\U0001D41C \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D\U0001D42C", b"mtg_home", "success", icon=5330237710655306682)],
+        [style_btn("\U0001F4AC \U0001D416\U0001D421\U0001D41A\U0001D42D\U0001D42C\U0001D400\U0001D429\U0001D429 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425", b"pp_open|whatsapp", "success", icon=5334998226636390258)],
+        [style_btn("\U0001F9E9 \U0001D400\U0001D425\U0001D425 \U0001D400\U0001D429\U0001D429\U0001D42C \U0001D40E\U0001D413\U0001D40F", b"pp_open|allotp", "primary", icon=5373130604147654226)],
+        [style_btn("\U0001F680 \U0001D412\U0001D426\U0001D426 \U0001D426\U0001D41E\U0001D41D\U0001D422\U0001D41A \U0001D42C\U0001D41E\U0001D42B\U0001D42F\U0001D422\U0001D41C\U0001D41E\U0001D42C", b"smm_menu_main", "success", icon=5408995930416362034)],
+        [style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D412\U0001D428\U0001D42E\U0001D42B\U0001D41C\U0001D41E \U0001D402\U0001D428\U0001D41D\U0001D41E\U0001D42C", b"src_code_menu", "danger", icon=5951663025336356427)],
+        [style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425\U0001D42C", b"panels_menu", "primary", icon=5409098988156629257)],
+        [style_btn("\U0001F5A5 \U0001D412\U0001D41E\U0001D42B\U0001D42F\U0001D41E\U0001D42B\U0001D42C", b"servers_menu", "primary", icon=5981035310241288157)],
+        [style_btn("\U0001F4E6 \U0001D40C\U0001D428\U0001D42B\U0001D41E \U0001D402\U0001D428\U0001D427\U0001D42D\U0001D41E\U0001D427\U0001D42D", b"more_content", "danger", icon=5289947142142577318)],
+        [style_btn("\U0001F4E7 \U0001D405\U0001D42B\U0001D41E\U0001D41E \U0001D413\U0001D41E\U0001D426\U0001D429 \U0001D40C\U0001D41A\U0001D422\U0001D425", b"tm_home", "primary", icon=5796209712009581332)],
+        [style_btn("\U0001F4B3 \U0001D411\U0001D41E\U0001D41C\U0001D421\U0001D41A\U0001D42B\U0001D420\U0001D41E", b"open_deposit_menu", "success", icon=5409271925014801629), style_btn("\U0001F9D9 \U0001D40F\U0001D42B\U0001D428\U0001D41F\U0001D422\U0001D425\U0001D41E", b"profile_stats", "primary", icon=6203982793379154737)],
+        [style_btn("\u2699\ufe0f \U0001D412\U0001D41E\U0001D42D\U0001D42D\U0001D422\U0001D427\U0001D420\U0001D42C", b"settings_menu", "primary", icon=5408995930416362034), style_url("\U0001F4D1 \U0001D405\U0001D41E\U0001D41E\U0001D41D\U0001D41B\U0001D41A\U0001D41C\U0001D424 \u2197\ufe0f", feedback_link, "danger", icon=6129732880529628243)],
+        [style_btn("\U0001F198 \U0001D407\U0001D41E\U0001D425\U0001D429 \U0001D402\U0001D428\U0001D426\U0001D426\U0001D41A\U0001D427\U0001D41D\U0001D42C", b"help_main", "success", icon=6129732880529628243)],
     ]
     
     edit_id = event.message_id if isinstance(event, events.CallbackQuery.Event) else None
