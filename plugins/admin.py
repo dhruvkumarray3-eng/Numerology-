@@ -10,6 +10,7 @@ from telethon.errors import SessionPasswordNeededError
 from database import cur, db, is_bot_online, is_admin, has_perm, ADMIN_ID, get_flag_by_country_name, get_country_info, update_balance, get_bot_mode, get_change_number_fee, get_lzt_margin, set_lzt_margin
 from config import PE_CROWN, PE_CHECK, PE_GIFT, PE_LOCATION, PE_LIGHTNING, P_USERS, P_PKG, P_WAIT, P_ON, P_YES, P_NO, P_WARN, P_DOC, P_FLAG, P_MONEY, P_PHONE, P_GLOBE, P_2FA, P_CAL, P_OTP, P_CARD, P_TG, P_ACC, P_USDT, P_UPI, P_CART, P_GIFT, P_STATS, P_OFF, API_ID, API_HASH, bot, is_super_admin
 from utils.keyboards import style_btn
+from utils.smm_client import is_server_enabled, SMM_SERVERS
 
 async def admin_panel_handler(event):
     uid = event.sender_id
@@ -29,6 +30,14 @@ async def admin_panel_handler(event):
             style_btn(f"Status: {status_text}", "adm_togglebot", "primary", icon=5409098988156629257),
             style_btn(f"Mode: {mode_text}", "adm_toggle_mode", "success", icon=5409271925014801629)
         ])
+        # Owner-controlled SMM server switches (turn server 1 / 2 ON or OFF).
+        smm1 = "\U0001F7E2 ON" if is_server_enabled(1) else "\U0001F534 OFF"
+        smm2 = "\U0001F7E2 ON" if is_server_enabled(2) else "\U0001F534 OFF"
+        btns.append([
+            style_btn(f"\U0001F6F0 SMM Server 1: {smm1}", "adm_togglesmm|1", "success", icon=5408995930416362034),
+            style_btn(f"\U0001F6F0 SMM Server 2: {smm2}", "adm_togglesmm|2", "danger", icon=5409320020058584473)
+        ])
+        btns.append([style_btn("\U0001F5A5 Manage Servers (Basic TG / Num / etc.)", "adm_servers", "primary", icon=5409098988156629257)])
         
     r1 = []
     if is_super_admin(uid) or has_perm(uid, 'p_add_stock'):

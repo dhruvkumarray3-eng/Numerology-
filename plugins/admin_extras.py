@@ -36,6 +36,9 @@ from utils.markup import (get_markup_config, set_markup, describe_markup,
                           price_breakdown, format_inr, format_usdt)
 from utils import mongo_store
 from utils import temporasms
+from utils.smm_client import (
+    SMM_SERVERS, is_server_enabled, set_server_enabled, server_status,
+)
 
 
 def _is_admin(uid):
@@ -334,6 +337,48 @@ async def cmd_support(e):
     )
 
 
+async def cmd_smmservers(e):
+    """Show the ON/OFF state of every SMM server."""
+    lines = ["<blockquote>\U0001F6F0 <b>SMM Server Switches</b>\n"]
+    for sid, info in SMM_SERVERS.items():
+        state = "\U0001F7E2 ON" if is_server_enabled(sid) else "\U0001F534 OFF"
+        lines.append(f"<b>Server {sid}</b> \u2014 {state}\n<i>{html.escape(info['name'])}</i>\n")
+    lines.append("Use <code>/smmserver 1 on</code> or <code>/smmserver 2 off</code> to change.</blockquote>")
+    await e.reply("\n".join(lines))
+
+
+async def cmd_smmserver(e, args):
+    """Toggle a server ON/OFF:  /smmserver <1|2> <on|off>  (or no args to flip)."""
+    parts = (args or "").split()
+    if not parts:
+        return await cmd_smmservers(e)
+
+    try:
+        sid = int(parts[0])
+    except (TypeError, ValueError):
+        return await e.reply("\u274C Usage: <code>/smmserver 1 on</code> or <code>/smmserver 2 off</code>")
+
+    if sid not in SMM_SERVERS:
+        return await e.reply(f"\u274C Unknown server <code>{sid}</code>. Available: {', '.join(map(str, SMM_SERVERS))}")
+
+    if len(parts) >= 2:
+        word = parts[1].strip().lower()
+        if word in ("on", "1", "true", "enable", "enabled", "start"):
+            enabled = True
+        elif word in ("off", "0", "false", "disable", "disabled", "stop"):
+            enabled = False
+        else:
+            return await e.reply("\u274C State must be <code>on</code> or <code>off</code>.")
+        set_server_enabled(sid, enabled)
+    else:
+        # No state given -> flip the current value.
+        enabled = not is_server_enabled(sid)
+        set_server_enabled(sid, enabled)
+
+    state = "\U0001F7E2 ON" if enabled else "\U0001F534 OFF"
+    await e.reply(f"\u2705 <b>SMM Server {sid}</b> is now <b>{state}</b>.")
+
+
 def register_admin_extras(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^/(?:setmarkup|setmargin)(?:@\w+)?(?:\s+(.+))?$"))
     async def h_setmarkup(e):
@@ -403,6 +448,18 @@ def register_admin_extras(bot):
         if not _is_admin(e.sender_id):
             return
         await cmd_grant(e, (e.pattern_match.group(1) or "").strip())
+
+    @bot.on(events.NewMessage(pattern=r"(?i)^/smmservers(?:@\w+)?$"))
+    async def h_smmservers(e):
+        if not _is_admin(e.sender_id):
+            return
+        await cmd_smmservers(e)
+
+    @bot.on(events.NewMessage(pattern=r"(?i)^/smmserver(?:@\w+)?(?:\s+(.+))?$"))
+    async def h_smmserver(e):
+        if not _is_admin(e.sender_id):
+            return
+        await cmd_smmserver(e, (e.pattern_match.group(1) or "").strip())
 
     # --- user commands ---------------------------------------------------
     @bot.on(events.NewMessage(pattern=r"(?i)^/myhistory(?:@\w+)?$"))

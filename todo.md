@@ -203,3 +203,23 @@ Real token supplied by the owner; every step exercised against api.lzt.market.
       dashboard and set `TEMPORASMS_API_KEY` if the repo is ever made public.
 - [x] Best-SMM wallet holds only 0.00138 USD, so server-2 orders will fail
       until it is topped up. Server 1 (FathersMM) has 1.12899 INR.
+
+## Round 12 — SMM server ON/OFF toggles
+
+- [x] Add settings-backed SMM server switches (`smm_server_1_enabled`, `smm_server_2_enabled`); server 1 default ON, server 2 default OFF
+- [x] Guard `fetch_smm_services` and `create_smm_order` against disabled servers
+- [x] User SMM menu shows disabled servers greyed-out as "🔴 OFF" and blocks entry with an alert
+- [x] Block order confirmation if the server was switched OFF mid-session
+- [x] Admin panel: SMM Server 1 / Server 2 ON-OFF toggle buttons (`adm_togglesmm|<id>`)
+- [x] Admin panel: "Manage Servers" screen to flip Basic TG / Num / etc. (`adm_srvtoggle|<idx>`)
+- [x] Per-server status override in `plugins/servers.py` persisted in settings
+- [x] Admin commands `/smmservers` and `/smmserver <1|2> <on|off>`
+- [x] Regression tests `tests/test_smm_servers.py` (21 checks)
+- [x] Run all suites + compileall + import checks (all green)
+- [x] Commit on a new branch, push, open PR, merge
+
+### Verification (Round 12)
+- test_buy_fixes 56, test_lzt_spec, test_lzt_errors 48, test_search_settings, test_temporasms 60, test_smm_servers 21 — all pass
+- compileall clean; imports OK
+- Live DB defaults confirmed: SMM server 1 ON, server 2 OFF
+- User menu renders server 2 as "— 🔴 OFF"; admin panel renders both SMM toggles + Manage Servers screen

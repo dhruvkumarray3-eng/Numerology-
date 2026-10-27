@@ -31,6 +31,45 @@ SERVER_ICONS = {
 }
 
 
+def _server_status_key(idx):
+    return f"server_status_{idx}"
+
+
+def get_server_status(idx, default="on"):
+    """Return the effective ON/OFF state for a server (1-based index).
+
+    The owner can override the SERVERS_CONFIG default from the admin panel;
+    the override is stored in the ``settings`` table so it survives restarts.
+    """
+    try:
+        from database import cur
+        row = cur.execute(
+            "SELECT value FROM settings WHERE key=?", (_server_status_key(idx),)
+        ).fetchone()
+        if row and str(row[0]).strip().lower() in ("on", "off"):
+            return str(row[0]).strip().lower()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"server status read failed for {idx}: {exc}")
+    return default
+
+
+def set_server_status(idx, status):
+    """Persist an ON/OFF override for a server (1-based index)."""
+    status = "on" if str(status).strip().lower() in ("on", "1", "true", "enable") else "off"
+    try:
+        from database import cur, db
+        cur.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (_server_status_key(idx), status),
+        )
+        db.commit()
+        return status
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"server status write failed for {idx}: {exc}")
+        return None
+
+
 def parse_servers():
     servers = []
     for chunk in (SERVERS_CONFIG or "").split(","):
@@ -41,6 +80,9 @@ def parse_servers():
         status = parts[1].lower()
         mode = parts[2] if len(parts) > 2 else "bulk"
         servers.append({"name": name, "status": status, "mode": mode})
+    # Apply owner overrides from the admin panel.
+    for idx, srv in enumerate(servers, start=1):
+        srv["status"] = get_server_status(idx, srv["status"])
     return servers
 
 
