@@ -320,6 +320,36 @@ def test_fast_buy_retries_without_dead_wallet():
     check("retry dropped the wallet", "balance_id" not in second, second)
 
 
+def test_fast_buy_retries_with_changed_price():
+    """LZT answers 403 "Account price has been changed. Account costs now
+    0.15. instead 0.09." -- the bot must retry once with the new price
+    instead of telling the buyer the purchase is forbidden."""
+    changed = FakeResp(
+        403,
+        {
+            "errors": [
+                "Account price has been changed. Account costs now 0.15. "
+                "instead 0.09."
+            ]
+        },
+    )
+    sess = FakeSession([changed, _ok_resp(14)])
+    L.aiohttp.ClientSession = lambda *a, **k: sess
+    ok, info = asyncio.run(L.lzt_client.fast_buy(14, "0.09", None))
+    check("price change is retried", ok is True, info)
+    check("price change retried once", len(sess.calls) == 2, len(sess.calls))
+    first = sess.calls[0][2]["json"]
+    second = sess.calls[-1][2]["json"]
+    check("first attempt used the old price", float(first["price"]) == 0.09, first)
+    check("retry used the new price", float(second["price"]) == 0.15, second)
+
+    # The message alone must also be human-readable.
+    msg = L.friendly_buy_error(
+        403, ["Account price has been changed. Account costs now 0.15."]
+    )
+    check("price change mapped", "price changed" in msg.lower(), msg)
+
+
 def test_fast_buy_phone_is_not_the_auth_key():
     """`login` holds the 512-char auth-key hex for Telegram items."""
     sess = FakeSession([_ok_resp(13)])
@@ -355,6 +385,45 @@ def test_get_otp_code_list():
     check("dict payload still supported", asyncio.run(L.lzt_client.get_otp_code(5)) == "4444")
 
 
+# ---------------------------------------------------------------------------
+# 8. Dead listings + empty network errors
+# ---------------------------------------------------------------------------
+def test_dead_session_error():
+    """LZT answers 403 "Session is invalid (logged out or account is blocked)"
+    for dead listings.  It must map to a per-item message, not a generic
+    "forbidden", so the buyer understands the bot is moving on."""
+    msg = L.friendly_buy_error(403, ["Session is invalid (logged out or account is blocked)"])
+    check("dead session mapped", "dead" in msg.lower(), msg)
+    check("dead session not generic", "forbidden" not in msg.lower(), msg)
+    for variant in ("session invalid", "logged out", "account is blocked"):
+        m = L.friendly_buy_error(403, [variant])
+        check(f"dead variant {variant!r}", "dead" in m.lower(), m)
+
+
+def test_empty_network_error():
+    """A bare aiohttp exception has an empty str(); the message must still
+    say *something* useful instead of trailing off after a colon."""
+    class Boom(Exception):
+        def __str__(self):
+            return ""
+
+    class BoomSession:
+        def post(self, *a, **k):
+            raise Boom()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    L.aiohttp.ClientSession = lambda *a, **k: BoomSession()
+    ok, msg = asyncio.run(L.lzt_client.fast_buy(1, "0.1", None))
+    check("network error fails", ok is False)
+    check("network error names the exception", "Boom" in msg, msg)
+    check("network error not blank", msg.strip().endswith(":") is False, msg)
+
+
 def main():
     test_post_buy_spam_ok()
     test_friendly_buy_error()
@@ -363,8 +432,11 @@ def main():
     test_balance_info_empty_subwallet()
     test_fast_buy_omits_balance_id()
     test_fast_buy_retries_without_dead_wallet()
+    test_fast_buy_retries_with_changed_price()
     test_fast_buy_phone_is_not_the_auth_key()
     test_get_otp_code_list()
+    test_dead_session_error()
+    test_empty_network_error()
     print(f"\nALL {PASS} CHECKS PASSED")
 
 

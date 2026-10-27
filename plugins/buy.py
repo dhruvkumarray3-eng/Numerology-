@@ -850,7 +850,11 @@ async def process_purchase(event, mode, country, year, price_str):
             phone = None
             last_err = ""
 
-            for itm in items[:5]:
+            # Roughly 40-60% of cheap listings are dead ("Session is invalid
+            # (logged out or account is blocked)") because LZT only verifies
+            # them at purchase time.  Trying just 5 items made live purchases
+            # fail far too often, so walk a wider slice of the result page.
+            for itm in items[:12]:
                 item_id = itm['item_id']
                 price_str = itm.get('price_str', str(itm.get('price_usd', '0.1')))
                 balance_id = itm.get('balance_id')
@@ -896,12 +900,26 @@ async def process_purchase(event, mode, country, year, price_str):
                             logger.warning(f"Connection error: {conn_err}")
                 else:
                     last_err = str(buy_result)
+                    logger.info(f"LZT item {item_id} skipped: {last_err}")
 
             if not buy_success or not client:
+                # If the last attempt was a dead listing, saying "trying
+                # another account" is misleading -- we already gave up.
+                if last_err and "session is dead" in last_err.lower():
+                    last_err = (
+                        "Every account we tried was already dead on the "
+                        "market. Please try again in a moment."
+                    )
                 async with get_user_lock(uid):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
-                return await event.edit(f"❌ <b>Purchase failed.</b>\n\n{last_err or 'No usable account session was returned.'}\n\nYour money has been refunded.")
+                return await event.edit(
+                    f"❌ <b>Purchase failed.</b>\n\n"
+                    f"{last_err or 'No usable account session was returned.'}\n\n"
+                    "Your money has been refunded.\n"
+                    "<i>Tip: try again or pick another country — dead "
+                    "listings are removed from the market continuously.</i>"
+                )
 
             item_id = bought_info['item_id']
             twofa_pass = bought_info.get("twofa") or "None"
