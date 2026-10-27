@@ -194,7 +194,13 @@ SMSMAN_API_KEY = os.getenv("SMSMAN_API_KEY", "").strip()            # https://sm
 TEMPMAIL_API_KEY = os.getenv("TEMPMAIL_API_KEY", "").strip()        # temp-mail style inbox API
 
 # --- TEMPORASMS: powers All Apps OTP + TG Number Change + WhatsApp Accounts ---
-TEMPORASMS_API_KEY = os.getenv("TEMPORASMS_API_KEY", "").strip()
+# The owner's working key is baked in as the default so the three OTP panels
+# work out of the box (Railway/host env vars still override it).
+# NOTE: this is a shared secret — rotate it in the TemporaSMS dashboard and set
+# TEMPORASMS_API_KEY in the host environment if the repo is ever made public.
+TEMPORASMS_API_KEY = os.getenv(
+    "TEMPORASMS_API_KEY", "961d06fbf5782a89bee0ff5a589de19c6f33"
+).strip()
 TEMPORASMS_BASE_URL = os.getenv("TEMPORASMS_BASE_URL", "https://api.temporasms.com").strip()
 
 # --- Generic OTP mailbox (IMAP) used to auto-read Telegram codes ---

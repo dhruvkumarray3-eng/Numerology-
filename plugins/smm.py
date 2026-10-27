@@ -40,7 +40,23 @@ async def show_smm_servers(event):
 async def show_smm_platforms_menu(event, server=1):
     srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
     platforms = await get_smm_platforms(server)
-    
+
+    if not platforms:
+        # Never leave the user on a blank screen: the provider did not answer
+        # (or returned an empty catalogue), so explain it and offer a retry.
+        msg = (f"<blockquote>{P_NO} <b>\u26a0\ufe0f {srv['name']} is not responding</b>\n\n"
+               f"The SMM provider did not return a service list. This is usually "
+               f"temporary \u2014 tap <b>Retry</b> in a few seconds.</blockquote>")
+        btns = [
+            [style_btn("\U0001F504 \u0280\u1d07\u1d1b\u0280\u028f", f"smm_srv|{server}", "success", icon=5409098988156629257)],
+            [style_btn("\U0001F519 \u1d04\u029c\u1d0f\u1d0fs\u1d07 \u1d00\u0274\u1d0f\u1d1b\u029c\u1d07\u0280 s\u1d07\u0280\u1d20\u1d07\u0280", b"smm_menu_main", "danger", icon=6129812419028982717)],
+        ]
+        try:
+            await event.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            pass
+        return
+
     btns = []
     plat_row = []
     for p in platforms:
@@ -170,6 +186,13 @@ async def show_service_card(event, server, platform, cat_idx, service_id):
     except MessageNotModifiedError: pass
 
 def register_smm(bot):
+    @bot.on(events.NewMessage(pattern=r"(?i)^/smm(?:@\w+)?$"))
+    async def cmd_smm(e):
+        # /smm was documented in the help menu but had no handler, so typing it
+        # did nothing.  show_smm_servers() works for both messages and
+        # callbacks, so it is safe to reuse here.
+        await show_smm_servers(e)
+
     @bot.on(events.CallbackQuery(pattern=b"^smm_menu_main$"))
     async def cb_smm_main(e):
         await show_smm_servers(e)
@@ -247,7 +270,7 @@ def register_smm(bot):
         else:
             await show_smm_servers(e)
 
-    @bot.on(events.NewMessage(func=lambda e: e.sender_id in smm_order_state and not e.text.startswith('/')))
+    @bot.on(events.NewMessage(func=lambda e: e.sender_id in smm_order_state and not (e.text or "").startswith('/')))
     async def msg_smm_order_inputs(e):
         uid = e.sender_id
         state = smm_order_state.get(uid)

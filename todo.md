@@ -157,3 +157,49 @@ Real token supplied by the owner; every step exercised against api.lzt.market.
 - [x] `test_buy_fixes` 56 checks, `test_lzt_spec`, `test_lzt_errors` (48),
       `test_search_settings` all green; `compileall` clean; `import main`,
       `plugins.buy`, `utils.lzt` OK.
+
+## Round 11 — TemporaSMS protocol + SMM + profit display
+- [x] Rewrite `utils/temporasms.py` for the real handler_api protocol
+      (operator is mandatory, service codes are per-operator, no all-country
+      price call, JSON errors).
+- [x] Live-verify: telegram `tvm`/op13 111 countries, whatsapp `wqp`/op13 122,
+      instagram 240, google 138, discord 189, tiktok 168, facebook 190.
+- [x] Fix `_error_code` to also catch bare tokens like `NO_BALANCE`.
+- [x] Fix `_resolve_country_id` ordering (`in` -> 22 India, not 4 Philippines).
+- [x] Add `tests/live_tempora_probe.py` read-only live probe.
+- [x] Put the user's TemporaSMS key in `config.py` as the default
+      (env var still overrides; documented in `.env.sample` + README).
+- [x] Diagnose + fix SMM handlers in `plugins/smm.py`:
+      `/smm` command was documented but never registered -> added;
+      blank menu when the provider is down -> retry screen;
+      O(n^2) category counting -> single pass; `e.text is None` crash -> guarded;
+      non-dict order response -> guarded.
+- [x] Panel price + owner profit display verified live:
+      SMM card shows `Panel Rate ₹11.09/1k`, `Your Profit +₹2.91/1k`,
+      `Your Price ₹14.0/1k`; `/markup`, `/setmarkup`, `/setprofit`,
+      `/resetmarkup`, `/panelstats` all render correctly.
+- [x] Cross-operator country fallback (`resolve_country_route`) so a
+      country missing on the preferred route is retried on another route that
+      carries the service (country ids are per-operator).
+- [x] Add `tests/test_temporasms.py` regression suite (60 checks).
+- [x] All suites green: test_buy_fixes 56, test_lzt_spec, test_lzt_errors 48,
+      test_search_settings, test_temporasms 60; `compileall` clean; imports OK.
+- [x] Commit on new branch, push, PR, merge.
+
+## Verification (Round 11)
+- [x] Live `check_connection()`: balance 75.6332 RUB, 14,677 services,
+      telegram `tvm` route 13, whatsapp `wqp` route 13.
+- [x] Live `get_countries`: telegram 110, whatsapp 123, instagram 241.
+- [x] Live panels: whatsapp 125, numchange 114, allotp 114 countries.
+- [x] Live purchase: telegram/Colombia -> order `6ae0bb2e26470884fcc678e8`,
+      phone `573132428283`, status `waiting`, cancel OK, balance unchanged.
+- [x] SMM live: FathersMM 1474 services / 1.12899 INR,
+      Best-SMM 2126 services / 0.00138 USD; all handlers render.
+- [x] `_error_code` no longer treats `ACCESS_CANCEL` / `STATUS_WAIT_CODE` as errors.
+
+## Notes (Round 11)
+- [x] The TemporaSMS key is baked into `config.py` as a default because the
+      owner asked for it. It is a shared secret: rotate it in the TemporaSMS
+      dashboard and set `TEMPORASMS_API_KEY` if the repo is ever made public.
+- [x] Best-SMM wallet holds only 0.00138 USD, so server-2 orders will fail
+      until it is topped up. Server 1 (FathersMM) has 1.12899 INR.
