@@ -145,6 +145,12 @@ class FakeResp:
     async def __aexit__(self, *a):
         return False
 
+    def __await__(self):
+        async def _self():
+            return self
+
+        return _self().__await__()
+
 
 class FakeSession:
     def __init__(self, responses):
@@ -152,7 +158,19 @@ class FakeSession:
         self.calls = []
 
     def post(self, url, **kwargs):
-        self.calls.append(("POST", url, kwargs))
+        # Copy the payload: fast_buy mutates the same dict between retries,
+        # so storing a reference would rewrite the earlier call's history.
+        snapshot = dict(kwargs)
+        if isinstance(snapshot.get("json"), dict):
+            snapshot["json"] = dict(snapshot["json"])
+        self.calls.append(("POST", url, snapshot))
+        return self.responses.pop(0)
+
+    def get(self, url, **kwargs):
+        # Return a FakeResp that is both awaitable and an async context
+        # manager: get_balance_info() awaits it, get_otp_code() uses
+        # `async with` directly.
+        self.calls.append(("GET", url, kwargs))
         return self.responses.pop(0)
 
     async def __aenter__(self):
@@ -183,7 +201,6 @@ def test_fast_buy_payload():
     )
     sess = FakeSession([ok])
     L.aiohttp.ClientSession = lambda *a, **k: sess
-    L.lzt_client.get_balance_info = _coro((None, 0.0, 0.0))
 
     async def run():
         # String balance id must be coerced to int; empty price omitted.
@@ -196,11 +213,158 @@ def test_fast_buy_payload():
     check("unknown price omitted", "price" not in payload, payload)
 
 
+# ---------------------------------------------------------------------------
+# 5. get_balance_info: empty sub-wallet must not hide the main balance
+# ---------------------------------------------------------------------------
+def test_balance_info_empty_subwallet():
+    """Live /me shape: main balance 413 RUB / 5.14 USD, sub-wallet $0.
+
+    The old code reported the empty sub-wallet's 0.00 *and* handed its
+    balance_id to fast_buy, which made LZT answer 403 "not enough money".
+    """
+    me = FakeResp(
+        200,
+        {
+            "user": {
+                "balance": 413.0,
+                "currency": "usd",
+                "convertedBalance": 5.14,
+                "balances": [
+                    {
+                        "type": "account",
+                        "balance_id": 264649,
+                        "balance": "0.00",
+                        "convertedBalance": 0,
+                        "fullTitle": "Balance for buying accounts ($0)",
+                    }
+                ],
+            }
+        },
+    )
+    sess = FakeSession([me])
+    L.aiohttp.ClientSession = lambda *a, **k: sess
+    L.lzt_client._balance_fetched = False
+    L.lzt_client._balance_id = None
+
+    bid, rub, usd = asyncio.run(L.lzt_client.get_balance_info(max_age=0))
+    check("empty wallet -> no balance_id", bid is None, bid)
+    check("main RUB balance reported", abs(rub - 413.0) < 0.01, rub)
+    check("main USD balance reported", abs(usd - 5.14) < 0.01, usd)
+
+    # A funded sub-wallet *is* usable.
+    me2 = FakeResp(
+        200,
+        {
+            "user": {
+                "balance": 0,
+                "convertedBalance": 0,
+                "balances": [
+                    {"type": "account", "balance_id": 999, "balance": "50.00", "convertedBalance": 0.6}
+                ],
+            }
+        },
+    )
+    L.aiohttp.ClientSession = lambda *a, **k: FakeSession([me2])
+    L.lzt_client._balance_fetched = False
+    bid2, rub2, usd2 = asyncio.run(L.lzt_client.get_balance_info(max_age=0))
+    check("funded wallet -> balance_id kept", bid2 == 999, bid2)
+    check("funded wallet amount", abs(usd2 - 0.6) < 0.01, usd2)
+
+
+# ---------------------------------------------------------------------------
+# 6. fast_buy must not invent a balance_id, and must recover from a dead one
+# ---------------------------------------------------------------------------
+def _ok_resp(item_id=11, phone="918197387243", login="ab" * 256):
+    return FakeResp(
+        200,
+        {
+            "status": "ok",
+            "item": {
+                "item_id": item_id,
+                "login": login,
+                "telegram_phone": phone,
+                "telegram_spam_block": 0,
+                "loginData": {"raw": "cd" * 256 + ":5", "password": "pw"},
+            },
+        },
+    )
+
+
+def test_fast_buy_omits_balance_id():
+    sess = FakeSession([_ok_resp()])
+    L.aiohttp.ClientSession = lambda *a, **k: sess
+    ok, info = asyncio.run(L.lzt_client.fast_buy(11, "0.09", None))
+    check("fast_buy without balance_id succeeds", ok is True, info)
+    payload = sess.calls[-1][2]["json"]
+    check("balance_id not auto-filled", "balance_id" not in payload, payload)
+    check("numeric price sent", payload.get("price") == 0.09, payload)
+
+
+def test_fast_buy_retries_without_dead_wallet():
+    dead = FakeResp(
+        403,
+        {
+            "errors": [
+                'You do not have enough money to buy this product. '
+                '<b><a href="market/balance/deposit">Add credit</a></b>'
+            ]
+        },
+    )
+    sess = FakeSession([dead, _ok_resp(12)])
+    L.aiohttp.ClientSession = lambda *a, **k: sess
+    ok, info = asyncio.run(L.lzt_client.fast_buy(12, "0.09", 264649))
+    check("403 on dead wallet is retried", ok is True, info)
+    first = sess.calls[0][2]["json"]
+    second = sess.calls[-1][2]["json"]
+    check("first attempt used the wallet", first.get("balance_id") == 264649, first)
+    check("retry dropped the wallet", "balance_id" not in second, second)
+
+
+def test_fast_buy_phone_is_not_the_auth_key():
+    """`login` holds the 512-char auth-key hex for Telegram items."""
+    sess = FakeSession([_ok_resp(13)])
+    L.aiohttp.ClientSession = lambda *a, **k: sess
+    ok, info = asyncio.run(L.lzt_client.fast_buy(13, "0.09", None))
+    check("buy ok", ok is True, info)
+    check("phone is the real number", info.get("phone") == "918197387243", info.get("phone"))
+    check("string session built", len(info.get("string_session") or "") > 100, info.get("string_session"))
+
+
+# ---------------------------------------------------------------------------
+# 7. get_otp_code: `codes` is a LIST and stale codes must be ignored
+# ---------------------------------------------------------------------------
+def test_get_otp_code_list():
+    body = {
+        "codes": [
+            {"code": "11111", "date": 1000},
+            {"code": "22222", "date": 3000},
+            {"code": "33333", "date": 2000},
+        ],
+        "item": {"item_id": 5},
+    }
+    L.aiohttp.ClientSession = lambda *a, **k: FakeSession([FakeResp(200, body)])
+    check("newest code picked", asyncio.run(L.lzt_client.get_otp_code(5)) == "22222")
+
+    L.aiohttp.ClientSession = lambda *a, **k: FakeSession([FakeResp(200, body)])
+    check("stale codes filtered", asyncio.run(L.lzt_client.get_otp_code(5, since=2500)) == "22222")
+
+    L.aiohttp.ClientSession = lambda *a, **k: FakeSession([FakeResp(200, body)])
+    check("no fresh code -> None", asyncio.run(L.lzt_client.get_otp_code(5, since=9000)) is None)
+
+    L.aiohttp.ClientSession = lambda *a, **k: FakeSession([FakeResp(200, {"codes": {"code": "4444"}})])
+    check("dict payload still supported", asyncio.run(L.lzt_client.get_otp_code(5)) == "4444")
+
+
 def main():
     test_post_buy_spam_ok()
     test_friendly_buy_error()
     test_parse_item_price()
     test_fast_buy_payload()
+    test_balance_info_empty_subwallet()
+    test_fast_buy_omits_balance_id()
+    test_fast_buy_retries_without_dead_wallet()
+    test_fast_buy_phone_is_not_the_auth_key()
+    test_get_otp_code_list()
     print(f"\nALL {PASS} CHECKS PASSED")
 
 

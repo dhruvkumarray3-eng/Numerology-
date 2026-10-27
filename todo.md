@@ -78,3 +78,56 @@
 ## Git
 - [x] Create branch `fix/lzt-purchase-and-readme`
 - [x] Commit, push, open PR
+
+---
+
+# Live LZT Verification (Round 9)
+
+Real token supplied by the owner; every step exercised against api.lzt.market.
+
+## Problem
+- [x] Purchases failed with 403 "You do not have enough money to buy this
+      product" although the market wallet held 413 RUB.
+- [x] `get_balance_info()` reported 0.00 / 0.00 and returned the *empty*
+      "Balance for buying accounts ($0)" sub-wallet id.
+- [x] OTP lookups always returned `None`.
+- [x] Order phone was the 512-char auth-key hex, not a number.
+- [x] `check_connection()` labelled the RUB balance as USD.
+
+## Root causes (all confirmed live)
+- [x] `fast_buy()` auto-filled `balance_id` from `/me`; LZT then charged the
+      empty sub-wallet. Verified: same request **without** `balance_id` -> 200.
+- [x] `/me` shape: `balance` (RUB) + `convertedBalance` (USD) are the main
+      wallet; `balances[]` only lists sub-wallets (here $0).
+- [x] `GET /{id}/telegram-login-code` returns `codes` as a **list**, the old
+      parser only handled a dict.
+- [x] Purchase payload puts the auth-key hex in `login`; the number lives in
+      `telegram_phone`.
+
+## Fixes
+- [x] `get_balance_info()`: sum sub-wallets, expose `balance_id` only when that
+      wallet holds money, fall back to the main RUB/USD balance, cache with
+      `_balance_fetched`.
+- [x] `fast_buy()`: never invent `balance_id`; retry once without it on
+      "not enough money".
+- [x] `fast_buy()`: phone from `telegram_phone` / `phone`, `login` accepted only
+      if it looks like a real number.
+- [x] `get_otp_code(item_id, since=None)`: parse the `codes` list, newest first,
+      drop codes older than the order start (60s skew tolerance).
+- [x] `check_connection()`: show `X RUB (~Y USD)`.
+- [x] `plugins/buy.py`: pass `since=start_time` to `get_otp_code`.
+- [x] `tests/live_lzt_check.py`: read-only live sweep (never spends money).
+- [x] `tests/test_buy_fixes.py`: 43 checks (was 25) covering all of the above.
+
+## Verification
+- [x] Live: `/me` 200, `IN` 76k listings, `US` 46k, `BD` 27k, `NG` 16k
+- [x] Live purchase #1 (no `balance_id`) -> 200, paid, session DC 5
+- [x] Live purchase #2 (dead wallet id) -> 403 -> auto retry -> 200, DC 5
+- [x] Live purchase #3 (bot path, US nonspam) -> 200, phone 17472589424, DC 1
+- [x] Live OTP -> `61944`; `since=now` -> `None`
+- [x] `tests/test_buy_fixes.py` 43 checks, `test_lzt_spec`, `test_lzt_errors`,
+      `test_search_settings` all green; `compileall` clean
+
+## Notes
+- [x] Token is **not** committed; set `LZT_API_KEY` on Railway or use
+      Admin -> LZT Panel Settings -> Set API Key.
