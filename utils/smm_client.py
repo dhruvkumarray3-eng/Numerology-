@@ -48,6 +48,88 @@ SMM_SERVERS = {
     }
 }
 
+# ---------------------------------------------------------------------------
+# Server ON/OFF switches (owner-controlled)
+#
+# The owner wants to run only FathersMM (server 1) while keeping server 2 in
+# the code but switched OFF for normal users.  Each server has a persisted
+# switch in the ``settings`` table so the owner can flip it at will from the
+# admin panel or with /smmserver.  Server 1 defaults to ON, server 2 to OFF.
+# ---------------------------------------------------------------------------
+SMM_SERVER_SETTING_KEYS = {1: "smm_server_1_enabled", 2: "smm_server_2_enabled"}
+SMM_SERVER_DEFAULT = {1: True, 2: False}
+_TRUTHY = ("1", "on", "true", "yes", "enabled", "active")
+
+
+def _read_setting(key, default=None):
+    try:
+        from database import cur
+        row = cur.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        if row and row[0] not in (None, ""):
+            return row[0]
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"smm setting read failed for {key}: {exc}")
+    return default
+
+
+def _write_setting(key, value):
+    try:
+        from database import cur, db
+        cur.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, str(value)),
+        )
+        db.commit()
+        return True
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"smm setting write failed for {key}: {exc}")
+        return False
+
+
+def is_server_enabled(server):
+    """Return True when the given SMM server is switched ON by the owner."""
+    try:
+        server = int(server)
+    except (TypeError, ValueError):
+        return False
+    key = SMM_SERVER_SETTING_KEYS.get(server)
+    if not key:
+        return False
+    default = SMM_SERVER_DEFAULT.get(server, False)
+    raw = _read_setting(key, "1" if default else "0")
+    return str(raw).strip().lower() in _TRUTHY
+
+
+def set_server_enabled(server, enabled):
+    """Persist the ON/OFF state of a server.  Returns True on success."""
+    try:
+        server = int(server)
+    except (TypeError, ValueError):
+        return False
+    key = SMM_SERVER_SETTING_KEYS.get(server)
+    if not key:
+        return False
+    return _write_setting(key, "1" if enabled else "0")
+
+
+def toggle_server(server):
+    """Flip a server's state and return the new boolean state."""
+    new_state = not is_server_enabled(server)
+    set_server_enabled(server, new_state)
+    return new_state
+
+
+def enabled_servers():
+    """Return the list of server ids that are currently ON."""
+    return [sid for sid in SMM_SERVERS if is_server_enabled(sid)]
+
+
+def server_status():
+    """Return {server_id: bool} for every configured server."""
+    return {sid: is_server_enabled(sid) for sid in SMM_SERVERS}
+
+
 _services_cache = {1: None, 2: None}
 _cache_time = {1: 0, 2: 0}
 
@@ -85,6 +167,9 @@ PLATFORM_PREMIUM_ICONS = {
 
 async def fetch_smm_services(server=1, force_refresh=False):
     global _services_cache, _cache_time
+    # A server the owner has switched OFF must never serve data to users.
+    if not is_server_enabled(server):
+        return []
     now = time.time()
     if not force_refresh and _services_cache.get(server) and (now - _cache_time.get(server, 0) < 600):
         return _services_cache[server]
@@ -209,6 +294,9 @@ def get_service_breakdown(service, server=1):
     return panel, round(max(0.0, user - panel), 2), user
 
 async def create_smm_order(service_id, link, quantity, server=1):
+    # Never place a paid order against a server the owner has switched OFF.
+    if not is_server_enabled(server):
+        return {'error': 'This SMM server is currently OFF. Please try another server.'}
     srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
     params = {
         'key': srv['key'],

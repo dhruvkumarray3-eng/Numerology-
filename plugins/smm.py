@@ -11,7 +11,8 @@ from utils.smm_client import (
     SMM_SERVERS, get_smm_platforms, get_categories_for_platform,
     get_services_for_category, get_smm_service_details, get_service_inr_rate,
     get_service_panel_rate, get_service_breakdown,
-    create_smm_order, get_smm_order_status, PLATFORM_ICONS, PLATFORM_PREMIUM_ICONS
+    create_smm_order, get_smm_order_status, PLATFORM_ICONS, PLATFORM_PREMIUM_ICONS,
+    is_server_enabled,
 )
 
 # User state dictionary for SMM orders
@@ -20,16 +21,29 @@ smm_order_state = {}
 # ── Step 1: Select Server ──
 async def show_smm_servers(event):
     btns = []
+    any_enabled = False
     for s_id, s_info in SMM_SERVERS.items():
         p_icon = 5408995930416362034 if s_id == 1 else 5409320020058584473
-        btns.append([style_btn(f"{s_info['name']}", f"smm_srv|{s_id}", "primary", icon=p_icon)])
-        
-    btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)])
-    
-    msg = (f"<blockquote>🚀 <b>𝐒ᴏᴄɪᴀʟ 𝐌ᴇᴅɪᴀ 𝐒ᴇʀᴠɪᴄᴇs (𝐒𝐌𝐌)</b>\n\n"
-           f"⚡ <b>𝐅ᴀsᴛ & 𝐈ɴsᴛᴀɴᴛ 𝐃ᴇʟɪᴠᴇʀʏ</b> ғᴏʀ ᴀʟʟ ᴍᴀᴊᴏʀ ᴘʟᴀᴛғᴏʀᴍs.\n\n"
-           f"👇 <b>𝐏ʟᴇᴀsᴇ sᴇʟᴇᴄᴛ ᴀ 𝐒ᴇʀᴠᴇʀ ʙᴇʟᴏᴡ:</b></blockquote>")
-           
+        if is_server_enabled(s_id):
+            any_enabled = True
+            btns.append([style_btn(f"{s_info['name']}", f"smm_srv|{s_id}", "primary", icon=p_icon)])
+        else:
+            # Disabled by the owner: shown greyed-out as OFF so users know it
+            # exists but is unavailable.  Tapping it explains why.
+            btns.append([style_btn(f"{s_info['name']}  \u2014  \U0001F534 OFF", f"smm_srv|{s_id}", "danger", icon=p_icon)])
+
+    btns.append([style_btn("\U0001F519 \U0001D401\U0001D44E\U0001D450\U0001D458 \U0001D461\U0001D560 \U0001D403\U0001D44E\U0001D460\U0001D455\U0001D44F\U0001D560\U0001D44E\U0001D45F\U0001D451", b"dashboard_main", "danger", icon=6129812419028982717)])
+
+    if any_enabled:
+        note = "\U0001F447 <b>\U0001D40F\U0001D459\U0001D452\U0001D44E\U0001D460\U0001D452 s\U0001D452\U0001D459\U0001D452\U0001D450\U0001D461 \U0001D44E \U0001D412\U0001D452\U0001D45F\U0001D463\U0001D452\U0001D45F \U0001D401\U0001D452\U0001D459\U0001D560\U0001D464:</b>"
+    else:
+        note = (f"{P_NO} <b>All SMM servers are currently OFF.</b>\n"
+                f"<i>Please try again later or contact support.</i>")
+
+    msg = (f"<blockquote>\U0001F680 <b>\U0001D412\U0001D560\U0001D450\U0001D456\U0001D44E\U0001D459 \U0001D40C\U0001D452\U0001D451\U0001D456\U0001D44E \U0001D412\U0001D452\U0001D45F\U0001D463\U0001D456\U0001D450\U0001D452\U0001D460 (\U0001D412\U0001D40C\U0001D40C)</b>\n\n"
+           f"\u26A1 <b>\U0001D405\U0001D44E\U0001D460\U0001D461 & \U0001D408\U0001D45B\U0001D460\U0001D461\U0001D44E\U0001D45B\U0001D461 \U0001D403\U0001D452\U0001D459\U0001D456\U0001D463\U0001D452\U0001D45F\U0001D466</b> \u0493\u1D0F\u0280 \u1D00\u029F\u029F \u1D0D\u1D00\u1D0A\u1D0F\u0280 \u1D18\u029F\u1D00\u1D1B\u0493\u1D0F\u0280\u1D0Ds.\n\n"
+           f"{note}</blockquote>")
+
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass
@@ -200,6 +214,11 @@ def register_smm(bot):
     @bot.on(events.CallbackQuery(pattern=r"^smm_srv\|(\d+)$"))
     async def cb_smm_srv(e):
         srv_id = int(e.pattern_match.group(1).decode())
+        if not is_server_enabled(srv_id):
+            return await e.answer(
+                "\U0001F534 This SMM server is currently OFF. Please choose another server.",
+                alert=True,
+            )
         await show_smm_platforms_menu(e, server=srv_id)
         
     @bot.on(events.CallbackQuery(pattern=r"^smm_plat\|(\d+)\|([^|]+)\|(\d+)$"))
@@ -343,6 +362,13 @@ def register_smm(bot):
         qty = state['qty']
         server = state['server']
         s = state['service']
+
+        # The owner may have switched this server OFF mid-session.
+        if not is_server_enabled(server):
+            return await e.answer(
+                "\U0001F534 This SMM server was switched OFF. Please start again.",
+                alert=True,
+            )
         
         async with get_user_lock(uid):
             bal_row = cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()

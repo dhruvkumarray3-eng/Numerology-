@@ -320,6 +320,73 @@ async def admin_actions(event):
         class FakeEvent: chat_id = chat; sender_id = uid
         return await admin_panel_handler(FakeEvent())
 
+    if action_data == "servers" and has_perm(uid, 'p_settings'):
+        from plugins.servers import parse_servers
+        servers = parse_servers()
+        lines = ["<blockquote>\U0001F5A5 <b>Server Switches</b>\n"]
+        btns = []
+        for idx, srv in enumerate(servers, start=1):
+            is_on = srv["status"] == "on"
+            state = "\U0001F7E2 ON" if is_on else "\U0001F534 OFF"
+            btn_state = "ON \U0001F7E2" if is_on else "OFF \U0001F534"
+            lines.append(f"<b>{idx}. {html.escape(srv['name'])}</b> \u2014 {state}")
+            btns.append([style_btn(
+                f"{idx}. {srv['name']}  \u2014  {btn_state}",
+                f"adm_srvtoggle|{idx}",
+                "success" if is_on else "danger",
+            )])
+        lines.append("\n<i>Tap a server to flip it ON/OFF. Changes apply instantly.</i></blockquote>")
+        btns.append([style_btn("\U0001F519 Back", "adm_adminmain", "danger", icon=6129888444245089008)])
+        try:
+            return await event.edit("\n".join(lines), buttons=btns)
+        except Exception:
+            return await bot.send_message(chat, "\n".join(lines), buttons=btns)
+
+    if action_data.startswith("srvtoggle|") and has_perm(uid, 'p_settings'):
+        try:
+            idx = int(action_data.split("|", 1)[1])
+        except (IndexError, ValueError):
+            return await event.answer("Invalid server.", alert=True)
+        from plugins.servers import parse_servers, set_server_status
+        servers = parse_servers()
+        if idx < 1 or idx > len(servers):
+            return await event.answer("Invalid server.", alert=True)
+        cur_state = servers[idx - 1]["status"]
+        new_state = "off" if cur_state == "on" else "on"
+        set_server_status(idx, new_state)
+        answer_state = "ON \U0001F7E2" if new_state == "on" else "OFF \U0001F534"
+        await event.answer(f"Server {idx} is now {answer_state}", alert=True)
+        # Re-render the servers screen.
+        class FakeEvent:
+            chat_id = chat
+            sender_id = uid
+            data = b"adm_servers"
+            async def edit(self, msg, buttons=None):
+                try:
+                    await event.edit(msg, buttons=buttons)
+                except Exception:
+                    pass
+            async def answer(self, *a, **k):
+                pass
+        return await admin_actions(FakeEvent())
+
+    if action_data.startswith("togglesmm|") and has_perm(uid, 'p_settings'):
+        try:
+            srv_id = int(action_data.split("|", 1)[1])
+        except (IndexError, ValueError):
+            return await event.answer("Invalid server.", alert=True)
+        from utils.smm_client import toggle_server, is_server_enabled
+        new_state = toggle_server(srv_id)
+        state_text = "ON \U0001F7E2" if new_state else "OFF \U0001F534"
+        await event.answer(f"SMM Server {srv_id} is now {state_text}", alert=True)
+        class FakeEvent: chat_id = chat; sender_id = uid
+        await admin_panel_handler(FakeEvent())
+        try:
+            await event.delete()
+        except Exception:
+            pass
+        return
+
     if action_data == "togglebot" and has_perm(uid, 'p_settings'):
         new_status = 'off' if is_bot_online() else 'on'
         cur.execute("UPDATE settings SET value=? WHERE key='bot_status'", (new_status,))
