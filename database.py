@@ -634,6 +634,54 @@ def set_start_image_url(url):
     cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('start_image', ?)", (url.strip(),))
     db.commit()
 
+
+# --------------------------------------------------------------------------
+# Owner-editable payment settings (Trust Wallet / USDT + UPI)
+# --------------------------------------------------------------------------
+def _get_setting(key):
+    try:
+        row = cur.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row[0] if row and row[0] else ""
+    except Exception:
+        return ""
+
+
+def _set_setting(key, value):
+    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value).strip()))
+    db.commit()
+
+
+def get_trust_wallet_address():
+    """Owner-set USDT (BEP-20) address, falling back to env config."""
+    from config import TRUST_WALLET_ADDRESS, BEP20_ADDRESS
+    return (_get_setting("trust_wallet_address")
+            or (TRUST_WALLET_ADDRESS or "").strip()
+            or (BEP20_ADDRESS or "").strip())
+
+
+def set_trust_wallet_address(addr):
+    _set_setting("trust_wallet_address", addr)
+
+
+def get_trust_wallet_qr():
+    """Owner-set QR (URL or Telegram file id), falling back to env config."""
+    from config import TRUST_WALLET_QR
+    return _get_setting("trust_wallet_qr") or (TRUST_WALLET_QR or "").strip()
+
+
+def set_trust_wallet_qr(value):
+    _set_setting("trust_wallet_qr", value)
+
+
+def get_upi_id():
+    """Owner-set UPI id, falling back to env config."""
+    from config import UPI_ID
+    return _get_setting("upi_id") or (UPI_ID or "").strip()
+
+
+def set_upi_id(value):
+    _set_setting("upi_id", value)
+
 def get_source_codes():
     rows = cur.execute("SELECT id, title, description, price, file_content, available FROM source_codes WHERE available=1").fetchall()
     if not rows:

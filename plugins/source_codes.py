@@ -120,7 +120,11 @@ def register_source_codes(bot):
             except: pass
             
         safe_name = _slugify(title)
-        zip_buf = _build_source_zip(title, file_link)
+        # Owner-uploaded ZIP is stored as "file:<path>" -> deliver it as-is.
+        stored_zip = None
+        if (file_link or "").startswith("file:"):
+            stored_zip = file_link.split(":", 1)[1].strip()
+        zip_buf = None if stored_zip else _build_source_zip(title, file_link)
 
         msg = (
             f"<blockquote>{PE_CHECK} <b>\U0001F389 Purchase Successful!</b>\n\n"
@@ -143,7 +147,7 @@ def register_source_codes(bot):
         try:
             await bot.send_file(
                 e.chat_id,
-                zip_buf,
+                stored_zip if stored_zip else zip_buf,
                 filename=f"{safe_name}.zip",
                 caption=(
                     f"\U0001F4E6 <b>{html.escape(title)}</b>\n"

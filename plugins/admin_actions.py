@@ -576,6 +576,20 @@ async def admin_actions(event):
                 [style_btn("\U0001F519 Back", "adm_lzt_settings", "danger", icon=6129888444245089008)]]
         return await event.edit(f"<blockquote>{res_msg}{extra}</blockquote>", buttons=btns)
 
+    elif action_data == "upi" and has_perm(uid, 'p_settings'):
+        upi_res = cur.execute("SELECT value FROM settings WHERE key='upi_id'").fetchone()
+        active_upi = upi_res[0] if upi_res and upi_res[0] else "vinit-godara@fam"
+        msg = (f"<blockquote>🏦 <b>ᴜᴘɪ ᴘᴀʏᴍᴇɴᴛ ꜱᴇᴛᴛɪɴɢꜱ</b>\n\n"
+               f"🆔 <b>ᴄᴜʀʀᴇɴᴛ ᴜᴘɪ ɪᴅ:</b> <code>{active_upi}</code>\n\n"
+               f"<i>💡 This UPI ID is shown to every user on the deposit screen. "
+               f"Change it anytime — it updates instantly, no restart needed.</i></blockquote>")
+        btns = [
+            [style_btn("✏️ Change UPI ID", "adm_change_upi", "success", icon=5409098988156629257)],
+            [style_btn("💳 Auto-UPI / IMAP", "adm_autoupi", "primary", icon=5409271925014801629)],
+            [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129812419028982717)]
+        ]
+        return await event.edit(msg, buttons=btns)
+
     elif action_data == "autoupi" and has_perm(uid, 'p_settings'):
         dep_mode_res = cur.execute("SELECT value FROM settings WHERE key='deposit_mode'").fetchone()
         dep_mode = dep_mode_res[0] if dep_mode_res and dep_mode_res[0] else "auto"
@@ -723,6 +737,26 @@ async def admin_actions(event):
         ]
         return await event.edit(f"{P_CARD} <b>Manage Payment Methods</b>", buttons=btns)
 
+    elif action_data == "trustwallet" and has_perm(uid, 'p_settings'):
+        from database import get_trust_wallet_address, get_trust_wallet_qr
+        addr = get_trust_wallet_address() or "not set"
+        qr = get_trust_wallet_qr() or "auto-generated from address"
+        msg = (f"<blockquote>\U0001F4B0 <b>Trust Wallet / USDT (BEP-20)</b>\n\n"
+               f"\U0001F45B <b>Address:</b> <code>{html.escape(addr)}</code>\n"
+               f"\U0001F5BC <b>QR:</b> {html.escape(qr)}\n\n"
+               f"<i>These values are used for every USDT deposit and can be changed "
+               f"here anytime. Leave the QR empty to auto-generate one.</i></blockquote>")
+        btns = [
+            [style_btn("\u270F\uFE0F Change Address", "adm_walletaddr", "primary", icon=5409098988156629257)],
+            [style_btn("\U0001F5BC Change QR (photo / URL)", "adm_walletqr", "success", icon=5409320020058584473)],
+            [style_btn("\U0001F5D1 Remove QR (auto QR)", "adm_walletqr_clear", "danger", icon=6129888444245089008)],
+            [style_btn("\U0001F519 Back to Admin", "adm_adminmain", "danger", icon=6129888444245089008)],
+        ]
+        try:
+            return await event.edit(msg, buttons=btns)
+        except Exception:
+            return await bot.send_message(chat, msg, buttons=btns)
+
     elif action_data == "manageadmins" and is_super_admin(uid):
         return await manage_admins_menu(event)
 
@@ -778,6 +812,101 @@ async def admin_actions(event):
                 cur.execute("INSERT OR REPLACE INTO custom_countries (code, name, flag) VALUES (?,?,?)", (code, name, flag))
                 db.commit()
                 await conv.send_message(f"{P_YES} <b>Custom Country Added Successfully!</b>\n{flag} {name} (+{code})\n\n<i>It will now automatically be recognized when adding stock!</i>")
+
+            elif action_data == "walletaddr" and has_perm(uid, 'p_settings'):
+                from database import set_trust_wallet_address
+                addr = (await get_reply("\U0001F45B <b>Enter new USDT (BEP-20) wallet address:</b>\n<i>Example: 0x1234...abcd</i>")).text.strip()
+                if len(addr) < 20:
+                    await conv.send_message(f"{P_NO} That does not look like a valid wallet address.")
+                else:
+                    set_trust_wallet_address(addr)
+                    await conv.send_message(f"{P_YES} <b>Trust Wallet address updated!</b>\n<code>{html.escape(addr)}</code>")
+
+            elif action_data == "walletqr" and has_perm(uid, 'p_settings'):
+                from database import set_trust_wallet_qr
+                await conv.send_message("\U0001F5BC <b>Send the new QR photo, or paste an image URL.</b>\n\n<i>(Type /cancel to abort)</i>")
+                resp = await conv.get_response()
+                if resp.text == "/cancel":
+                    raise ValueError("Cancelled")
+                if resp.photo or resp.document:
+                    os.makedirs("assets", exist_ok=True)
+                    path = await resp.download_media("assets/trust_wallet_qr.png")
+                    if not path:
+                        await conv.send_message(f"{P_NO} Could not save that image, try again.")
+                    else:
+                        set_trust_wallet_qr(path)
+                        await conv.send_message(f"{P_YES} <b>Custom QR saved.</b>\nIt will be sent with every USDT invoice.")
+                elif resp.text and resp.text.strip().startswith("http"):
+                    set_trust_wallet_qr(resp.text.strip())
+                    await conv.send_message(f"{P_YES} <b>QR image URL saved.</b>")
+                else:
+                    await conv.send_message(f"{P_NO} Send a photo or a link starting with http.")
+
+            elif action_data == "walletqr_clear" and has_perm(uid, 'p_settings'):
+                from database import set_trust_wallet_qr
+                set_trust_wallet_qr("")
+                await conv.send_message(f"{P_YES} <b>Custom QR removed.</b> The bot will auto-generate a QR from the address.")
+
+            elif action_data == "addsrc" and has_perm(uid, 'p_settings'):
+                title = (await get_reply("\U0001F4BB <b>Source code title:</b>")).text.strip()
+                desc = (await get_reply("\U0001F4DD <b>Short description:</b>")).text.strip()
+                price_raw = (await get_reply(f"{P_INR} <b>Price in INR:</b>")).text.strip()
+                try:
+                    price = float(re.sub(r"[^0-9.]", "", price_raw) or "0")
+                except ValueError:
+                    price = 0.0
+                await conv.send_message("\U0001F4E6 <b>Now send the ZIP file</b> (as a document).\n\n<i>(Type /cancel to abort)</i>")
+                resp = await conv.get_response()
+                if resp.text == "/cancel":
+                    raise ValueError("Cancelled")
+                if not resp.document:
+                    await conv.send_message(f"{P_NO} That was not a file. Send the ZIP as a document.")
+                else:
+                    os.makedirs("assets/source_codes", exist_ok=True)
+                    safe = re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-").lower() or "source"
+                    dest = f"assets/source_codes/{safe}-{int(time.time())}.zip"
+                    path = await resp.download_media(dest)
+                    if not path:
+                        await conv.send_message(f"{P_NO} Could not save the file, try again.")
+                    else:
+                        cur.execute(
+                            "INSERT INTO source_codes (title, description, price, file_content, available) VALUES (?,?,?,?,1)",
+                            (title, desc, price, f"file:{path}"),
+                        )
+                        db.commit()
+                        new_id = cur.lastrowid
+                        await conv.send_message(
+                            f"{P_YES} <b>Source code added!</b>\n\n"
+                            f"\U0001F194 ID: <code>{new_id}</code>\n"
+                            f"\U0001F3F7 {html.escape(title)}\n"
+                            f"{P_INR} Price: <b>{price}</b>\n"
+                            f"\U0001F4E6 File: <code>{html.escape(path)}</code>\n\n"
+                            f"<i>Buyers receive this exact ZIP on purchase.</i>"
+                        )
+
+            elif action_data == "delsrc" and has_perm(uid, 'p_settings'):
+                rows = cur.execute("SELECT id, title, price FROM source_codes ORDER BY id DESC LIMIT 20").fetchall()
+                if not rows:
+                    await conv.send_message(f"{P_NO} No source codes in the store.")
+                else:
+                    listing = "\n".join(f"\u2022 <code>{r[0]}</code> — {html.escape(str(r[1]))} ({P_INR}{r[2]})" for r in rows)
+                    sid_raw = (await get_reply(f"\U0001F5D1 <b>Enter the ID to delete:</b>\n\n{listing}")).text.strip()
+                    try:
+                        sid = int(re.sub(r"[^0-9]", "", sid_raw) or "0")
+                    except ValueError:
+                        sid = 0
+                    row = cur.execute("SELECT title, file_content FROM source_codes WHERE id=?", (sid,)).fetchone()
+                    if not row:
+                        await conv.send_message(f"{P_NO} No source code with that ID.")
+                    else:
+                        if (row[1] or "").startswith("file:"):
+                            try:
+                                os.remove(row[1].split(":", 1)[1])
+                            except Exception:
+                                pass
+                        cur.execute("DELETE FROM source_codes WHERE id=?", (sid,))
+                        db.commit()
+                        await conv.send_message(f"{P_YES} <b>Deleted:</b> {html.escape(str(row[0]))}")
 
             elif action_data == "userinfo" and has_perm(uid, 'p_stats'):
                 t_uid = int((await get_reply(f"{P_ACC} <b>Enter User ID:</b>")).text)

@@ -68,6 +68,8 @@ async def admin_panel_handler(event):
         btns.append([style_btn("💳 Auto-UPI / IMAP", "adm_autoupi", "success", icon=5409271925014801629), style_btn("🌐 LZT Panel Settings", "adm_lzt_settings", "primary", icon=5409166771330494453)])
         btns.append([style_btn("⚙️ Search & Quality Settings", "adm_search_settings", "success", icon=5409320020058584473)])
         btns.append([style_btn("📧 Temp Mail (API)", "adm_tempmail", "primary", icon=5796209712009581332)])
+        btns.append([style_btn("💰 Trust Wallet / USDT", "adm_trustwallet", "success", icon=5409271925014801629), style_btn("🏦 UPI Settings", "adm_upi", "primary", icon=5409098988156629257)])
+        btns.append([style_btn("📦 Add Source Code (ZIP)", "adm_addsrc", "success", icon=5951663025336356427), style_btn("🗑 Delete Source Code", "adm_delsrc", "danger", icon=6129888444245089008)])
         btns.append([style_btn(f"🔄 Change Num Fee: ₹{chg_fee}", "adm_setchangefee", "success", icon=5409320020058584473), style_btn("Set USDT Rate", "adm_usdtrate", "primary", icon=5409098988156629257)])
         btns.append([style_btn("Payments", "adm_payments", "primary", icon=5409098988156629257), style_btn("Manage Admins", "adm_manageadmins", "primary", icon=5409098988156629257)])
         btns.append([style_btn("𝐁ᴀᴄᴋup Users", "adm_backupusr", "primary", icon=5409098988156629257), style_btn("Restore Users", "adm_restoreusr", "primary", icon=5409098988156629257)])

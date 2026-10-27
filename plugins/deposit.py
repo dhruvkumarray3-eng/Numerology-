@@ -5,7 +5,9 @@ import urllib.parse
 import io
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
-from database import cur, db, get_usdt_rate, update_balance, to_usd, get_log_channels_db, is_admin
+from database import (cur, db, get_usdt_rate, update_balance, to_usd, get_log_channels_db,
+                      is_admin, is_super_admin, get_trust_wallet_address, get_trust_wallet_qr,
+                      get_upi_id)
 from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_YES, P_WARN, P_INR, P_USDT, P_KEY, PE_CHECK, P_ACC, P_ID, LOG_CHANNEL_ID, LOG_CHANNELS, ADMIN_ID, SUPER_ADMINS, CWALLET_QR, CWALLET_ID, UPI_ID, bot, logger, BEP20_ADDRESS, TRUST_WALLET_ADDRESS, TRUST_WALLET_QR
 from utils.keyboards import style_btn
 from utils.states import deposit_input, waiting_proof, admin_dep_state, custom_dep_amt, get_user_lock
@@ -49,7 +51,7 @@ def _bep20_qr_bytes(address: str):
 
 async def send_bep20_invoice(uid, amt, rate_text=None):
     """Send the Trust Wallet USDT (BEP-20) address + QR to the user."""
-    address = (TRUST_WALLET_ADDRESS or BEP20_ADDRESS or "").strip()
+    address = get_trust_wallet_address()
     if not address:
         return await bot.send_message(
             uid,
@@ -81,9 +83,10 @@ async def send_bep20_invoice(uid, amt, rate_text=None):
     btns = [[Button.inline("\u274C \U0001D402\U0001D41A\U0001D427\U0001D41C\U0001D41E\U0001D425", "cancel_action")]]
 
     # 1) custom QR (URL or Telegram file_id) if owner provided one
-    if TRUST_WALLET_QR:
+    _qr = get_trust_wallet_qr()
+    if _qr:
         try:
-            await bot.send_file(uid, TRUST_WALLET_QR, caption=msg, buttons=btns)
+            await bot.send_file(uid, _qr, caption=msg, buttons=btns)
             return
         except Exception as exc:
             logger.warning(f"Custom Trust Wallet QR failed, generating one: {exc}")
@@ -197,7 +200,7 @@ def register_deposit(bot):
                 except Exception: await bot.send_message(uid, msg + f"\n\n🔗 QR Link: {CWALLET_QR}", buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
             elif method in ("AutoUPI", "UPI"):
                 upi_res = cur.execute("SELECT value FROM settings WHERE key='upi_id'").fetchone()
-                active_upi = upi_res[0] if upi_res and upi_res[0] else UPI_ID
+                active_upi = upi_res[0] if upi_res and upi_res[0] else get_upi_id()
                 
                 upi_url = f"upi://pay?pa={active_upi}&am={amt}&cu=INR"
                 instruction = "👉 <b>𝐀ғᴛᴇʀ 𝐏ᴀʏɪɴɢ:</b>\n𝐏ʟᴇᴀsᴇ ᴇɴᴛᴇʀ ʏᴏᴜʀ <b>12-ᴅɪɢɪᴛ 𝐔𝐓𝐑 / 𝐑ᴇғ 𝐍ᴏ.</b> (ᴏʀ 𝐓ʀᴀɴsᴀᴄᴛɪᴏɴ 𝐈𝐃) ʙᴇʟᴏᴡ:"
@@ -223,7 +226,7 @@ def register_deposit(bot):
                     await bot.send_message(uid, msg, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
             elif method == "ManualUPI":
                 upi_res = cur.execute("SELECT value FROM settings WHERE key='upi_id'").fetchone()
-                active_upi = upi_res[0] if upi_res and upi_res[0] else UPI_ID
+                active_upi = upi_res[0] if upi_res and upi_res[0] else get_upi_id()
                 
                 upi_url = f"upi://pay?pa={active_upi}&am={amt}&cu=INR"
                 instruction = "👉 <b>𝐒ᴇɴᴅ 𝐏ʀᴏᴏғ:</b>\n𝐏ʟᴇᴀsᴇ sᴇɴᴅ ᴀ ᴄʟᴇᴀʀ <b>𝐒ᴄʀᴇᴇɴsʜᴏᴛ</b> ᴏғ ᴛʜᴇ ᴘᴀʏᴍᴇɴᴛ ɴᴏᴡ. 𝐎ᴜʀ ᴀᴅᴍɪɴ ᴡɪʟʟ ᴠᴇʀɪғʏ ᴀɴᴅ ᴀᴘᴘʀᴏᴠᴇ ɪɴsᴛᴀɴᴛʟʏ."
@@ -396,8 +399,8 @@ def register_deposit(bot):
         # 2. If all channels failed or no channels configured -> Fallback to Admin PM
         if not delivered:
             try:
-                admin_rows = cur.execute("SELECT user_id FROM admins").fetchall()
-                admin_ids = [r[0] for r in admin_rows]
+                # Approval is Owner / Super-Admin only -> notify only them.
+                admin_ids = []
                 for sa in SUPER_ADMINS:
                     if sa and sa not in admin_ids:
                         admin_ids.append(sa)
@@ -417,8 +420,8 @@ def register_deposit(bot):
     @bot.on(events.CallbackQuery(pattern=r"^dep_acc\|"))
     async def cb_dep_acc(e):
         admin_uid = e.sender_id
-        if not is_admin(admin_uid):
-            return await e.answer("🚫 Access Denied! Only Bot Admins can approve deposits.", alert=True)
+        if not is_super_admin(admin_uid):
+            return await e.answer("🚫 Access Denied! Only the Owner / Super Admin can approve deposits.", alert=True)
             
         p = e.data.decode().split("|")
         dep_id, t_uid, method, a_type = p[1], int(p[2]), p[3], p[4]
@@ -463,8 +466,8 @@ def register_deposit(bot):
     @bot.on(events.CallbackQuery(pattern=r"^dep_rej\|"))
     async def cb_dep_rej(e):
         admin_uid = e.sender_id
-        if not is_admin(admin_uid):
-            return await e.answer("🚫 Access Denied! Only Bot Admins can reject deposits.", alert=True)
+        if not is_super_admin(admin_uid):
+            return await e.answer("🚫 Access Denied! Only the Owner / Super Admin can reject deposits.", alert=True)
             
         p = e.data.decode().split("|")
         dep_id, t_uid = p[1], int(p[2])
@@ -491,8 +494,8 @@ def register_deposit(bot):
     @bot.on(events.CallbackQuery(pattern=r"^dkp\|"))
     async def cb_dkp(e):
         uid = e.sender_id
-        if not is_admin(uid):
-            return await e.answer("🚫 Access Denied! Only Bot Admins can set deposit amounts.", alert=True)
+        if not is_super_admin(uid):
+            return await e.answer("🚫 Access Denied! Only the Owner / Super Admin can set deposit amounts.", alert=True)
             
         _, dep_id, action = e.data.decode().split("|")
         dep_id = int(dep_id)
@@ -553,7 +556,7 @@ async def cb_choose_bep20(e):
     uid = e.sender_id
     deposit_input[uid] = {"step": "wait_amt", "method": "BEP20"}
 
-    address = (TRUST_WALLET_ADDRESS or BEP20_ADDRESS or "").strip()
+    address = get_trust_wallet_address()
     addr_line = (f"\U0001F45B <b>\U0001D400\U0001D41D\U0001D41D\U0001D42B\U0001D41E\U0001D42C\U0001D42C:</b> <code>{address}</code>\n\n"
                  if address else
                  "\u26A0\uFE0F <b>Wallet address not set by owner yet.</b>\n\n")
@@ -582,7 +585,7 @@ def get_bep20_payment_text(amount_inr: float, usdt_amt: float) -> str:
         f"<blockquote>{PE_LIGHTNING} <b>BEP-20 (USDT) PAYMENT DETAILS</b></blockquote>\n\n"
         f"{rate_text}\n\n"
         f"📍 <b>Network:</b> BNB Smart Chain (BEP20)\n"
-        f"👛 <b>Address:</b> <code>{BEP20_ADDRESS}</code>\n\n"
+        f"👛 <b>Address:</b> <code>{get_trust_wallet_address()}</code>\n\n"
         f"<blockquote>{PE_GIFT} <b>AFTER PAYING:</b> Send a clear screenshot or TXN Hash here.</blockquote>"
     )
     return payment_text
