@@ -131,3 +131,29 @@ Real token supplied by the owner; every step exercised against api.lzt.market.
 ## Notes
 - [x] Token is **not** committed; set `LZT_API_KEY` on Railway or use
       Admin -> LZT Panel Settings -> Set API Key.
+
+## Round 10 — Dead listings & price changes (live sweep)
+- [x] Found ~60% of cheap listings answer `403 Session is invalid (logged out or
+      account is blocked)`; the bot only tried `items[:5]`, so purchases failed.
+- [x] `plugins/buy.py`: walk `items[:12]` instead of 5, log every skip, and
+      replace the misleading "trying another account" text when every attempt
+      was a dead listing.
+- [x] `utils/lzt.py`: map `Session is invalid` / `logged out` / `account is
+      blocked` -> "This listing's session is dead. Trying another account."
+- [x] `utils/lzt.py`: map `More than 20 errors occurred during account
+      validation` -> "This listing failed the market's account check."
+- [x] `utils/lzt.py`: `403 Account price has been changed ... costs now X` now
+      re-parses X and retries the purchase once with the new price.
+- [x] `utils/lzt.py`: fast-buy timeout 25s -> 90s (LZT checks the account
+      server-side before charging).
+- [x] `utils/lzt.py`: empty exception text no longer yields
+      `Network error during purchase: ` (falls back to the class name).
+- [x] `tests/test_buy_fixes.py`: 51 -> 56 checks (dead session, empty network
+      error, price-change retry).
+
+## Verification (Round 10)
+- [x] Live: Bangladesh sweep, first 10 listings dead, item 11 `268525181`
+      bought -> spam `-4`, phone `8801829481896`, DC 5, 256-byte key.
+- [x] `test_buy_fixes` 56 checks, `test_lzt_spec`, `test_lzt_errors` (48),
+      `test_search_settings` all green; `compileall` clean; `import main`,
+      `plugins.buy`, `utils.lzt` OK.

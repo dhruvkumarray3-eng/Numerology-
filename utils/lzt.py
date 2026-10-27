@@ -513,6 +513,25 @@ def friendly_buy_error(status, errors):
         return "The market is busy right now. Please try again in a moment."
     if any(k in low for k in ("not enough", "insufficient", "balance", "money")):
         return "The shop's LZT balance is too low to buy this account. Please top up the market wallet."
+    if "more than" in low and "errors" in low and "validation" in low:
+        # LZT ran its pre-sale account check and the listing failed it.
+        return "This listing failed the market's account check. Trying another account."
+    if "price has been changed" in low or "price changed" in low:
+        return "The listing price changed. Please search again for the current price."
+    if any(
+        k in low
+        for k in (
+            "session is invalid",
+            "session invalid",
+            "logged out",
+            "account is blocked",
+            "account blocked",
+            "session is dead",
+        )
+    ):
+        # LZT pre-checks the account before selling.  A dead listing is a
+        # per-item problem: the caller must simply try the next one.
+        return "This listing's session is dead. Trying another account."
     if "blacklist" in low or "black_list" in low:
         return "The seller has blacklisted this shop, so this account cannot be bought."
     if "limit" in low and any(k in low for k in ("check", "daily", "day", "purchase")):
@@ -1529,12 +1548,18 @@ class LZTClient:
 
         MAX_RETRIES = 100
         last_err = "Failed to purchase"
+        # LZT re-checks the price at purchase time.  If the seller bumped it,
+        # the API answers 403 "Account costs now 0.15. instead 0.09." -- we can
+        # simply retry once with the new price instead of failing the order.
+        price_retried = False
 
         try:
             async with aiohttp.ClientSession() as session:
                 for attempt in range(MAX_RETRIES):
+                    # LZT docs recommend long timeouts: fast-buy performs an
+                    # account check server-side and can take a while.
                     async with session.post(
-                        url, headers=self.get_headers(), json=payload, timeout=25
+                        url, headers=self.get_headers(), json=payload, timeout=90
                     ) as resp:
                         try:
                             data_json = await resp.json(content_type=None)
@@ -1610,6 +1635,29 @@ class LZTClient:
                                 "item_data": item,
                             }
 
+                        if (
+                            not price_retried
+                            and "price has been changed" in err_text
+                        ):
+                            import re as _re
+
+                            m = _re.search(
+                                r"costs now\s*([0-9]+(?:[.,][0-9]+)?)", err_text
+                            )
+                            if m:
+                                try:
+                                    new_price = float(m.group(1).replace(",", "."))
+                                except ValueError:
+                                    new_price = 0.0
+                                if new_price > 0:
+                                    logger.info(
+                                        f"LZT fast_buy {item_id}: price changed "
+                                        f"{payload.get('price')} -> {new_price}; retrying"
+                                    )
+                                    payload["price"] = new_price
+                                    price_retried = True
+                                    continue
+
                         # Some shops have several wallets.  If the caller pinned
                         # one that is empty, LZT answers "not enough money" even
                         # though the main wallet is funded -- retry once on the
@@ -1638,9 +1686,15 @@ class LZTClient:
                         return False, last_err
 
             return False, friendly_buy_error(429, last_err)
+        except asyncio.TimeoutError:
+            logger.error(f"LZT fast_buy timeout for {item_id}")
+            return False, "The market took too long to answer. Please try again."
         except Exception as e:
-            logger.error(f"LZT fast_buy error for {item_id}: {e}")
-            return False, f"Network error during purchase: {str(e)}"
+            # `str(e)` is empty for many aiohttp errors, which used to surface
+            # as "Network error during purchase: " with no reason at all.
+            detail = str(e) or type(e).__name__
+            logger.error(f"LZT fast_buy error for {item_id}: {detail}")
+            return False, f"Network error during purchase: {detail}"
 
     async def get_otp_code(self, item_id, since=None):
         """Fetch the newest login code for a purchased Telegram item.
