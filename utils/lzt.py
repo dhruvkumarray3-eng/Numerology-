@@ -494,6 +494,69 @@ def lzt_raw_to_string_session(raw_str):
     """Convert LZT auth key string (hex:dc_id) into a valid Telethon StringSession."""
     return extract_telethon_string_session({'raw': raw_str})
 
+
+def friendly_buy_error(status, errors):
+    """Translate LZT fast-buy errors into something a buyer can act on.
+
+    The market returns terse machine codes (``retry_request``,
+    ``not_enough_money`` ...).  Showing the raw string to a shop customer is
+    useless, so map the documented cases to clear English while keeping the
+    original text for logs.
+    """
+    raw = errors
+    if isinstance(errors, (list, tuple)):
+        raw = " ".join(str(e) for e in errors)
+    raw = str(raw or "").strip()
+    low = raw.lower()
+
+    if "retry_request" in low:
+        return "The market is busy right now. Please try again in a moment."
+    if any(k in low for k in ("not enough", "insufficient", "balance", "money")):
+        return "The shop's LZT balance is too low to buy this account. Please top up the market wallet."
+    if "blacklist" in low or "black_list" in low:
+        return "The seller has blacklisted this shop, so this account cannot be bought."
+    if "limit" in low and any(k in low for k in ("check", "daily", "day", "purchase")):
+        return "The daily purchase/check limit for this account has been reached. Try again later."
+    if "sold" in low:
+        return "This account was just sold to someone else. Please pick another one."
+    if "deleted" in low or "not found" in low or status == 404:
+        return "This listing no longer exists. Please search again."
+    if status == 401 or any(k in low for k in ("unauthorized", "invalid token", "token")):
+        return "The LZT API key is invalid or expired. Please update it in the admin panel."
+    if status == 403:
+        return "The market refused this purchase (forbidden). Please try another account."
+    if status == 429:
+        return "Too many requests to the market. Please wait a few seconds and try again."
+    if raw:
+        return raw
+    return f"Purchase failed (HTTP {status})."
+
+
+def post_buy_spam_ok(mode, post_sb):
+    """Does a freshly bought account satisfy the requested spam mode?
+
+    LZT encodes ``telegram_spam_block`` as:
+      * ``-3``        -> real Telegram spam block
+      * ``> 0``       -> spam block for that many days
+      * ``0``         -> clean
+      * ``-1/-4/None``-> unknown / geo-only block
+
+    A clean account (``0``) MUST be accepted in ``nonspam`` mode.  The old
+    check treated it as spam and discarded every successful purchase.
+    """
+    try:
+        sb = int(post_sb) if post_sb is not None else None
+    except (TypeError, ValueError):
+        sb = None
+
+    is_real_spam = sb == -3 or (sb is not None and sb > 0)
+    if mode == "nonspam" and is_real_spam:
+        return False
+    if mode == "spam" and sb == 0:
+        return False
+    return True
+
+
 class LZTClient:
     # Class-level defaults: every attribute used by the client must exist even
     # if __init__ is bypassed (e.g. an object restored from a cache/old pickle).
@@ -914,7 +977,25 @@ class LZTClient:
             price_rub = item.get("rub_price")
             if price_rub is None:
                 price_rub = item.get("price", 0)
-            price_rub = float(price_rub or 0)
+            try:
+                price_rub = float(price_rub or 0)
+            except (TypeError, ValueError):
+                price_rub = 0.0
+
+            # ``price`` is the listing price in the market currency that
+            # fast-buy expects back in its ``price`` argument.  ``rub_price``
+            # is only the RUB equivalent.  Never invent a "0.1" fallback: a
+            # wrong price is the most common cause of a rejected purchase.
+            price_raw = item.get("price")
+            if price_raw is None:
+                price_raw = item.get("rub_price")
+            try:
+                price_num = float(price_raw)
+            except (TypeError, ValueError):
+                price_num = 0.0
+            if price_num <= 0:
+                price_num = price_rub
+            price_str = ("%.2f" % price_num).rstrip("0").rstrip(".") if price_num else ""
 
             pwd_val = (
                 item.get("telegram_password_value")
@@ -995,8 +1076,8 @@ class LZTClient:
             return {
                 "item_id": item.get("item_id"),
                 "price_rub": price_rub,
-                "price_usd": float(item.get("price", 0) or 0),
-                "price_str": str(item.get("price", "0.1")),
+                "price_usd": price_num,
+                "price_str": price_str,
                 "balance_id": balance_id,
                 "phone": item.get("telegram_phone") or item.get("phone") or "Hidden",
                 "year": item_year,
@@ -1343,24 +1424,41 @@ class LZTClient:
             on the search list, never on the purchase response).
         """
         url = f"{LZT_BASE_URL}/{item_id}/fast-buy"
+
+        # Resolve the wallet id.  It must be an integer per the OpenAPI
+        # schema; a string id makes LZT reject the purchase with a 400.
+        try:
+            if balance_id is not None:
+                balance_id = int(str(balance_id).strip())
+        except (TypeError, ValueError):
+            balance_id = None
         if balance_id is None:
             # Never let a balance hiccup block the purchase itself.
             try:
                 bid, _, _ = await asyncio.wait_for(
-                    self.get_balance_info(), timeout=20
+                    self.get_balance_info(max_age=0), timeout=20
                 )
-                balance_id = bid
+                balance_id = int(str(bid).strip()) if bid is not None else None
             except Exception as exc:
                 logger.warning(f"LZT balance lookup before fast-buy failed: {exc}")
                 balance_id = None
 
-        # `price` must be a number per the OpenAPI schema.
+        # `price` must be a JSON number per the OpenAPI schema.  If we do not
+        # have a trustworthy positive price we omit it entirely -- the
+        # reference client (market.purchasing.fast(item_id=...)) does the same
+        # and LZT then charges the listing's current price.
+        price_num = None
         try:
-            price_num = float(price_str)
+            if price_str not in (None, ""):
+                candidate = float(price_str)
+                if candidate > 0:
+                    price_num = candidate
         except (TypeError, ValueError):
-            price_num = price_str
+            price_num = None
 
-        payload = {"price": price_num}
+        payload = {}
+        if price_num is not None:
+            payload["price"] = price_num
         if balance_id:
             payload["balance_id"] = balance_id
 
@@ -1381,6 +1479,10 @@ class LZTClient:
                         errors = data_json.get("errors") or []
                         if isinstance(errors, str):
                             errors = [errors]
+                        elif isinstance(errors, dict):
+                            errors = list(errors.values())
+                        elif not isinstance(errors, (list, tuple)):
+                            errors = [errors]
                         err_text = " ".join(str(e) for e in errors).lower()
 
                         # Documented transient condition: repeat the same
@@ -1395,7 +1497,7 @@ class LZTClient:
                                 continue
                             break
 
-                        if resp.status == 200 and not errors:
+                        if resp.status == 200 and not errors and data_json.get("item"):
                             item = data_json.get("item", {}) or {}
                             login_data = item.get("loginData") or {}
 
@@ -1429,14 +1531,14 @@ class LZTClient:
                                 "item_data": item,
                             }
 
-                        last_err = (
-                            errors[0]
-                            if isinstance(errors, list) and errors
-                            else (f"HTTP {resp.status}" if resp.status != 200 else "Failed to purchase")
+                        last_err = friendly_buy_error(resp.status, errors)
+                        logger.warning(
+                            f"LZT fast_buy {item_id} failed: HTTP {resp.status} "
+                            f"errors={errors!r} body={str(data_json)[:200]}"
                         )
-                        return False, f"{last_err}"
+                        return False, last_err
 
-            return False, f"{last_err}"
+            return False, friendly_buy_error(429, last_err)
         except Exception as e:
             logger.error(f"LZT fast_buy error for {item_id}: {e}")
             return False, f"Network error during purchase: {str(e)}"

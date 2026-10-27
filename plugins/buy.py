@@ -28,7 +28,7 @@ from config import (
 from utils.keyboards import style_btn, matches_menu
 from utils.markup import format_dual_from_inr, format_dual_price
 from utils.states import active_orders, session_buy_state, get_user_lock
-from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code
+from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code, post_buy_spam_ok
 from utils import stock_details as stock_card
 
 try:
@@ -858,12 +858,24 @@ async def process_purchase(event, mode, country, year, price_str):
                 if ok:
                     bought_data = buy_result.get("item_data") or {}
                     post_sb = bought_data.get("telegram_spam_block")
-                    if mode == 'nonspam' and post_sb is not None and post_sb != -1:
-                        continue
-                    if mode == 'spam' and post_sb == -1:
+                    # Only reject *known* real spam.  See post_buy_spam_ok():
+                    # a clean account has flag 0 and must be accepted.
+                    if not post_buy_spam_ok(mode, post_sb):
+                        logger.warning(
+                            f"Bought item {item_id} but it does not match mode "
+                            f"{mode!r} (spam flag={post_sb}); trying next item"
+                        )
                         continue
 
                     str_sess = buy_result.get("string_session")
+                    if not str_sess:
+                        last_err = (
+                            "The market returned an account without a usable "
+                            "session. Please try another account."
+                        )
+                        logger.warning(
+                            f"Bought item {item_id} but no StringSession could be built"
+                        )
                     if str_sess:
                         try:
                             from telethon.sessions import StringSession
@@ -889,7 +901,7 @@ async def process_purchase(event, mode, country, year, price_str):
                 async with get_user_lock(uid):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
-                return await event.edit(f"❌ <b>Error initializing account.</b> {last_err or 'Session unavailable.'}\nYour money has been refunded.")
+                return await event.edit(f"❌ <b>Purchase failed.</b>\n\n{last_err or 'No usable account session was returned.'}\n\nYour money has been refunded.")
 
             item_id = bought_info['item_id']
             twofa_pass = bought_info.get("twofa") or "None"
