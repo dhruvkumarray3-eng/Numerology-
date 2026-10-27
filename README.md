@@ -183,9 +183,26 @@ The bot prints `🚀 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!` and then 
 2. `LZTClient.search_items()` calls `GET /telegram` with `country[]`, `spam`, `allow_geo_spamblock`, `password`, `premium`, `email`, `dc_id[]`, `min_stars`, `session_age` and price bounds. Pages are followed via `nextCursor`/`after`.
 3. Each item is normalised by `_parse_item()`: price, phone, year, 2FA, email, premium, stars, DC and the spam flag (`-3` real spam, `>0` spam days, `0` clean, `-1/-4/None` unknown/geo).
 4. On confirm, `process_purchase()` debits the wallet and calls `LZTClient.fast_buy(item_id, price, balance_id)`.
-5. `fast_buy()` sends `POST /{item_id}/fast-buy` with a **numeric** `price` and an **integer** `balance_id`. If the price is unknown it omits `price` so LZT charges the current listing price. `retry_request` is retried up to 100 times with backoff.
-6. On success, the bot reads `item.login` (phone) and `item.loginData.password` (2FA), builds a `StringSession` from `loginData.raw` / `loginData.login` + `telegram_dc_id`, verifies `is_user_authorized()`, and shows the order card.
-7. Any failure (market error, dead session, mismatch) refunds the buyer's wallet and reports a clear reason.
+5. `fast_buy()` sends `POST /{item_id}/fast-buy` with a **numeric** `price`. `balance_id` is **optional** and is only sent when the caller explicitly supplies a funded wallet; otherwise LZT charges the main market balance. If the price is unknown the field is omitted so LZT charges the current listing price. `retry_request` is retried up to 100 times with backoff, and an "insufficient funds" reply on a pinned wallet is retried once without `balance_id`.
+6. On success, the bot takes the phone from `item.telegram_phone` (never from `item.login`, which holds the 512-character auth-key hex for Telegram items), the 2FA password from `item.loginData.password`, builds a `StringSession` from `loginData.raw` / `loginData.login` + `telegram_dc_id`, verifies `is_user_authorized()`, and shows the order card.
+7. OTP retrieval (`GET /{item_id}/telegram-login-code`) parses the `codes` **array**, picks the newest entry and ignores codes received before the order started, so a buyer never sees an expired code.
+8. Any failure (market error, dead session, mismatch) refunds the buyer's wallet and reports a clear reason.
+
+### Verified against the live market
+
+The flow above was exercised end to end against `api.lzt.market` with a real token and real purchases:
+
+| Check | Result |
+| --- | --- |
+| `GET /me` | 200, account resolved, main wallet read in RUB + USD |
+| `GET /telegram?country[]=IN` | 200, 76k+ listings (ISO-2 **uppercase** required; lowercase or full names return 0) |
+| `POST /{id}/fast-buy` without `balance_id` | 200, `item_state: paid` |
+| `POST /{id}/fast-buy` with an empty sub-wallet id | 403 "not enough money" -> automatic retry without the id -> 200 |
+| `StringSession` from the purchase payload | parses, correct DC and 256-byte auth key |
+| `GET /{id}/telegram-login-code` | 200, `codes` array parsed, stale codes filtered |
+| `check_connection()` | 200, shows `387.00 RUB (~4.81 USD)` |
+
+`tests/live_lzt_check.py` repeats the read-only part of that sweep (it never spends money).
 
 ### Purchase troubleshooting
 
@@ -198,6 +215,8 @@ The bot prints `🚀 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!` and then 
 | "This account was just sold" | Listing disappeared between search and buy | The bot automatically tries the next item |
 | "Out of stock (no local stock and no LZT market key)" | No local stock and live search disabled/unconfigured | Set `LZT_API_KEY` and enable live search |
 | "No live accounts found" | Token invalid, filters too strict, or country has no stock | Check Admin → LZT diagnostics; relax filters |
+| Search returns 0 for every country | `country[]` must be ISO-2 **uppercase** (`IN`, not `in` or `India`) | Handled by `get_lzt_code2()`; do not send raw country names |
+| "The shop's LZT balance is too low" although the account is funded | An empty sub-wallet id was pinned | `fast_buy()` now omits `balance_id` and retries automatically |
 
 A regression test (`tests/test_buy_fixes.py`) covers the clean-account (`telegram_spam_block == 0`) case that previously caused every non-spam purchase to be discarded with a refund.
 

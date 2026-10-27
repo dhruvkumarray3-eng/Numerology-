@@ -967,7 +967,7 @@ async def fetch_order_otp(order):
 
     if order.get('is_lzt') and order.get('item_id'):
         try:
-            lzt_code = await lzt_client.get_otp_code(order['item_id'])
+            lzt_code = await lzt_client.get_otp_code(order['item_id'], since=start_time)
             if lzt_code:
                 code = extract_otp_from_text(str(lzt_code)) or str(lzt_code).strip()
                 if code and re.match(r"^\d{4,8}$", code): return code

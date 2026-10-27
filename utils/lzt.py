@@ -564,6 +564,7 @@ class LZTClient:
     _balance_rub = 0.0
     _balance_usd = 0.0
     _balance_cache_ts = 0.0
+    _balance_fetched = False
     last_total = 0
     last_fallback = False
     country_totals = {}
@@ -593,6 +594,7 @@ class LZTClient:
         self._balance_rub = 0.0
         self._balance_usd = 0.0
         self._balance_cache_ts = 0.0
+        self._balance_fetched = False
 
     def get_token(self):
         try:
@@ -658,16 +660,26 @@ class LZTClient:
                             data = {}
                         user = data.get("user", {}) or {}
                         username = user.get("username") or "Unknown"
-                        balance = user.get("balance")
-                        currency = user.get("currency", "RUB")
+                        # /me returns the main wallet in RUB (`balance`) plus a
+                        # USD conversion (`convertedBalance`).  The old code
+                        # labelled the RUB amount with `currency` ("usd"), so a
+                        # 387 RUB wallet looked like $387.  Show both, clearly.
+                        try:
+                            balance_rub = float(user.get("balance") or 0)
+                        except (TypeError, ValueError):
+                            balance_rub = 0.0
+                        try:
+                            balance_usd = float(user.get("convertedBalance") or 0)
+                        except (TypeError, ValueError):
+                            balance_usd = 0.0
                         lines = [
                             "\u2705 <b>Connected to LZT Market!</b>",
                             f"\U0001F464 User: <b>{html_escape(username)}</b>",
                         ]
-                        if balance is not None:
+                        if balance_rub or balance_usd:
                             lines.append(
-                                f"\U0001F4B0 Balance: <b>{html_escape(str(balance))} "
-                                f"{html_escape(str(currency))}</b>"
+                                f"\U0001F4B0 Balance: <b>{balance_rub:.2f} RUB</b> "
+                                f"(~{balance_usd:.2f} USD)"
                             )
                         return True, "\n".join(lines)
 
@@ -795,7 +807,7 @@ class LZTClient:
         """
         now = time.monotonic()
         if (
-            self._balance_id is not None
+            self._balance_fetched
             and max_age
             and (now - self._balance_cache_ts) < max_age
         ):
@@ -822,30 +834,81 @@ class LZTClient:
                 async with resp:
                     if resp.status == 200:
                         data = await resp.json(content_type=None)
-                        user = data.get("user", {})
-                        balances = user.get("balances", [])
+                        user = data.get("user", {}) or {}
+                        balances = user.get("balances") or []
 
+                        # ------------------------------------------------------------------
+                        # Balance parsing (verified live against api.lzt.market).
+                        #
+                        # A real /me payload looks like:
+                        #   balance          = 413.00      <- main wallet (RUB)
+                        #   currency         = "usd"       <- display currency only
+                        #   convertedBalance = 5.14        <- main wallet in USD
+                        #   balances         = [{type: "account", balance_id: 264649,
+                        #                        balance: "0.00", convertedBalance: 0,
+                        #                        fullTitle: "Balance for buying accounts ($0)"}]
+                        #
+                        # The old code picked the FIRST `type == "account"` entry and
+                        # reported its (empty) amounts, then fast_buy() sent that
+                        # balance_id.  LZT charged the empty sub-wallet and answered
+                        # 403 "You do not have enough money to buy this product" even
+                        # though the main wallet was funded -- every purchase failed.
+                        #
+                        # Rules now:
+                        #   * sum every account balance, but
+                        #   * only expose a balance_id when that wallet actually holds
+                        #     money; otherwise leave it None so fast_buy() omits the
+                        #     field and LZT charges the main wallet (verified: HTTP 200).
+                        #   * fall back to the main wallet numbers when the sub-wallets
+                        #     are empty, so the UI shows the real available amount.
+                        # ------------------------------------------------------------------
                         balance_id = None
                         balance_rub = 0.0
                         balance_usd = 0.0
 
                         for b in balances:
-                            if b.get("type") == "account":
+                            if not isinstance(b, dict):
+                                continue
+                            if b.get("type") != "account":
+                                continue
+                            try:
+                                amt = float(b.get("balance") or 0)
+                            except (TypeError, ValueError):
+                                amt = 0.0
+                            try:
+                                conv = float(b.get("convertedBalance") or 0)
+                            except (TypeError, ValueError):
+                                conv = 0.0
+                            balance_rub += amt
+                            balance_usd += conv
+                            if amt > 0 and balance_id is None:
                                 balance_id = b.get("balance_id")
-                                balance_rub = float(b.get("balance", 0))
-                                balance_usd = float(
-                                    b.get("convertedBalance", 0)
-                                )
-                                break
 
-                        if not balance_id:
-                            balance_usd = float(user.get("balance", 0))
-                            balance_rub = balance_usd * 84.0
+                        try:
+                            main_rub = float(user.get("balance") or 0)
+                        except (TypeError, ValueError):
+                            main_rub = 0.0
+                        try:
+                            main_usd = float(user.get("convertedBalance") or 0)
+                        except (TypeError, ValueError):
+                            main_usd = 0.0
+
+                        if main_rub > balance_rub:
+                            balance_rub = main_rub
+                        if main_usd > balance_usd:
+                            balance_usd = main_usd
+
+                        if balance_id is None and balance_usd <= 0 and balance_rub <= 0:
+                            logger.warning(
+                                "LZT balance is empty (main and sub-wallets); "
+                                "purchases will fail until the market wallet is topped up"
+                            )
 
                         self._balance_id = balance_id
                         self._balance_rub = balance_rub
                         self._balance_usd = balance_usd
                         self._balance_cache_ts = time.monotonic()
+                        self._balance_fetched = True
                         return balance_id, balance_rub, balance_usd
 
                     # Any non-200 (401 bad key, 402 subscription, 429 rate
@@ -861,7 +924,7 @@ class LZTClient:
                     logger.error(
                         f"LZT profile endpoint returned HTTP {resp.status}: {body[:200]}"
                     )
-                    if self._balance_id is not None:
+                    if self._balance_fetched:
                         return (
                             self._balance_id,
                             self._balance_rub,
@@ -871,7 +934,7 @@ class LZTClient:
 
         except Exception as e:
             logger.error(f"LZT balance info error: {e}")
-            if self._balance_id is not None:
+            if self._balance_fetched:
                 return self._balance_id, self._balance_rub, self._balance_usd
             return None, 0.0, 0.0
 
@@ -1427,21 +1490,23 @@ class LZTClient:
 
         # Resolve the wallet id.  It must be an integer per the OpenAPI
         # schema; a string id makes LZT reject the purchase with a 400.
+        #
+        # IMPORTANT (verified live against api.lzt.market):
+        #   POST /{id}/fast-buy {"price": 0.09}                    -> 200 OK
+        #   POST /{id}/fast-buy {"price": 0.09, "balance_id": 264649} -> 403
+        #        "You do not have enough money to buy this product."
+        #
+        # `balance_id` is an *optional* tag for a specific sub-wallet.  The
+        # old code auto-filled it from /me, which returned the empty
+        # "Balance for buying accounts ($0)" wallet, so every purchase was
+        # rejected even though the main wallet was funded.  We now only send
+        # a wallet id that the caller explicitly provides, and we retry once
+        # without it if LZT reports insufficient funds.
         try:
             if balance_id is not None:
                 balance_id = int(str(balance_id).strip())
         except (TypeError, ValueError):
             balance_id = None
-        if balance_id is None:
-            # Never let a balance hiccup block the purchase itself.
-            try:
-                bid, _, _ = await asyncio.wait_for(
-                    self.get_balance_info(max_age=0), timeout=20
-                )
-                balance_id = int(str(bid).strip()) if bid is not None else None
-            except Exception as exc:
-                logger.warning(f"LZT balance lookup before fast-buy failed: {exc}")
-                balance_id = None
 
         # `price` must be a JSON number per the OpenAPI schema.  If we do not
         # have a trustworthy positive price we omit it entirely -- the
@@ -1502,12 +1567,26 @@ class LZTClient:
                             login_data = item.get("loginData") or {}
 
                             # Phone: the purchase response uses `login`.
-                            phone = (
-                                item.get("login")
-                                or item.get("telegram_phone")
-                                or item.get("phone")
-                                or ""
-                            )
+                            #
+                            # CAREFUL: for Telegram items LZT puts the *auth
+                            # key hex* (512 chars) in `login` and the actual
+                            # number in `telegram_phone`.  The old code used
+                            # `login` first, so the shop saved a 512-char hex
+                            # blob as the phone number (broken order cards,
+                            # filenames and OTP lookups).
+                            def _looks_like_phone(v):
+                                s = str(v or "").strip().lstrip("+")
+                                return s.isdigit() and 6 <= len(s) <= 15
+
+                            phone = ""
+                            for cand in (
+                                item.get("telegram_phone"),
+                                item.get("phone"),
+                                item.get("login"),
+                            ):
+                                if _looks_like_phone(cand):
+                                    phone = str(cand).strip()
+                                    break
                             str_sess = extract_telethon_string_session(item)
 
                             # 2FA password lives in loginData.password.
@@ -1531,6 +1610,26 @@ class LZTClient:
                                 "item_data": item,
                             }
 
+                        # Some shops have several wallets.  If the caller pinned
+                        # one that is empty, LZT answers "not enough money" even
+                        # though the main wallet is funded -- retry once on the
+                        # main wallet by dropping the tag.
+                        if (
+                            "balance_id" in payload
+                            and resp.status in (400, 402, 403)
+                            and any(
+                                k in err_text
+                                for k in ("not enough", "insufficient", "money", "balance")
+                            )
+                        ):
+                            logger.warning(
+                                f"LZT fast_buy {item_id}: wallet "
+                                f"{payload['balance_id']} has no funds; retrying "
+                                "on the main wallet"
+                            )
+                            payload.pop("balance_id", None)
+                            continue
+
                         last_err = friendly_buy_error(resp.status, errors)
                         logger.warning(
                             f"LZT fast_buy {item_id} failed: HTTP {resp.status} "
@@ -1543,7 +1642,13 @@ class LZTClient:
             logger.error(f"LZT fast_buy error for {item_id}: {e}")
             return False, f"Network error during purchase: {str(e)}"
 
-    async def get_otp_code(self, item_id):
+    async def get_otp_code(self, item_id, since=None):
+        """Fetch the newest login code for a purchased Telegram item.
+
+        ``since`` (unix timestamp) drops stale codes: LZT keeps every code
+        ever received by the account, and returning one from before the
+        purchase would hand the buyer an expired OTP.
+        """
         url = f"{LZT_BASE_URL}/{item_id}/telegram-login-code"
 
         try:
@@ -1557,21 +1662,53 @@ class LZTClient:
                     data = await resp.json(content_type=None)
 
                     if resp.status == 200:
-                        # Official TgCodeModel: {"codes": {"code": "...", "date": ...}, "item": {...}}
-                        codes = data.get("codes") or {}
-                        code = (
-                            (codes.get("code") if isinstance(codes, dict) else None)
-                            or data.get("code")
-                            or data.get("sms_code")
-                            or data.get("telegram_code")
-                        )
+                        # Official TgCodeModel: {"codes": [...], "item": {...}}
+                        #
+                        # LIVE payload (verified against api.lzt.market):
+                        #   "codes": [{"code": "88825", "date": 1792854965}, ...]
+                        # i.e. a LIST, newest first.  The old code only handled
+                        # a dict (`codes.get("code")`), so every OTP lookup
+                        # returned None even though the code was right there.
+                        codes = data.get("codes")
+                        code = None
+                        if isinstance(codes, list) and codes:
+                            entries = [c for c in codes if isinstance(c, dict) and c.get("code")]
+                            if entries:
+                                # Prefer the newest code when dates are present.
+                                try:
+                                    entries.sort(key=lambda c: int(c.get("date") or 0), reverse=True)
+                                except Exception:
+                                    pass
+                                if since:
+                                    # Ignore codes received before this order
+                                    # started (60s tolerance for clock skew).
+                                    try:
+                                        cutoff = float(since) - 60.0
+                                        fresh = [
+                                            c for c in entries
+                                            if float(c.get("date") or 0) >= cutoff
+                                        ]
+                                        entries = fresh
+                                    except Exception:
+                                        pass
+                                if entries:
+                                    code = entries[0].get("code")
+                        elif isinstance(codes, dict):
+                            code = codes.get("code")
+                        if not code:
+                            code = (
+                                data.get("code")
+                                or data.get("sms_code")
+                                or data.get("telegram_code")
+                            )
 
                         if code:
                             return str(code).strip()
 
-                    logger.error(
-                        f"LZT OTP error {resp.status}: {data}"
-                    )
+                    # HTTP 200 without a code simply means "no new SMS yet"
+                    # while the bot is polling -- not an error.
+                    log = logger.debug if resp.status == 200 else logger.error
+                    log(f"LZT OTP {resp.status}: {str(data)[:200]}")
 
         except Exception as e:
             logger.error(
