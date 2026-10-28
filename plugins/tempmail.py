@@ -173,7 +173,7 @@ def _inbox_text(email: str, expires: int, messages: List[dict]) -> str:
         head += f"🟢 <b>{len(messages)} message(s)</b> received.\n"
     else:
         head += "🟡 <b>Waiting for incoming mail.</b>\n"
-        head += "QuickCodes is monitoring your temporary inbox for new messages.\n"
+        head += "Vendor Sellings is monitoring your temporary inbox for new messages.\n"
 
     head += (
         "\n⚠️ <b>IMPORTANT:</b>\n"
