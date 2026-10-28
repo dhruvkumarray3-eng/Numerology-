@@ -107,7 +107,8 @@ def setup_db():
         description TEXT,
         price REAL,
         file_content TEXT,
-        available INTEGER DEFAULT 1
+        available INTEGER DEFAULT 1,
+        stock INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS panels (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,7 +116,8 @@ def setup_db():
         description TEXT,
         price REAL,
         panel_content TEXT,
-        available INTEGER DEFAULT 1
+        available INTEGER DEFAULT 1,
+        stock INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS redeemed_transactions (
         email_msg_id TEXT PRIMARY KEY,
@@ -154,6 +156,18 @@ def setup_db():
     db.commit()
 
 setup_db()
+
+
+def _migrate_catalog_stock():
+    """Add explicit inventory counters; existing listings start at zero."""
+    for table in ("source_codes", "panels"):
+        columns = {row[1] for row in cur.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "stock" not in columns:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN stock INTEGER NOT NULL DEFAULT 0")
+    db.commit()
+
+
+_migrate_catalog_stock()
 
 
 def _migrate_remove_demo_catalog_items():
@@ -738,14 +752,14 @@ def set_upi_id(value):
 
 def get_source_codes():
     return cur.execute(
-        "SELECT id, title, description, price, file_content, available "
+        "SELECT id, title, description, price, file_content, available, stock "
         "FROM source_codes WHERE available=1 ORDER BY id DESC"
     ).fetchall()
 
 def get_panels():
     # Cheapest-first so users always see the lowest rates first.
     return cur.execute(
-        "SELECT id, title, description, price, panel_content, available "
+        "SELECT id, title, description, price, panel_content, available, stock "
         "FROM panels WHERE available=1 ORDER BY price ASC, id DESC"
     ).fetchall()
 

@@ -1,17 +1,18 @@
 import html
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
-from database import cur, db, get_panels, is_admin
+from database import cur, db, get_panels
 from utils.states import get_user_lock
-from config import P_INR, P_NO, PE_CHECK, PE_GIFT, logger
+from config import P_INR, PE_CHECK, logger
 from utils.keyboards import style_btn
 
 async def show_panels_menu(event):
     pnls = get_panels()
     btns = []
-    for idx, (p_id, title, desc, price, panel_link, avail) in enumerate(pnls):
+    for idx, (p_id, title, desc, price, panel_link, avail, stock) in enumerate(pnls):
         tag = " 💸" if idx == 0 else ""
-        btns.append([style_btn(f"{title} - {P_INR}{price}{tag}", f"pnl_info|{p_id}", "success" if idx == 0 else "primary")])
+        stock_label = f"📦 {int(stock)}" if int(stock or 0) > 0 else "🔴 OUT OF STOCK"
+        btns.append([style_btn(f"{str(title)[:30]} - {P_INR}{price}{tag} · {stock_label}", f"pnl_info|{p_id}", "success" if idx == 0 else "primary", icon="panel")])
         
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)])
     
@@ -24,7 +25,7 @@ async def show_panels_menu(event):
                "<i>𝐒ᴇʟᴇᴄᴛ ᴛʜᴇ ᴘᴀɴᴇʟ ʏᴏᴜ ᴡᴀɴɴᴀ ʙᴜʏ:</i></blockquote>")
     else:
         msg = ("<blockquote>🌌 <b>𝐏ᴀɴᴇʟ 𝐒ᴛᴏʀᴇ</b>\n\n"
-               "No panels are available yet. Please check back after the admin adds a listing.</blockquote>")
+               "No panels are currently visible. Please check back later.</blockquote>")
            
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -34,23 +35,24 @@ async def show_panels_menu(event):
 
 async def show_panel_info(event, panel_id):
     row = cur.execute(
-        "SELECT id, title, description, price, panel_content FROM panels "
+        "SELECT id, title, description, price, panel_content, stock FROM panels "
         "WHERE id=? AND available=1", (panel_id,)
     ).fetchone()
     if not row:
         return await event.answer("❌ Panel not found.", alert=True)
         
-    p_id, title, desc, price, panel_link = row
+    p_id, title, desc, price, panel_link, stock = row
     msg = (f"<blockquote>🌌 <b>{html.escape(title)}</b>\n\n"
            f"📝 <b>𝐃ᴇsᴄʀɪᴘᴛɪᴏɴ:</b>\n{html.escape(desc)}\n\n"
            f"💰 <b>𝐏ʀɪᴄᴇ:</b> <code>{P_INR}{price}</code>\n"
+           f"📦 <b>Stock:</b> <code>{int(stock or 0)}</code>\n"
            f"⚡ <b>𝐃ᴇʟɪᴠᴇʀʏ:</b> <code>Instant Access & Setup Guide</code>\n\n"
-           f"<b>𝐀ʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ?</b></blockquote>")
+           f"{('<b>Out of stock. Please contact the admin.</b>' if int(stock or 0) <= 0 else '<b>𝐀ʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ?</b>')}</blockquote>")
            
-    btns = [
-        [style_btn("✅ 𝐂ᴏɴғɪʀᴍ 𝐁ᴜʏ", f"pnl_cf|{p_id}", "success", icon=5409320020058584473)],
-        [style_btn("🔙 𝐁ᴀᴄᴋ", b"panels_menu", "danger", icon=6129812419028982717)]
-    ]
+    btns = []
+    if int(stock or 0) > 0:
+        btns.append([style_btn("✅ 𝐂ᴏɴғɪʀ𝐦 𝐁ᴜʏ", f"pnl_cf|{p_id}", "success", icon="buy")])
+    btns.append([style_btn("🔙 𝐁ᴀᴄᴋ", b"panels_menu", "danger", icon=6129812419028982717)])
     try: await event.edit(msg, buttons=btns)
     except MessageNotModifiedError: pass
 
@@ -70,20 +72,33 @@ def register_panels(bot):
         panel_id = int(e.pattern_match.group(1).decode())
         
         row = cur.execute(
-            "SELECT id, title, description, price, panel_content FROM panels "
+            "SELECT id, title, description, price, panel_content, stock FROM panels "
             "WHERE id=? AND available=1", (panel_id,)
         ).fetchone()
         if not row:
             return await e.answer("❌ Panel not found.", alert=True)
             
-        p_id, title, desc, price, panel_link = row
+        p_id, title, desc, price, panel_link, stock = row
+        if int(stock or 0) <= 0:
+            return await e.answer("📦 This panel is out of stock. Please contact the admin.", alert=True)
         
         async with get_user_lock(uid):
+            current = cur.execute(
+                "SELECT stock, available FROM panels WHERE id=?", (p_id,)
+            ).fetchone()
             bal_row = cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()
+            if not current or not current[1] or int(current[0] or 0) <= 0:
+                return await e.answer("📦 This panel is out of stock. Please contact the admin.", alert=True)
             if not bal_row or bal_row[0] < price:
                 return await e.answer(f"❌ Insufficient Balance! Price: ₹{price}, Your Balance: ₹{bal_row[0] if bal_row else 0}", alert=True)
-                
-            cur.execute("UPDATE users SET balance = balance - ? WHERE user_id=? AND balance >= ?", (price, uid, price))
+            cur.execute("UPDATE panels SET stock=stock-1 WHERE id=? AND available=1 AND stock>0", (p_id,))
+            if cur.rowcount != 1:
+                db.rollback()
+                return await e.answer("📦 This panel is out of stock. Please contact the admin.", alert=True)
+            cur.execute("UPDATE users SET balance=balance-? WHERE user_id=? AND balance>=?", (price, uid, price))
+            if cur.rowcount != 1:
+                db.rollback()
+                return await e.answer("❌ Your balance changed. Please try the purchase again.", alert=True)
             db.commit()
             
         from database import get_log_channels_db
@@ -109,6 +124,12 @@ def register_panels(bot):
         ]
         try: await e.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass
+        except Exception as exc:
+            logger.warning(f"Panel purchase confirmation edit failed: {exc}")
+            try:
+                await bot.send_message(uid, msg, buttons=btns)
+            except Exception as send_exc:
+                logger.error(f"Panel purchase confirmation delivery failed: {send_exc}")
         try:
             from utils import stickers as _sticker_engine
             await _sticker_engine.send_purchase_for_event(e)

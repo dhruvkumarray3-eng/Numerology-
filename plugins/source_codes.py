@@ -3,11 +3,11 @@ import io
 import base64
 import re
 import zipfile
-from telethon import events, Button
+from telethon import events
 from telethon.errors import MessageNotModifiedError
-from database import cur, db, get_source_codes, is_admin
+from database import cur, db, get_source_codes
 from utils.states import get_user_lock
-from config import P_INR, P_NO, PE_CHECK, PE_GIFT, logger
+from config import P_INR, PE_CHECK, logger
 from utils.keyboards import style_btn
 
 
@@ -59,8 +59,9 @@ def _build_delivery_zip(title, file_content):
 async def show_source_codes_menu(event):
     codes = get_source_codes()
     btns = []
-    for c_id, title, desc, price, file_link, avail in codes:
-        btns.append([style_btn(f"{title} - {P_INR}{price}", f"src_info|{c_id}", "primary", icon="code")])
+    for c_id, title, desc, price, file_link, avail, stock in codes:
+        stock_label = f"📦 {int(stock)}" if int(stock or 0) > 0 else "🔴 OUT OF STOCK"
+        btns.append([style_btn(f"{str(title)[:30]} - {P_INR}{price} · {stock_label}", f"src_info|{c_id}", "primary", icon="code")])
         
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)])
     
@@ -71,7 +72,7 @@ async def show_source_codes_menu(event):
                "<i>Select a source-code ZIP to view its details:</i></blockquote>")
     else:
         msg = ("<blockquote>💻 <b>𝐒ᴏᴜʀᴄᴇ 𝐂ᴏᴅᴇ 𝐒ᴛᴏʀᴇ</b>\n\n"
-               "No source-code ZIPs are available yet. Please check back after the admin adds a listing.</blockquote>")
+        "No source-code ZIPs are currently visible. Please check back later.</blockquote>")
            
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -81,23 +82,24 @@ async def show_source_codes_menu(event):
 
 async def show_source_code_info(event, code_id):
     row = cur.execute(
-        "SELECT id, title, description, price, file_content FROM source_codes "
+        "SELECT id, title, description, price, file_content, stock FROM source_codes "
         "WHERE id=? AND available=1", (code_id,)
     ).fetchone()
     if not row:
         return await event.answer("❌ Source code not found.", alert=True)
         
-    c_id, title, desc, price, file_link = row
+    c_id, title, desc, price, file_link, stock = row
     msg = (f"<blockquote>💻 <b>{html.escape(title)}</b>\n\n"
            f"📝 <b>𝐃ᴇsᴄʀɪᴘᴛɪᴏɴ:</b>\n{html.escape(desc)}\n\n"
            f"💰 <b>𝐏ʀɪᴄᴇ:</b> <code>{P_INR}{price}</code>\n"
+           f"📦 <b>Stock:</b> <code>{int(stock or 0)}</code>\n"
            f"⚡ <b>𝐃ᴇʟɪᴠᴇʀʏ:</b> <code>ZIP file</code>\n\n"
-           f"<b>𝐀ʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ?</b></blockquote>")
+           f"{('<b>Out of stock. Please contact the admin.</b>' if int(stock or 0) <= 0 else '<b>𝐀ʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ?</b>')}</blockquote>")
            
-    btns = [
-        [style_btn("✅ 𝐂ᴏɴғɪʀᴍ 𝐁ᴜʏ", f"src_cf|{c_id}", "success", icon="buy")],
-        [style_btn("🔙 𝐁ᴀᴄᴋ", b"src_code_menu", "danger", icon=6129812419028982717)]
-    ]
+    btns = []
+    if int(stock or 0) > 0:
+        btns.append([style_btn("✅ 𝐂ᴏɴғɪʀᴍ 𝐁ᴜʏ", f"src_cf|{c_id}", "success", icon="buy")])
+    btns.append([style_btn("🔙 𝐁ᴀᴄᴋ", b"src_code_menu", "danger", icon=6129812419028982717)])
     try: await event.edit(msg, buttons=btns)
     except MessageNotModifiedError: pass
 
@@ -117,20 +119,48 @@ def register_source_codes(bot):
         code_id = int(e.pattern_match.group(1).decode())
         
         row = cur.execute(
-            "SELECT id, title, description, price, file_content FROM source_codes "
+            "SELECT id, title, description, price, file_content, stock FROM source_codes "
             "WHERE id=? AND available=1", (code_id,)
         ).fetchone()
         if not row:
             return await e.answer("❌ Source code not found.", alert=True)
             
-        c_id, title, desc, price, file_link = row
-        
+        c_id, title, desc, price, file_link, stock = row
+        if int(stock or 0) <= 0:
+            return await e.answer("📦 This source ZIP is out of stock. Please contact the admin.", alert=True)
+
+        safe_name = _slugify(title)
+        stored_zip = None
+        if (file_link or "").startswith("file:"):
+            stored_zip = file_link.split(":", 1)[1].strip()
+        try:
+            zip_buf = None if stored_zip else _build_delivery_zip(title, file_link)
+        except ValueError as exc:
+            return await e.answer(f"❌ The source ZIP is unavailable: {html.escape(str(exc))}", alert=True)
+
         async with get_user_lock(uid):
+            current = cur.execute(
+                "SELECT stock, available FROM source_codes WHERE id=?", (c_id,)
+            ).fetchone()
             bal_row = cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()
+            if not current or not current[1] or int(current[0] or 0) <= 0:
+                return await e.answer("📦 This source ZIP is out of stock. Please contact the admin.", alert=True)
             if not bal_row or bal_row[0] < price:
                 return await e.answer(f"❌ Insufficient Balance! Price: ₹{price}, Your Balance: ₹{bal_row[0] if bal_row else 0}", alert=True)
-                
-            cur.execute("UPDATE users SET balance = balance - ? WHERE user_id=? AND balance >= ?", (price, uid, price))
+            cur.execute(
+                "UPDATE source_codes SET stock=stock-1 WHERE id=? AND available=1 AND stock>0",
+                (c_id,),
+            )
+            if cur.rowcount != 1:
+                db.rollback()
+                return await e.answer("📦 This source ZIP is out of stock. Please contact the admin.", alert=True)
+            cur.execute(
+                "UPDATE users SET balance=balance-? WHERE user_id=? AND balance>=?",
+                (price, uid, price),
+            )
+            if cur.rowcount != 1:
+                db.rollback()
+                return await e.answer("❌ Your balance changed. Please try the purchase again.", alert=True)
             db.commit()
             
         from database import get_log_channels_db
@@ -143,22 +173,6 @@ def register_source_codes(bot):
                 await bot.send_message(ch, admin_log)
             except: pass
             
-        safe_name = _slugify(title)
-        # Existing owner-uploaded ZIPs remain supported as "file:<path>".
-        stored_zip = None
-        if (file_link or "").startswith("file:"):
-            stored_zip = file_link.split(":", 1)[1].strip()
-        try:
-            zip_buf = None if stored_zip else _build_delivery_zip(title, file_link)
-        except ValueError as exc:
-            async with get_user_lock(uid):
-                cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (price, uid))
-                db.commit()
-            return await e.edit(
-                f"❌ The source ZIP could not be prepared. Your balance has been refunded.\n"
-                f"<code>{html.escape(str(exc))}</code>"
-            )
-
         msg = (
             f"<blockquote>{PE_CHECK} <b>\U0001F389 Purchase Successful!</b>\n\n"
             f"\U0001F4BB <b>Item:</b> <b>{html.escape(title)}</b>\n"
@@ -175,6 +189,8 @@ def register_source_codes(bot):
             await e.edit(msg, buttons=btns)
         except MessageNotModifiedError:
             pass
+        except Exception as edit_ex:
+            logger.warning(f"source purchase confirmation edit failed: {edit_ex}")
 
         # Deliver the real ZIP document to the buyer
         try:
@@ -190,21 +206,14 @@ def register_source_codes(bot):
             )
         except Exception as _zip_ex:
             logger.warning(f"source zip send failed: {_zip_ex}")
-            if str(file_link or "").startswith("zip64:"):
-                async with get_user_lock(uid):
-                    cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (price, uid))
-                    db.commit()
-                try:
-                    await e.respond("❌ ZIP delivery failed; your balance has been refunded. Please contact the admin.")
-                except Exception:
-                    pass
-            else:
-                try:
-                    await e.respond(
-                        f"🔗 <b>Download link:</b> <code>{html.escape(file_link)}</code>"
-                    )
-                except Exception:
-                    pass
+            async with get_user_lock(uid):
+                cur.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (price, uid))
+                cur.execute("UPDATE source_codes SET stock=stock+1 WHERE id=?", (c_id,))
+                db.commit()
+            try:
+                await e.respond("❌ ZIP delivery failed; your balance was refunded and stock restored. Please contact the admin.")
+            except Exception:
+                pass
         try:
             from utils import stickers as _sticker_engine
             await _sticker_engine.send_purchase_for_event(e)

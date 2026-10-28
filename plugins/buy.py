@@ -1179,7 +1179,7 @@ async def cb_back_to_menu_bytes(event):
     if user_id in user_states:
         del user_states[user_id]
     await safe_edit_message(event, "🏠 Main Menu:", buttons=[
-        [style_btn("🛒 Buy Account", "buy_account_cb", "primary")]
+        [style_btn("🛒 Buy Account", "buy_account_cb", "primary", icon=5841670626577748398)]
     ])
 
 @bot.on(events.CallbackQuery(pattern=r"^buy_account_cb$"))
