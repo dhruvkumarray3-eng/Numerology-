@@ -89,13 +89,26 @@ def _user_inboxes(uid: int) -> List[str]:
         return []
 
 
-def _delete_inbox(uid: int, email: str) -> None:
+def _owns_inbox(uid: int, email: str) -> bool:
+    try:
+        return bool(cur.execute(
+            "SELECT 1 FROM tempmail_inboxes WHERE user_id=? AND email=?",
+            (uid, email),
+        ).fetchone())
+    except Exception:
+        return False
+
+
+def _delete_inbox(uid: int, email: str) -> bool:
     try:
         cur.execute("DELETE FROM tempmail_inboxes WHERE user_id=? AND email=?", (uid, email))
         db.commit()
-    except Exception:
-        pass
-    _tm_state.pop(uid, None)
+    except Exception as exc:
+        logger.warning(f"tempmail delete failed: {exc}")
+        return False
+    if _tm_state.get(uid, {}).get("email") == email:
+        _tm_state.pop(uid, None)
+    return True
 
 
 def _countdown(expires: int) -> tuple[str, bool]:
@@ -216,7 +229,7 @@ def _start_live_inbox(event, sent_msg, email: str, expires: int, messages: List[
         return
 
     cache = {"messages": list(messages or []), "poll_at": time.time() + 12.0}
-    key = f"tm:{email}"
+    key = f"tm:{event.sender_id}:{email}"
 
     async def _render():
         now = time.time()
@@ -347,7 +360,21 @@ async def copy_email(event, email: str):
 
 async def cancel_mail(event, email: str):
     uid = event.sender_id
-    _delete_inbox(uid, email)
+    if not _owns_inbox(uid, email):
+        try:
+            await event.answer("⚠️ Mailbox not found or already cancelled.", alert=True)
+        except Exception:
+            pass
+        return await show_home(event)
+    if not _delete_inbox(uid, email):
+        try:
+            await event.answer("⚠️ Could not cancel this mailbox. Please try again.", alert=True)
+        except Exception:
+            pass
+        return
+    # Stop the live countdown/refresh job before editing this same message to
+    # the home screen; otherwise an in-flight tick can restore the inbox card.
+    unregister_live(f"tm:{uid}:{email}")
     try:
         await event.answer("❌ Mailbox cancelled.", alert=False)
     except Exception:

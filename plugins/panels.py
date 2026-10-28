@@ -15,12 +15,16 @@ async def show_panels_menu(event):
         
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)])
     
-    msg = ("<blockquote>🌌 <b>𝐏ᴀɴᴇʟ 𝐒ᴛᴏʀᴇ</b>\n"
-           "───────────────────────────────\n"
-           "• 𝐂ʜᴇᴀᴘᴇsᴛ ᴀɴᴅ 𝐓ʀᴜsᴛᴇᴅ ᴘᴀɴᴇʟs\n"
-           "• ✅ 𝐒ᴏʀᴛᴇᴅ 𝐂ʜᴇᴀᴘᴇsᴛ 𝐅ɪʀsᴛ (ʟᴏᴡᴇsᴛ ʀᴀᴛᴇs ᴀᴛ ᴛᴏᴘ)\n"
-           "• 𝐓ʜᴇsᴇ ᴘᴀɴᴇʟs ᴀʀᴇ ᴜsᴇᴅ ʙʏ ᴜs ᴀʟsᴏ\n\n"
-           "<i>𝐒ᴇʟᴇᴄᴛ ᴛʜᴇ ᴘᴀɴᴇʟ ʏᴏᴜ ᴡᴀɴɴᴀ ʙᴜʏ:</i></blockquote>")
+    if pnls:
+        msg = ("<blockquote>🌌 <b>𝐏ᴀɴᴇʟ 𝐒ᴛᴏʀᴇ</b>\n"
+               "───────────────────────────────\n"
+               "• 𝐂ʜᴇᴀᴘᴇsᴛ ᴀɴᴅ 𝐓ʀᴜsᴛᴇᴅ ᴘᴀɴᴇʟs\n"
+               "• ✅ 𝐒ᴏʀᴛᴇᴅ 𝐂ʜᴇᴀᴘᴇsᴛ 𝐅ɪʀsᴛ (ʟᴏᴡᴇsᴛ ʀᴀᴛᴇs ᴀᴛ ᴛᴏᴘ)\n"
+               "• 𝐓ʜᴇsᴇ ᴘᴀɴᴇʟs ᴀʀᴇ ᴜsᴇᴅ ʙʏ ᴜs ᴀʟsᴏ\n\n"
+               "<i>𝐒ᴇʟᴇᴄᴛ ᴛʜᴇ ᴘᴀɴᴇʟ ʏᴏᴜ ᴡᴀɴɴᴀ ʙᴜʏ:</i></blockquote>")
+    else:
+        msg = ("<blockquote>🌌 <b>𝐏ᴀɴᴇʟ 𝐒ᴛᴏʀᴇ</b>\n\n"
+               "No panels are available yet. Please check back after the admin adds a listing.</blockquote>")
            
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -29,7 +33,10 @@ async def show_panels_menu(event):
         await event.respond(msg, buttons=btns)
 
 async def show_panel_info(event, panel_id):
-    row = cur.execute("SELECT id, title, description, price, panel_content FROM panels WHERE id=?", (panel_id,)).fetchone()
+    row = cur.execute(
+        "SELECT id, title, description, price, panel_content FROM panels "
+        "WHERE id=? AND available=1", (panel_id,)
+    ).fetchone()
     if not row:
         return await event.answer("❌ Panel not found.", alert=True)
         
@@ -62,7 +69,10 @@ def register_panels(bot):
         uid = e.sender_id
         panel_id = int(e.pattern_match.group(1).decode())
         
-        row = cur.execute("SELECT id, title, description, price, panel_content FROM panels WHERE id=?", (panel_id,)).fetchone()
+        row = cur.execute(
+            "SELECT id, title, description, price, panel_content FROM panels "
+            "WHERE id=? AND available=1", (panel_id,)
+        ).fetchone()
         if not row:
             return await e.answer("❌ Panel not found.", alert=True)
             

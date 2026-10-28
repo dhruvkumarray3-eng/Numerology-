@@ -1,5 +1,6 @@
 import html
 import io
+import base64
 import re
 import zipfile
 from telethon import events, Button
@@ -41,6 +42,20 @@ def _build_source_zip(title, file_content):
     return buf
 
 
+def _build_delivery_zip(title, file_content):
+    """Return an uploaded ZIP or package a legacy text/URL catalog entry."""
+    content = str(file_content or "")
+    if content.startswith("zip64:"):
+        try:
+            raw = base64.b64decode(content[6:], validate=True)
+        except Exception as exc:
+            raise ValueError("Stored ZIP data is invalid") from exc
+        if not zipfile.is_zipfile(io.BytesIO(raw)):
+            raise ValueError("Stored source archive is not a valid ZIP")
+        return io.BytesIO(raw)
+    return _build_source_zip(title, content)
+
+
 async def show_source_codes_menu(event):
     codes = get_source_codes()
     btns = []
@@ -49,11 +64,14 @@ async def show_source_codes_menu(event):
         
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)])
     
-    msg = ("<blockquote>💻 <b>𝐒ᴏᴜʀᴄᴇ 𝐂ᴏᴅᴇ 𝐒ᴛᴏʀᴇ</b>\n"
-           "───────────────────────────────\n"
-           "• 𝐑ᴇᴀᴅʏᴍᴀᴅᴇ ᴄᴏᴅᴇs, 𝐂ʀᴇᴀᴛᴇ ʏᴏᴜʀ ᴏᴡɴ ʙᴏᴛs\n"
-           "• 𝐀ʟʟ ᴛʜɪɴɢs ᴀʀᴇ ᴅᴏɴᴇ ᴀʟʀᴇᴀᴅʏ ʏᴏᴜ ᴊᴜsᴛ ʜᴀᴠᴇ ᴛᴏ ᴇᴅɪᴛ ᴛʜᴇ ᴅᴇᴛᴀɪʟs\n\n"
-           "<i>𝐒ᴇʟᴇᴄᴛ ᴛʜᴇ sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ ʏᴏᴜ ᴡᴀɴɴᴀ ʙᴜʏ:</i></blockquote>")
+    if codes:
+        msg = ("<blockquote>💻 <b>𝐒ᴏᴜʀᴄᴇ 𝐂ᴏᴅᴇ 𝐒ᴛᴏʀᴇ</b>\n"
+               "───────────────────────────────\n"
+               "• Admin-listed ZIP archives with title and price\n\n"
+               "<i>Select a source-code ZIP to view its details:</i></blockquote>")
+    else:
+        msg = ("<blockquote>💻 <b>𝐒ᴏᴜʀᴄᴇ 𝐂ᴏᴅᴇ 𝐒ᴛᴏʀᴇ</b>\n\n"
+               "No source-code ZIPs are available yet. Please check back after the admin adds a listing.</blockquote>")
            
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -62,7 +80,10 @@ async def show_source_codes_menu(event):
         await event.respond(msg, buttons=btns)
 
 async def show_source_code_info(event, code_id):
-    row = cur.execute("SELECT id, title, description, price, file_content FROM source_codes WHERE id=?", (code_id,)).fetchone()
+    row = cur.execute(
+        "SELECT id, title, description, price, file_content FROM source_codes "
+        "WHERE id=? AND available=1", (code_id,)
+    ).fetchone()
     if not row:
         return await event.answer("❌ Source code not found.", alert=True)
         
@@ -70,7 +91,7 @@ async def show_source_code_info(event, code_id):
     msg = (f"<blockquote>💻 <b>{html.escape(title)}</b>\n\n"
            f"📝 <b>𝐃ᴇsᴄʀɪᴘᴛɪᴏɴ:</b>\n{html.escape(desc)}\n\n"
            f"💰 <b>𝐏ʀɪᴄᴇ:</b> <code>{P_INR}{price}</code>\n"
-           f"⚡ <b>𝐃ᴇʟɪᴠᴇʀʏ:</b> <code>Instant Download Link</code>\n\n"
+           f"⚡ <b>𝐃ᴇʟɪᴠᴇʀʏ:</b> <code>ZIP file</code>\n\n"
            f"<b>𝐀ʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙᴜʏ?</b></blockquote>")
            
     btns = [
@@ -95,7 +116,10 @@ def register_source_codes(bot):
         uid = e.sender_id
         code_id = int(e.pattern_match.group(1).decode())
         
-        row = cur.execute("SELECT id, title, description, price, file_content FROM source_codes WHERE id=?", (code_id,)).fetchone()
+        row = cur.execute(
+            "SELECT id, title, description, price, file_content FROM source_codes "
+            "WHERE id=? AND available=1", (code_id,)
+        ).fetchone()
         if not row:
             return await e.answer("❌ Source code not found.", alert=True)
             
@@ -120,11 +144,20 @@ def register_source_codes(bot):
             except: pass
             
         safe_name = _slugify(title)
-        # Owner-uploaded ZIP is stored as "file:<path>" -> deliver it as-is.
+        # Existing owner-uploaded ZIPs remain supported as "file:<path>".
         stored_zip = None
         if (file_link or "").startswith("file:"):
             stored_zip = file_link.split(":", 1)[1].strip()
-        zip_buf = None if stored_zip else _build_source_zip(title, file_link)
+        try:
+            zip_buf = None if stored_zip else _build_delivery_zip(title, file_link)
+        except ValueError as exc:
+            async with get_user_lock(uid):
+                cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (price, uid))
+                db.commit()
+            return await e.edit(
+                f"❌ The source ZIP could not be prepared. Your balance has been refunded.\n"
+                f"<code>{html.escape(str(exc))}</code>"
+            )
 
         msg = (
             f"<blockquote>{PE_CHECK} <b>\U0001F389 Purchase Successful!</b>\n\n"
@@ -157,12 +190,21 @@ def register_source_codes(bot):
             )
         except Exception as _zip_ex:
             logger.warning(f"source zip send failed: {_zip_ex}")
-            try:
-                await e.respond(
-                    f"\U0001F517 <b>Download link:</b> <code>{html.escape(file_link)}</code>"
-                )
-            except Exception:
-                pass
+            if str(file_link or "").startswith("zip64:"):
+                async with get_user_lock(uid):
+                    cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (price, uid))
+                    db.commit()
+                try:
+                    await e.respond("❌ ZIP delivery failed; your balance has been refunded. Please contact the admin.")
+                except Exception:
+                    pass
+            else:
+                try:
+                    await e.respond(
+                        f"🔗 <b>Download link:</b> <code>{html.escape(file_link)}</code>"
+                    )
+                except Exception:
+                    pass
         try:
             from utils import stickers as _sticker_engine
             await _sticker_engine.send_purchase_for_event(e)

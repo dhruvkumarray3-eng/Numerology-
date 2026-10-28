@@ -155,6 +155,60 @@ def setup_db():
 
 setup_db()
 
+
+def _migrate_remove_demo_catalog_items():
+    """Remove only the exact example rows previously inserted by getters."""
+    migration_key = "catalog_demo_seed_cleanup_v1"
+    if cur.execute("SELECT 1 FROM settings WHERE key=?", (migration_key,)).fetchone():
+        return
+
+    demo_sources = [
+        (
+            "Main Store Bot (Full Modular Code)",
+            "Complete full modular bot source code with OTP buying, SMM services, panels & instant delivery.",
+            500.0,
+            "https://github.com/dhruvkumarray3-eng/Numerology-",
+        ),
+        (
+            "OTP & SMM Bot Source Code",
+            "Complete Python Telethon based automated OTP & SMM bot source code.",
+            299.0,
+            "https://github.com/dhruvkumarray3-eng/Numerology-",
+        ),
+    ]
+    demo_panels = [
+        (
+            "VIP SMM Panel (Server 1)",
+            "High-speed VIP SMM reseller panel with instant order delivery and auto balance top-up.",
+            399.0,
+            "https://fathersmm.com",
+        ),
+        (
+            "Budget SMM Panel (Server 2 - Cheap)",
+            "Cheapest global SMM panel with over 1500+ bulk services and lowest wholesale rates.",
+            399.0,
+            "https://best-smm.com",
+        ),
+    ]
+    for row in demo_sources:
+        cur.execute(
+            "DELETE FROM source_codes WHERE title=? AND description=? AND price=? AND file_content=?",
+            row,
+        )
+    for row in demo_panels:
+        cur.execute(
+            "DELETE FROM panels WHERE title=? AND description=? AND price=? AND panel_content=?",
+            row,
+        )
+    cur.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, 'done')",
+        (migration_key,),
+    )
+    db.commit()
+
+
+_migrate_remove_demo_catalog_items()
+
 # --- Lightweight migrations: add per-user preferences if missing ---
 def _migrate_user_prefs():
     try:
@@ -683,31 +737,17 @@ def set_upi_id(value):
     _set_setting("upi_id", value)
 
 def get_source_codes():
-    rows = cur.execute("SELECT id, title, description, price, file_content, available FROM source_codes WHERE available=1").fetchall()
-    if not rows:
-        defaults = [
-            ("Main Store Bot (Full Modular Code)", "Complete full modular bot source code with OTP buying, SMM services, panels & instant delivery.", 500.0, "https://github.com/dhruvkumarray3-eng/Numerology-"),
-            ("OTP & SMM Bot Source Code", "Complete Python Telethon based automated OTP & SMM bot source code.", 299.0, "https://github.com/dhruvkumarray3-eng/Numerology-")
-        ]
-        for t, d, p, f in defaults:
-            cur.execute("INSERT INTO source_codes (title, description, price, file_content) VALUES (?,?,?,?)", (t, d, p, f))
-        db.commit()
-        rows = cur.execute("SELECT id, title, description, price, file_content, available FROM source_codes WHERE available=1").fetchall()
-    return rows
+    return cur.execute(
+        "SELECT id, title, description, price, file_content, available "
+        "FROM source_codes WHERE available=1 ORDER BY id DESC"
+    ).fetchall()
 
 def get_panels():
     # Cheapest-first so users always see the lowest rates first.
-    rows = cur.execute("SELECT id, title, description, price, panel_content, available FROM panels WHERE available=1 ORDER BY price ASC").fetchall()
-    if not rows:
-        defaults = [
-            ("VIP SMM Panel (Server 1)", "High-speed VIP SMM reseller panel with instant order delivery and auto balance top-up.", 399.0, "https://fathersmm.com"),
-            ("Budget SMM Panel (Server 2 - Cheap)", "Cheapest global SMM panel with over 1500+ bulk services and lowest wholesale rates.", 399.0, "https://best-smm.com")
-        ]
-        for t, d, p, f in defaults:
-            cur.execute("INSERT INTO panels (title, description, price, panel_content) VALUES (?,?,?,?)", (t, d, p, f))
-        db.commit()
-        rows = cur.execute("SELECT id, title, description, price, panel_content, available FROM panels WHERE available=1 ORDER BY price ASC").fetchall()
-    return rows
+    return cur.execute(
+        "SELECT id, title, description, price, panel_content, available "
+        "FROM panels WHERE available=1 ORDER BY price ASC, id DESC"
+    ).fetchall()
 
 def is_payment_redeemed_db(email_msg_id=None, utr=None, txn_id=None):
     if email_msg_id and str(email_msg_id).strip():

@@ -670,13 +670,34 @@ async def get_otp(order_id: str):
             "error": friendly_error(text)}
 
 
+def _cancel_was_acknowledged(text):
+    """Recognise documented text replies and explicit JSON cancel success."""
+    raw = str(text or "").strip()
+    data = _try_json(raw)
+    if isinstance(data, dict):
+        node = data.get("data") if isinstance(data.get("data"), dict) else data
+        for flag in ("ok", "success"):
+            if flag in node:
+                return node[flag] is True
+        status = str(node.get("status") or node.get("result") or "").strip().lower()
+        if status in {"cancelled", "canceled", "cancel", "status_cancel", "access_cancel", "success"}:
+            return True
+    reply_code = raw.upper().split(":", 1)[0].strip()
+    return reply_code in {"ACCESS_CANCEL", "STATUS_CANCEL", "CANCELLED", "CANCELED", "SUCCESS", "OK"}
+
+
 async def cancel(order_id: str):
-    """Cancel an activation (status=8). Returns ``{ok, error}``."""
+    """Cancel an activation and confirm the provider accepted status=8."""
     text, err = await _call("setStatus", id=order_id, status="8")
     if text is None:
-        return {"ok": False, "error": err}
+        return {"ok": False, "error": err or "No response from the number provider"}
     if _error_code(text):
         return {"ok": False, "error": friendly_error(text)}
+    if not _cancel_was_acknowledged(text):
+        return {
+            "ok": False,
+            "error": f"Provider did not confirm cancellation: {str(text).strip()[:160]}",
+        }
     return {"ok": True, "error": None}
 
 

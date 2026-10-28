@@ -49,6 +49,9 @@ async def admin_panel_handler(event):
         r2.extend([style_btn("Manage Stock", "adm_managestock", "success", icon=6129731974291527294), style_btn("Check Stock", "adm_checkstock", "primary", icon=5409098988156629257), style_btn("Auto Price", "adm_autoprice", "primary", icon=5409098988156629257)])
     if r2: btns.append(r2)
 
+    if is_super_admin(uid) or has_perm(uid, 'p_manage_stock'):
+        btns.append([style_btn("🛍 Product Catalogs (Panels · ZIPs)", "adm_catalogs", "success", icon=5409320020058584473)])
+
     r3 = []
     if is_super_admin(uid) or has_perm(uid, 'p_stats'):
         r3.extend([style_btn("Statistics", "adm_stats", "primary", icon=5409098988156629257), style_btn("Broadcast", "adm_bcast", "primary", icon=5409098988156629257)])

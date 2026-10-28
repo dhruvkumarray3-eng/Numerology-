@@ -118,6 +118,12 @@ async def _worker() -> None:
                     _REGISTRY.pop(key, None)
                 continue
 
+            # The render can await a network request. If a cancel action removed
+            # this job during that await, do not let the stale result edit the
+            # message after the cancellation handler has replaced its contents.
+            if _REGISTRY.get(key) is not entry:
+                continue
+
             entry["failures"] = 0
 
             if text != entry["last"]:

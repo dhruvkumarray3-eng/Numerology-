@@ -403,8 +403,7 @@ async def show_buy_menu(event):
            f"🏛 <b>𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> 𝐅𝐢𝐥𝐭𝐞𝐫 𝐛𝐲 𝐒𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐘𝐞𝐚𝐫 (2025, 2024, 2023...).</blockquote>")
     btns = [
         [style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "search_country_btn", "primary", icon=5409098988156629257)],
-        [style_btn("\U0001f4f1 \U0001d400\U0001d425\U0001d425 \U0001d400\U0001d429\U0001d429\U0001d42c \U0001d400\U0001d41c\U0001d41c\U0001d428\U0001d42e\U0001d427\U0001d42d\U0001d42c", "all_apps_menu", "success", icon=5409320020058584473),
-         style_btn("\U0001f4ac \U0001d401\U0001d42e\U0001d432 \U0001d416\U0001d40f \U0001d400\U0001d41c\U0001d41c\U0001d428\U0001d42e\U0001d427\U0001d42d", "buy_wp_acc", "success", icon=5408995930416362034)],
+        [style_btn("\U0001f4ac \U0001d401\U0001d42e\U0001d432 \U0001d416\U0001d40f \U0001d400\U0001d41c\U0001d41c\U0001d428\U0001d42e\U0001d427\U0001d42d", "buy_wp_acc", "success", icon=5408995930416362034)],
         [
             style_btn("✅ 𝓖𝓸𝓸𝓭 𝓠𝓾𝓪𝓵𝓲𝓽𝔂 𝓣𝓖 𝓐𝓬𝓬", "pg_c|nonspam|1", "success", icon=5409320020058584473),
             style_btn("💰 𝓒𝓱𝓮𝓪𝓹 𝓣𝓖 𝓐𝓬𝓬", "pg_c|spam|1", "primary", icon=5408995930416362034)

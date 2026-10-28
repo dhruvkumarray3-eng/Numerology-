@@ -44,7 +44,7 @@ from utils.markup import (
 from utils import mongo_store
 from utils import stickers as sticker_engine
 from utils import stock_details as stock_card
-
+from utils.states import get_user_lock
 PAGE_SIZE = 12
 CACHE_TTL = 240
 
@@ -362,6 +362,7 @@ def _filter_apps(query):
 # uid -> {"panel": key, "country": code, "order_id": str, "phone": str,
 #         "price": float, "mode": "search"}
 panel_state = {}
+_AUTO_OTP_TASKS = {}  # order_id -> asyncio.Task
 _cache = {}  # key -> {"ts": float, "countries": [...]}
 _last_error = {}  # cache key -> human readable provider error
 
@@ -1070,7 +1071,25 @@ async def buy(event, key, code):
     except Exception as _sk_ex:
         logger.debug(f"premium purchase emoji skipped: {_sk_ex}")
 
-    asyncio.create_task(_auto_otp(uid, key, order_id, phone, display_inr))
+    _start_auto_otp(uid, key, order_id, phone, display_inr)
+
+
+def _start_auto_otp(uid, key, order_id, phone, price):
+    task = asyncio.create_task(_auto_otp(uid, key, order_id, phone, price))
+    _AUTO_OTP_TASKS[order_id] = task
+    return task
+
+
+def _mark_order_received(order_id, otp):
+    """Atomically accept an OTP only while the local order is still pending."""
+    cur.execute(
+        "UPDATE panel_orders SET status='received', otp=? "
+        "WHERE order_id=? AND status='pending'",
+        (str(otp), order_id),
+    )
+    changed = cur.rowcount == 1
+    db.commit()
+    return changed
 
 
 async def _auto_otp(uid, key, order_id, phone, price):
@@ -1079,7 +1098,8 @@ async def _auto_otp(uid, key, order_id, phone, price):
         result = await temporasms.wait_for_otp(order_id, attempts=18, delay=6)
         if not result.get("otp"):
             return
-        _update_order(order_id, status="received", otp=result["otp"])
+        if not _mark_order_received(order_id, result["otp"]):
+            return
         await mongo_store.log_event(uid, "panel_otp", panel=key,
                                     order_id=order_id, otp=result["otp"])
         from utils.helpers import get_bot_instance
@@ -1103,6 +1123,9 @@ async def _auto_otp(uid, key, order_id, phone, price):
             logger.debug(f"purchase emoji skipped: {_sk_ex}")
     except Exception as exc:
         logger.warning(f"auto OTP task failed: {exc}")
+    finally:
+        if _AUTO_OTP_TASKS.get(order_id) is asyncio.current_task():
+            _AUTO_OTP_TASKS.pop(order_id, None)
 
 
 async def get_otp_now(event):
@@ -1116,7 +1139,8 @@ async def get_otp_now(event):
     await event.answer("⏳ Checking for SMS…")
     result = await temporasms.get_otp(order_id)
     if result.get("otp"):
-        _update_order(order_id, status="received", otp=result["otp"])
+        if not _mark_order_received(order_id, result["otp"]):
+            return await event.answer("⚠️ This order is no longer active.", alert=True)
         msg = (
             "<blockquote expandable>🔢 <b>OTP received</b>\n\n"
             f"📞 <b>Number:</b> <code>{html.escape(st.get('phone') or '—')}</code>\n"
@@ -1142,14 +1166,65 @@ async def refund(event):
     uid = event.sender_id
     st = panel_state.get(uid) or {}
     order_id = st.get("order_id")
-    price = st.get("price") or 0
     key = st.get("panel")
     if not order_id:
         return await event.answer("⚠️ No active order to cancel.", alert=True)
-    await temporasms.cancel(order_id)
-    cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (price, uid))
-    db.commit()
-    _update_order(order_id, status="refunded")
+
+    async with get_user_lock(uid):
+        order = cur.execute(
+            "SELECT price, status, panel, phone FROM panel_orders "
+            "WHERE order_id=? AND user_id=?",
+            (order_id, uid),
+        ).fetchone()
+        if not order:
+            return await event.answer("⚠️ Order not found for this account.", alert=True)
+        price, status, key, phone = order
+        if status != "pending":
+            return await event.answer("⚠️ This order is already closed or has an OTP.", alert=True)
+        cur.execute(
+            "UPDATE panel_orders SET status='cancel_requested' "
+            "WHERE order_id=? AND user_id=? AND status='pending'",
+            (order_id, uid),
+        )
+        if cur.rowcount != 1:
+            db.commit()
+            return await event.answer("⚠️ This order is already being closed.", alert=True)
+        db.commit()
+
+    poll_task = _AUTO_OTP_TASKS.pop(order_id, None)
+    resume_polling = poll_task is not None and not poll_task.done()
+    if resume_polling:
+        poll_task.cancel()
+        await asyncio.gather(poll_task, return_exceptions=True)
+
+    cancel_result = await temporasms.cancel(order_id)
+    if not cancel_result.get("ok"):
+        cur.execute(
+            "UPDATE panel_orders SET status='pending' "
+            "WHERE order_id=? AND user_id=? AND status='cancel_requested'",
+            (order_id, uid),
+        )
+        db.commit()
+        if resume_polling:
+            _start_auto_otp(uid, key, order_id, phone or "—", price or 0)
+        reason = html.escape(str(cancel_result.get("error") or "Provider cancellation was not confirmed")[:70])
+        return await event.answer(
+            f"⚠️ The provider did not confirm cancellation, so this order remains active and no refund was issued. {reason}",
+            alert=True,
+        )
+
+    async with get_user_lock(uid):
+        cur.execute(
+            "UPDATE panel_orders SET status='refunded' "
+            "WHERE order_id=? AND user_id=? AND status='cancel_requested'",
+            (order_id, uid),
+        )
+        if cur.rowcount != 1:
+            db.commit()
+            return await event.answer("⚠️ The order changed state; no duplicate refund was issued.", alert=True)
+        cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (price, uid))
+        db.commit()
+
     await mongo_store.log_event(uid, "panel_refund", panel=key,
                                 order_id=order_id, amount=price)
     panel_state.get(uid, {}).pop("order_id", None)

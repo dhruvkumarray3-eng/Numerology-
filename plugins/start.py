@@ -1,7 +1,10 @@
 import html
 from telethon import events, types, Button
 from telethon.errors import MessageNotModifiedError
-from database import cur, db, ensure_user, is_user_banned, is_bot_online, is_admin, get_support_url, get_start_image_url
+from database import (
+    cur, db, ensure_user, is_user_banned, is_bot_online, is_admin,
+    get_support_url, get_start_image_url, get_source_codes, get_panels,
+)
 from utils.keyboards import get_persistent_menu, get_terms_buttons, get_join_buttons, style_btn, style_url
 from utils.terms import get_terms_message
 from utils.helpers import check_channel_joined, to_small_caps, send_preview_on_top
@@ -83,20 +86,23 @@ async def send_main_menu(bot, event, uid):
            
     buttons = [
         [style_btn("\U0001F4F2 \U0001D401\U0001D42E\U0001D432 \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D", b"open_buy_categories", "success", icon=5796209712009581332)],
-        [style_btn("\U0001F4F1 \U0001D400\U0001D425\U0001D425 \U0001D400\U0001D429\U0001D429\U0001D42C \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D\U0001D42C", b"all_apps_menu", "primary", icon=5373130604147654226)],
         [style_btn("\U0001F4F1 \U0001D413\U0001D41E\U0001D425\U0001D41E\U0001D420\U0001D42B\U0001D41A\U0001D426 \U0001D401\U0001D41A\U0001D42C\U0001D422\U0001D41C \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D\U0001D42C", b"mtg_home", "success", icon=5330237710655306682)],
         [style_btn("\U0001F4AC \U0001D416\U0001D421\U0001D41A\U0001D42D\U0001D42C\U0001D400\U0001D429\U0001D429 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425", b"pp_open|whatsapp", "success", icon=5334998226636390258)],
         [style_btn("\U0001F9E9 \U0001D400\U0001D425\U0001D425 \U0001D400\U0001D429\U0001D429\U0001D42C \U0001D40E\U0001D413\U0001D40F", b"pp_open|allotp", "primary", icon=5373130604147654226)],
         [style_btn("\U0001F680 \U0001D412\U0001D40C\U0001D40C & \U0001D40C\U0001D41E\U0001D41D\U0001D422\U0001D41A \U0001D412\U0001D41E\U0001D42B\U0001D42F\U0001D422\U0001D41C\U0001D41E\U0001D42C", b"smm_menu_main", "success", icon=5408995930416362034)],
-        [style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D412\U0001D428\U0001D42E\U0001D42B\U0001D41C\U0001D41E \U0001D402\U0001D428\U0001D41D\U0001D41E\U0001D42C", b"src_code_menu", "danger", icon=5951663025336356427)],
-        [style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425\U0001D42C", b"panels_menu", "primary", icon=5409098988156629257)],
+    ]
+    if get_source_codes():
+        buttons.append([style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D412\U0001D428\U0001D42E\U0001D42B\U0001D41C\U0001D41E \U0001D402\U0001D428\U0001D41D\U0001D41E\U0001D42C", b"src_code_menu", "danger", icon=5951663025336356427)])
+    if get_panels():
+        buttons.append([style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425\U0001D42C", b"panels_menu", "primary", icon=5409098988156629257)])
+    buttons.extend([
         [style_btn("\U0001F5A5 \U0001D412\U0001D41E\U0001D42B\U0001D42F\U0001D41E\U0001D42B\U0001D42C", b"servers_menu", "primary", icon=5981035310241288157)],
         [style_btn("\U0001F4E6 \U0001D40C\U0001D428\U0001D42B\U0001D41E \U0001D402\U0001D428\U0001D427\U0001D42D\U0001D41E\U0001D427\U0001D42D", b"more_content", "danger", icon=5289947142142577318)],
         [style_btn("\U0001F4E7 \U0001D405\U0001D42B\U0001D41E\U0001D41E \U0001D413\U0001D41E\U0001D426\U0001D429 \U0001D40C\U0001D41A\U0001D422\U0001D425", b"tm_home", "primary", icon=5796209712009581332)],
         [style_btn("\U0001F4B3 \U0001D411\U0001D41E\U0001D41C\U0001D421\U0001D41A\U0001D42B\U0001D420\U0001D41E", b"open_deposit_menu", "success", icon=5409271925014801629), style_btn("\U0001F9D9 \U0001D40F\U0001D42B\U0001D428\U0001D41F\U0001D422\U0001D425\U0001D41E", b"profile_stats", "primary", icon=6203982793379154737)],
         [style_btn("\u2699\ufe0f \U0001D412\U0001D41E\U0001D42D\U0001D42D\U0001D422\U0001D427\U0001D420\U0001D42C", b"settings_menu", "primary", icon=5408995930416362034), style_url("\U0001F4D1 \U0001D405\U0001D41E\U0001D41E\U0001D41D\U0001D41B\U0001D41A\U0001D41C\U0001D424 \u2197\ufe0f", feedback_link, "danger", icon=6129732880529628243)],
         [style_btn("\U0001F198 \U0001D407\U0001D41E\U0001D425\U0001D429 \U0001D402\U0001D428\U0001D426\U0001D426\U0001D41A\U0001D427\U0001D41D\U0001D42C", b"help_main", "success", icon=6129732880529628243)],
-    ]
+    ])
     
     edit_id = event.message_id if isinstance(event, events.CallbackQuery.Event) else None
     await send_preview_on_top(bot, uid, msg, start_img, buttons=buttons, edit_msg_id=edit_id)
@@ -213,4 +219,3 @@ def register_start(bot):
         except Exception as ex:
             logger.error(f"Save sticker error: {ex}", exc_info=True)
             await e.reply("❌ Failed to save sticker.")
-

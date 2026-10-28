@@ -17,11 +17,13 @@ from config import (
     PE_LIGHTNING,
     UPDATES_URL,
     SUPPORT_URL,
-    OWNER_URL,
     MAIN_CHANNEL_URL,
     logger,
 )
-from database import cur, db, redeem_code_for_user, get_user_currency, create_redeem_code, list_redeem_codes, is_admin
+from database import (
+    cur, db, redeem_code_for_user, get_user_currency, create_redeem_code,
+    list_redeem_codes, is_admin, get_source_codes,
+)
 from utils.keyboards import style_btn, style_url
 from utils.session_gen import generate_session_from_string, read_session_file
 
@@ -38,7 +40,7 @@ async def show_more_content(event):
         f"into a .session file, or read an existing session.\n"
         f"🎟 <b>Redeem</b> — redeem a gift code and get balance instantly.\n"
         f"🎁 <b>Refer &amp; Earn</b> — invite friends and earn commission.\n"
-        f"🤖 <b>Get your own Bots</b> — deploy your own bot with our source codes.\n\n"
+        f"🤖 <b>Get your own Bots</b> — bot news and updates.\n\n"
         f"<i>Choose an option below.</i></blockquote>"
     )
     btns = [
@@ -47,11 +49,16 @@ async def show_more_content(event):
         [style_btn("🎁 Refer & Earn", b"view_referrals", "success", icon=5354889508674360491)],
         # ---- Get your own Bots (colourful link hub) ----
         [style_url("🤖 Get your own Bots ↗️", UPDATES_URL, "success", icon=5409320020058584473)],
-        [style_url("🧩 Buy Source Codes ↗️", OWNER_URL, "primary", icon=5409098988156629257),
-         style_url("📢 Updates Channel ↗️", MAIN_CHANNEL_URL, "primary", icon=6129732880529628243)],
+        [style_url("📢 Updates Channel ↗️", MAIN_CHANNEL_URL, "primary", icon=6129732880529628243)],
         [style_url("🛠 Bot Setup Support ↗️", SUPPORT_URL, "danger", icon=6129812419028982717)],
         [style_btn("🔙 Back", b"dashboard_main", "danger", icon=6129812419028982717)],
     ]
+    if get_source_codes():
+        btns.insert(
+            4,
+            [style_btn("🧩 Buy Source Codes", b"src_code_menu", "primary",
+                       icon=5409098988156629257)],
+        )
     if isinstance(event, events.CallbackQuery.Event):
         try:
             await event.edit(msg, buttons=btns)
