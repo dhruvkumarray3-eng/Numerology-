@@ -54,9 +54,13 @@ def test_combined_customer_price_and_vip_label():
 
         vip = "".join(chr(codepoint) for codepoint in (0x1D5E9, 0x1D5DC, 0x1D5E3))
         vil = "".join(chr(codepoint) for codepoint in (0x1D5E9, 0x1D5DC, 0x1D5DF))
-        assert SMM_SERVERS[1]["name"].startswith(vip)
-        assert not SMM_SERVERS[1]["name"].startswith(vil)
-        print("PASS: SMM customers see only the combined rate and the server label reads VIP")
+        server_name = SMM_SERVERS[1]["name"]
+        best = "".join(chr(codepoint) for codepoint in (0x1D5D5, 0x1D5F2, 0x1D600, 0x1D601))
+        instant = "".join(chr(codepoint) for codepoint in (0x1D5DC, 0x1D5FB, 0x1D600, 0x1D601, 0x1D5EE, 0x1D5FB, 0x1D601))
+        assert server_name.startswith(vip)
+        assert not server_name.startswith(vil)
+        assert f"({best} & {instant})" in server_name
+        print("PASS: SMM users see a combined rate and VIP Server 1 (Best & Instant)")
     finally:
         smm.get_smm_service_details = original_details
         smm.get_service_inr_rate = original_price
