@@ -40,6 +40,7 @@ from utils import temporasms
 from utils.markup import (
     apply_markup, get_markup_config, describe_markup,
     format_dual_price, format_dual_from_inr, price_breakdown,
+    apply_service_markup, format_service_dual_price, get_service_config,
 )
 from utils import mongo_store
 from utils import stickers as sticker_engine
@@ -242,7 +243,7 @@ def _ensure_emoji(label, fallback=_EMOJI_FALLBACK):
     return label if _has_emoji(label) else f"{fallback} {label}"
 
 
-def _country_label(code, name, price, uid, cfg=None, limit=60):
+def _country_label(code, name, price, uid, cfg=None, limit=60, service=None):
     """Country button label: flag + name + price (price omitted when unknown).
 
     The old label always ended with ``· —`` when the provider had no live
@@ -250,7 +251,7 @@ def _country_label(code, name, price, uid, cfg=None, limit=60):
     the flag + country name are shown.
     """
     label = f"{_flag(code)} {_clean_name(name)}"
-    price_txt = _price_label(price, uid, cfg)
+    price_txt = _price_label(price, uid, cfg, service)
     if price_txt and price_txt not in ("\u2014", "-", ""):
         label = f"{label} \u00b7 {price_txt}"
     return label[:limit]
@@ -383,19 +384,24 @@ def _user_currency(uid):
         return "INR"
 
 
-def _price_label(real_price, uid, cfg=None):
+def _price_label(real_price, uid, cfg=None, service=None):
     """Real panel cost -> what the customer sees, in INR **and** USDT.
 
     The panel's real (cost) price is never leaked: the value shown is always
     ``real_price + owner_margin`` where the margin is either a percentage or a
-    fixed amount in INR/USD (see /setmarkup and /setprofit).
+    fixed amount in INR/USD (see /setmarkup and /setprofit).  When a panel
+    ``service`` is supplied its own profit override (if enabled) is used.
     """
     if real_price is None:
         return "—"
+    if service:
+        return format_service_dual_price(real_price, service)
     return format_dual_price(real_price, cfg)
 
 
-def _display_inr(real_price, cfg=None):
+def _display_inr(real_price, cfg=None, service=None):
+    if service:
+        return apply_service_markup(real_price, service)
     return apply_markup(real_price, cfg)
 
 
@@ -590,7 +596,7 @@ async def show_terms(event, key, country=None):
         countries, _ = await _countries_for(key, uid)
         match = next((c for c in countries if c["code"] == country), None)
         if match:
-            price_txt = _price_label(match["price"], uid)
+            price_txt = _price_label(match["price"], uid, service=key)
             header = (f"\n\n{_flag(match['code'])} <b>{html.escape(_clean_name(match['name']))}</b>")
             if price_txt and price_txt not in ("—", "-", ""):
                 header += f" · {price_txt}"
@@ -831,7 +837,7 @@ async def show_countries(event, key, page=1, query=None):
     btns = []
     row = []
     for c in chunk:
-        label = _country_label(c["code"], c["name"], c["price"], uid, cfg)
+        label = _country_label(c["code"], c["name"], c["price"], uid, cfg, service=key)
         row.append(style_btn(label, f"pp_buy|{key}|{c['code']}", p["style"]))
         if len(row) == 2:
             btns.append(row)
@@ -1028,7 +1034,7 @@ async def buy(event, key, code):
         ]
         return await _safe_edit(event, msg, btns)
 
-    display_inr = _display_inr(real_price, cfg)
+    display_inr = _display_inr(real_price, cfg, key)
     profit = display_inr - float(real_price)
     bal = _balance(uid)
     if bal < display_inr:

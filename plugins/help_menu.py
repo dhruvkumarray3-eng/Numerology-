@@ -171,6 +171,7 @@ def _admin_help_text():
         "/setprofit <n> \u2014 add a flat \u20b9 profit on top of panel price\n"
         "/setmarkup <pct> \u2014 add a % profit on top of panel price\n"
         "/resetmarkup \u2014 back to default profit\n"
+        "/profit \u2014 open the Profit & Pricing panel (INR \u00b7 USDT \u00b7 per-service)\n"
         "/smm \u2014 SMM services (FathersMM). User price = panel rate + your profit"
         "</blockquote>\n"
 

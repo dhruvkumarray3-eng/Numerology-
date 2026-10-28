@@ -15,6 +15,7 @@ from plugins.all_apps import register_all_apps
 from plugins.more_content import register_more_content
 from plugins.product_panels import register_product_panels
 from plugins.admin_extras import register_admin_extras
+from plugins.profit_admin import register_profit_admin
 from plugins.help_menu import register_help
 from plugins.manual_accounts import register_manual_accounts
 from plugins.stickers import register_stickers
@@ -39,6 +40,7 @@ def register_all_handlers(bot):
     register_more_content(bot)
     register_product_panels(bot)
     register_admin_extras(bot)
+    register_profit_admin(bot)
     register_help(bot)
     register_manual_accounts(bot)
     register_stickers(bot)

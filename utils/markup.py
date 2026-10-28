@@ -260,3 +260,191 @@ def format_dual_from_inr(amount_inr):
     except (TypeError, ValueError):
         inr = 0.0
     return f"{format_inr(inr)} · {format_usdt(usdt_from_inr(inr))}"
+
+
+# ---------------------------------------------------------------------------
+# Per-service profit overrides
+# ---------------------------------------------------------------------------
+# The owner can price each product line independently:
+#
+#     whatsapp   -> WhatsApp Account panel
+#     numchange  -> TG Number Change panel
+#     allotp     -> All Apps OTP panel
+#     smm        -> SMM services (per 1000 units)
+#     lzt        -> LZT market Telegram accounts
+#
+# Every service starts OUT of override mode and simply inherits the global
+# configuration above, so nothing changes for existing deployments.  Once the
+# owner enables an override for a service, only that service uses its own
+# numbers - the others keep following the global setting.
+
+SERVICES = {
+    "whatsapp": "WhatsApp Account",
+    "numchange": "TG Number Change",
+    "allotp": "All Apps OTP",
+    "smm": "SMM Services",
+    "lzt": "LZT TG Accounts",
+}
+
+SERVICE_ORDER = ("whatsapp", "numchange", "allotp", "smm", "lzt")
+
+
+def _svc_key(service, field):
+    return f"markup_svc_{service}_{field}"
+
+
+def is_service_override(service):
+    """True when this service has its own profit numbers switched on."""
+    if service not in SERVICES:
+        return False
+    return str(_get(_svc_key(service, "enabled"), "0")).strip() in ("1", "true", "yes", "on")
+
+
+def get_service_config(service):
+    """Profit configuration that applies to one service.
+
+    Returns the global config (plus ``service``/``override`` metadata) when the
+    service has no override enabled, otherwise the service's own numbers.
+    """
+    if service not in SERVICES:
+        cfg = dict(get_markup_config())
+        cfg.update({"service": service, "override": False})
+        return cfg
+
+    if not is_service_override(service):
+        cfg = dict(get_markup_config())
+        cfg.update({"service": service, "override": False})
+        return cfg
+
+    base = get_markup_config()
+    mode = str(_get(_svc_key(service, "mode"), base["mode"])).strip().lower()
+    if mode not in _VALID_MODES:
+        mode = base["mode"]
+    try:
+        percent = float(_get(_svc_key(service, "percent"), base["percent"]))
+    except (TypeError, ValueError):
+        percent = base["percent"]
+    try:
+        fixed = float(_get(_svc_key(service, "fixed"), base["fixed"]))
+    except (TypeError, ValueError):
+        fixed = base["fixed"]
+    currency = str(_get(_svc_key(service, "currency"), base["currency"])).strip().upper()
+    if currency not in _VALID_CURRENCIES:
+        currency = base["currency"]
+    return {
+        "mode": mode,
+        "percent": max(0.0, percent),
+        "fixed": max(0.0, fixed),
+        "currency": currency,
+        "service": service,
+        "override": True,
+    }
+
+
+def set_service_markup(service, mode=None, percent=None, fixed=None,
+                       currency=None, enabled=True):
+    """Persist a per-service profit override. Only provided fields change."""
+    if service not in SERVICES:
+        return {}
+    changed = {}
+    if enabled:
+        _set(_svc_key(service, "enabled"), "1")
+        changed["enabled"] = True
+    if mode is not None:
+        mode = str(mode).strip().lower()
+        if mode in _VALID_MODES:
+            _set(_svc_key(service, "mode"), mode)
+            changed["mode"] = mode
+    if percent is not None:
+        try:
+            p = max(0.0, float(percent))
+            _set(_svc_key(service, "percent"), p)
+            changed["percent"] = p
+        except (TypeError, ValueError):
+            pass
+    if fixed is not None:
+        try:
+            f = max(0.0, float(fixed))
+            _set(_svc_key(service, "fixed"), f)
+            changed["fixed"] = f
+        except (TypeError, ValueError):
+            pass
+    if currency is not None:
+        code = str(currency).strip().upper()
+        if code in _VALID_CURRENCIES:
+            _set(_svc_key(service, "currency"), code)
+            changed["currency"] = code
+    return changed
+
+
+def reset_service_markup(service):
+    """Drop a service's override so it follows the global profit again."""
+    if service not in SERVICES:
+        return False
+    ok = True
+    for field in ("enabled", "mode", "percent", "fixed", "currency"):
+        ok = _set(_svc_key(service, field), "0" if field == "enabled" else "") and ok
+    return ok
+
+
+def reset_all_markup():
+    """Reset the global profit to defaults and clear every service override."""
+    _set(K_MODE, DEFAULT_MARKUP_MODE)
+    _set(K_PERCENT, DEFAULT_MARKUP_PERCENT)
+    _set(K_FIXED, DEFAULT_MARKUP_FIXED)
+    _set(K_CURRENCY, DEFAULT_MARKUP_CURRENCY)
+    for service in SERVICES:
+        reset_service_markup(service)
+    return get_markup_config()
+
+
+def service_profit_in_inr(real_price_inr, service):
+    """Owner profit for one sale of `service`, in INR."""
+    return profit_in_inr(real_price_inr, get_service_config(service))
+
+
+def apply_service_markup(real_price_inr, service, minimum=1.0):
+    """Real cost -> customer price (INR) using that service's profit rules."""
+    return apply_markup(real_price_inr, get_service_config(service), minimum=minimum)
+
+
+def service_price_breakdown(real_price_inr, service):
+    """Full INR + USDT + profit maths for one service."""
+    return price_breakdown(real_price_inr, get_service_config(service))
+
+
+def format_service_dual_price(real_price_inr, service):
+    """Customer-facing '₹X · Y USDT' label for a service."""
+    if real_price_inr is None:
+        return "—"
+    try:
+        float(real_price_inr)
+    except (TypeError, ValueError):
+        return "—"
+    b = service_price_breakdown(real_price_inr, service)
+    return f"{format_inr(b['inr'])} · {format_usdt(b['usdt'])}"
+
+
+def describe_service_markup(service):
+    """One-line description of the profit rule used by a service."""
+    cfg = get_service_config(service)
+    if cfg["mode"] == "percent":
+        text = f"{cfg['percent']:g}% profit"
+    else:
+        symbol = "₹" if cfg["currency"] == "INR" else "$"
+        text = f"{symbol}{cfg['fixed']:g} fixed profit ({cfg['currency']})"
+    return text + (" · custom" if cfg.get("override") else " · global")
+
+
+def service_summary(service, samples=(10, 50, 100, 500)):
+    """Rows for the admin live preview: cost -> profit -> INR -> USDT."""
+    rows = []
+    for cost in samples:
+        b = service_price_breakdown(cost, service)
+        rows.append({
+            "cost": float(cost),
+            "profit": b["profit_inr"],
+            "inr": b["inr"],
+            "usdt": b["usdt"],
+        })
+    return rows

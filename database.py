@@ -429,11 +429,11 @@ def _apply_owner_margin(real_cost_inr):
     so pricing can never break.
     """
     try:
-        from utils.markup import apply_markup, get_markup_config
-        cfg = get_markup_config()
+        from utils.markup import apply_service_markup, get_service_config
+        cfg = get_service_config("lzt")
         # Honour the configured mode even when the fixed amount is 0.
         if cfg.get("mode") in ("percent", "fixed"):
-            return apply_markup(real_cost_inr, cfg)
+            return apply_service_markup(real_cost_inr, "lzt")
     except Exception:
         pass
     try:

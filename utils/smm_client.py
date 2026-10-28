@@ -323,12 +323,15 @@ def get_service_panel_rate(service, server=1):
 
 
 def get_service_profit_per_1k(service, server=1):
-    """Owner profit added on top of the panel rate, per 1000 units."""
+    """Owner profit added on top of the panel rate, per 1000 units.
+
+    Uses the SMM-specific profit override when the owner has enabled one,
+    otherwise falls back to the global profit engine.
+    """
     try:
-        from utils.markup import get_markup_config, profit_in_inr
-        cfg = get_markup_config()
+        from utils.markup import service_profit_in_inr
         panel = get_service_panel_rate(service, server)
-        return round(float(profit_in_inr(panel, cfg) or 0), 2)
+        return round(float(service_profit_in_inr(panel, 'smm') or 0), 2)
     except Exception:
         return 0.0
 
@@ -341,8 +344,8 @@ def get_service_inr_rate(service, server=1):
     """
     panel = get_service_panel_rate(service, server)
     try:
-        from utils.markup import apply_markup, get_markup_config
-        final = float(apply_markup(panel, get_markup_config(), minimum=0.0))
+        from utils.markup import apply_service_markup
+        final = float(apply_service_markup(panel, 'smm', minimum=0.0))
         return round(final, 2)
     except Exception:
         return panel
