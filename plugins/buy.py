@@ -14,7 +14,10 @@ from telethon.errors import (
     FreshChangePhoneForbiddenError, FloodWaitError
 )
 from telethon.errors.rpcerrorlist import MessageIdInvalidError
-from telethon.tl.functions.account import SendChangePhoneCodeRequest, ChangePhoneRequest
+from telethon.tl.functions.account import (
+    SendChangePhoneCodeRequest, ChangePhoneRequest,
+    GetAuthorizationsRequest, ResetAuthorizationRequest,
+)
 
 from database import (
     cur, db, get_flag_by_country_name, get_bot_mode, get_panel_price,
@@ -213,7 +216,8 @@ def get_active_order_card(order, phone, is_admin_user=False):
         [
             style_btn("🔄 𝐆𝐞𝐭 𝐎𝐓𝐏 𝐀𝐠𝐚𝐢𝐧", f"get_otp_again|{phone}", "primary", icon=5408995930416362034),
             style_btn("✅ 𝐅𝐢𝐧𝐢𝐬𝐡 𝐎𝐫𝐝𝐞𝐫", f"finish_order|{phone}", "primary", icon=5409320020058584473)
-        ]
+        ],
+        [style_btn("\ud83d\udeab \ud835\udc13\ud835\udc1e\ud835\udc2b\ud835\udc26\ud835\udc22\ud835\udc27\ud835\udc1a\ud835\udc2d\ud835\udc1e \ud835\udc0e\ud835\udc2d\ud835\udc21\ud835\udc1e\ud835\udc2b \ud835\udc12\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc22\ud835\udc28\ud835\udc27\ud835\udc2c", f"reset_sessions|{phone}", "danger", icon=6129888444245089008)]
     ]
     if is_admin_user:
         btns.append([style_btn("❌ [Admin] Cancel & Refund", f"cancel_order|{phone}", "danger", icon=6129888444245089008)])
@@ -1096,7 +1100,7 @@ async def auto_otp_task(phone):
                     ],
                     [
                         style_btn("🔄 𝐆𝐞𝐭 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐎𝐓𝐏", f"get_code_{phone}", "primary", icon=5408995930416362034),
-                        style_btn("🚫 𝐓𝐞𝐫𝐦𝐢𝐧𝐚𝐭𝐞 𝐎𝐭𝐡𝐞𝐫 𝐒𝐞𝐬𝐬𝐢𝐨𝐧𝐬", f"reset_sessions_{phone}", "danger", icon=6129888444245089008)
+                        style_btn("🚫 𝐓𝐞𝐫𝐦𝐢𝐧𝐚𝐭𝐞 𝐎𝐭𝐡𝐞𝐫 𝐒𝐞𝐬𝐬𝐢𝐨𝐧𝐬", f"reset_sessions|{phone}", "danger", icon=6129888444245089008)
                     ],
                     [style_btn("✅ 𝐅𝐢𝐧𝐢𝐬𝐡 / 𝐃𝐨𝐧𝐞", f"finish_order|{phone}", "success", icon=5409320020058584473)]
                 ]
@@ -1383,3 +1387,359 @@ async def cb_finish_order(event):
         unregister_live(f"order:{phone}")
         del active_orders[phone]
     await event.edit("✅ <b>Order completed successfully! Thank you.</b>")
+
+
+# =========================================================
+# 🛡 ACTIVE DEVICE / SESSION TERMINATION
+# =========================================================
+# The "Terminate Other Sessions" button used to be rendered on the OTP card
+# but had no callback registered, so tapping it did nothing.  The helpers
+# below list every active Telegram authorization (device), let the buyer
+# terminate a specific device, or wipe every device while keeping either the
+# newest device (the buyer's freshly logged-in phone) or only the panel
+# session (so the buyer can log in cleanly afterwards).
+
+session_auth_cache = {}
+
+_BOLD_UPPER = {chr(65 + i): chr(0x1D400 + i) for i in range(26)}
+_BOLD_LOWER = {chr(97 + i): chr(0x1D41A + i) for i in range(26)}
+_BOLD_DIGIT = {chr(48 + i): chr(0x1D7CE + i) for i in range(10)}
+_BOLD_MAP = {**_BOLD_UPPER, **_BOLD_LOWER, **_BOLD_DIGIT}
+
+
+def _sty(text):
+    """Render ASCII text in a stylish mathematical-bold font for buttons."""
+    return "".join(_BOLD_MAP.get(ch, ch) for ch in str(text))
+
+
+def _auth_ts(auth):
+    """Best-effort unix timestamp for an authorization's creation date."""
+    dt = getattr(auth, "date_created", None)
+    try:
+        return int(dt.timestamp())
+    except Exception:
+        return 0
+
+
+def _auth_device_name(auth):
+    name = (getattr(auth, "device_model", None)
+            or getattr(auth, "app_name", None)
+            or "Unknown device")
+    return str(name).strip() or "Unknown device"
+
+
+def _auth_platform(auth):
+    platform = (getattr(auth, "platform", None)
+                or getattr(auth, "system_version", None)
+                or "Unknown")
+    return str(platform).strip() or "Unknown"
+
+
+def _auth_country(auth):
+    country = getattr(auth, "country", None) or ""
+    region = getattr(auth, "region", None) or ""
+    parts = [str(p).strip() for p in (country, region) if str(p).strip()]
+    return ", ".join(parts)
+
+
+def _fmt_auth_date(auth):
+    ts = _auth_ts(auth)
+    if not ts:
+        return "unknown"
+    try:
+        return time.strftime("%d %b %Y, %H:%M", time.localtime(ts))
+    except Exception:
+        return "unknown"
+
+
+async def _ensure_order_client(phone):
+    """Return (client, error) for an active order's Telethon client."""
+    order = active_orders.get(phone)
+    if not order:
+        return None, "Order is no longer active."
+    client = order.get("client")
+    if not client:
+        return None, "Account client is unavailable for this order."
+    try:
+        if not client.is_connected():
+            await client.connect()
+        if not await client.is_user_authorized():
+            return None, "This account session is expired or already logged out."
+    except Exception as exc:
+        logger.error(f"Session client check failed for {phone}: {exc}")
+        return None, f"Could not connect to the account session: {exc}"
+    return client, None
+
+
+async def _load_authorizations(phone):
+    """Fetch and cache the active authorizations for an order's account."""
+    client, err = await _ensure_order_client(phone)
+    if err:
+        return None, err
+    try:
+        result = await client(GetAuthorizationsRequest())
+    except Exception as exc:
+        logger.error(f"GetAuthorizations failed for {phone}: {exc}")
+        return None, f"Could not load devices: {exc}"
+
+    auths = list(getattr(result, "authorizations", []) or [])
+    # Current/panel session first, then newest devices first.
+    auths.sort(key=lambda a: (not bool(getattr(a, "current", False)), -_auth_ts(a)))
+    session_auth_cache[phone] = auths
+    return auths, None
+
+
+def _sessions_message(phone, auths):
+    total = len(auths)
+    current = next((a for a in auths if getattr(a, "current", False)), None)
+    lines = [
+        "<blockquote expandable>",
+        f"🛡 <b>{_sty('ACTIVE DEVICES')}</b>",
+        "",
+        f"📱 <b>{_sty('Phone')}:</b> <code>+{html.escape(str(phone))}</code>",
+        f"🔢 <b>{_sty('Total devices')}:</b> <b>{total}</b>",
+    ]
+    if current:
+        lines.append(
+            f"🖥 <b>{_sty('Panel device')}:</b> {html.escape(_auth_device_name(current))} "
+            f"({html.escape(_auth_platform(current))})"
+        )
+    lines += [
+        "",
+        f"<i>{_sty('Select a device below to terminate it')}, "
+        f"{_sty('or use a bulk option')}.</i>",
+        "",
+    ]
+
+    idx = 0
+    for auth in auths:
+        if getattr(auth, "current", False):
+            continue
+        idx += 1
+        country = _auth_country(auth)
+        country_line = f" · 🌍 {html.escape(country)}" if country else ""
+        lines.append(
+            f"<b>{idx}.</b> {html.escape(_auth_device_name(auth))} "
+            f"({html.escape(_auth_platform(auth))}){country_line}\n"
+            f"    🕒 {_fmt_auth_date(auth)}"
+        )
+
+    if idx == 0:
+        lines.append("<i>No other devices are logged in right now.</i>")
+
+    lines.append("</blockquote>")
+    return "\n".join(lines)
+
+
+def _sessions_buttons(phone, auths):
+    btns = []
+    idx = 0
+    for auth in auths:
+        if getattr(auth, "current", False):
+            continue
+        idx += 1
+        label = f"❌ {idx}. {_auth_device_name(auth)} ({_auth_platform(auth)})"
+        btns.append([style_btn(label, f"reset_one|{phone}|{idx}", "danger",
+                               icon=6129888444245089008)])
+
+    if idx:
+        btns.append([
+            style_btn(f"🛡 {_sty('Terminate All Others (Keep Newest)')}",
+                      f"reset_all|{phone}", "danger", icon=6129888444245089008),
+        ])
+        btns.append([
+            style_btn(f"📱 {_sty('Keep Only Panel Device')}",
+                      f"reset_panel|{phone}", "primary", icon=5409166771330494453),
+        ])
+
+    btns.append([
+        style_btn(f"🔄 {_sty('Refresh')}", f"reset_sessions|{phone}", "primary",
+                  icon=5409320020058584473),
+        style_btn(f"⬅️ {_sty('Back to Order')}", f"refresh_order|{phone}", "success",
+                  icon=6129812419028982717),
+    ])
+    return btns
+
+
+async def _show_sessions(event, phone):
+    """Render the active-device list for an order."""
+    auths, err = await _load_authorizations(phone)
+    if err:
+        msg = (
+            "<blockquote expandable>❌ <b>Could not load devices</b>\n\n"
+            f"{html.escape(str(err))}</blockquote>"
+        )
+        btns = [
+            [style_btn(f"🔄 {_sty('Try Again')}", f"reset_sessions|{phone}", "primary",
+                       icon=5409320020058584473)],
+            [style_btn(f"⬅️ {_sty('Back to Order')}", f"refresh_order|{phone}", "success",
+                       icon=6129812419028982717)],
+        ]
+        try:
+            return await event.edit(msg, buttons=btns)
+        except Exception:
+            return await event.respond(msg, buttons=btns)
+    msg = _sessions_message(phone, auths)
+    btns = _sessions_buttons(phone, auths)
+    try:
+        await event.edit(msg, buttons=btns)
+    except MessageNotModifiedError:
+        pass
+    except Exception:
+        await event.respond(msg, buttons=btns)
+
+
+def _other_authorizations(auths):
+    """Return every authorization that is not the bot's current session."""
+    return [a for a in auths if not getattr(a, "current", False)]
+
+
+def _hashes_keep_newest(auths):
+    """Hashes to terminate so the newest buyer device + panel session survive."""
+    others = _other_authorizations(auths)
+    if not others:
+        return []
+    newest = max(others, key=_auth_ts)
+    return [a.hash for a in others if a.hash != newest.hash]
+
+
+def _hashes_all_others(auths):
+    """Hashes to terminate so only the panel session survives."""
+    return [a.hash for a in _other_authorizations(auths)]
+
+
+async def _terminate_hashes(phone, hashes):
+    """Terminate the given authorization hashes. Returns (done, failed)."""
+    client, err = await _ensure_order_client(phone)
+    if err:
+        return 0, [err]
+    done, failed = 0, []
+    for h in hashes:
+        try:
+            await client(ResetAuthorizationRequest(hash=h))
+            done += 1
+        except Exception as exc:
+            logger.error(f"ResetAuthorization failed for {phone}: {exc}")
+            failed.append(str(exc))
+    return done, failed
+
+
+@bot.on(events.CallbackQuery(pattern=r"^reset_sessions\|(.+)$"))
+async def cb_reset_sessions(event):
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode("utf-8") if isinstance(r1, bytes) else r1
+    if phone not in active_orders:
+        return await event.answer("❌ Order is no longer active.", alert=True)
+    await event.answer("🔄 Loading active devices...")
+    await _show_sessions(event, phone)
+
+
+@bot.on(events.CallbackQuery(pattern=r"^refresh_order\|(.+)$"))
+async def cb_refresh_order(event):
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode("utf-8") if isinstance(r1, bytes) else r1
+    if phone not in active_orders:
+        return await event.answer("❌ Order is no longer active.", alert=True)
+    order = active_orders[phone]
+    temp_order = {
+        "c_icon": order.get("c_icon", ""),
+        "country": order.get("country", ""),
+        "twofa": order.get("twofa", "None"),
+    }
+    msg, btns = get_active_order_card(temp_order, phone, is_admin(event.sender_id))
+    try:
+        await event.edit(msg, buttons=btns)
+    except MessageNotModifiedError:
+        pass
+    except Exception:
+        await event.respond(msg, buttons=btns)
+
+
+@bot.on(events.CallbackQuery(pattern=r"^reset_one\|([^|]+)\|(\d+)$"))
+async def cb_reset_one(event):
+    r1 = event.pattern_match.group(1)
+    r2 = event.pattern_match.group(2)
+    phone = r1.decode("utf-8") if isinstance(r1, bytes) else r1
+    idx = int(r2.decode("utf-8") if isinstance(r2, bytes) else r2)
+    if phone not in active_orders:
+        return await event.answer("❌ Order is no longer active.", alert=True)
+
+    auths = session_auth_cache.get(phone)
+    if not auths:
+        auths, err = await _load_authorizations(phone)
+        if err:
+            return await event.answer(f"❌ {err}", alert=True)
+
+    others = [a for a in auths if not getattr(a, "current", False)]
+    if idx < 1 or idx > len(others):
+        return await event.answer("❌ That device is no longer in the list. Tap Refresh.", alert=True)
+
+    target = others[idx - 1]
+    done, failed = await _terminate_hashes(phone, [target.hash])
+    if done:
+        await event.answer("✅ Device terminated successfully.", alert=True)
+    else:
+        await event.answer(f"❌ Could not terminate device: {failed[0] if failed else 'unknown error'}", alert=True)
+    await _show_sessions(event, phone)
+
+
+@bot.on(events.CallbackQuery(pattern=r"^reset_all\|(.+)$"))
+async def cb_reset_all(event):
+    """Terminate every device except the panel session and the newest device.
+
+    The newest non-panel authorization is the buyer's freshly logged-in phone,
+    so this keeps the buyer's new device and removes all older devices.
+    """
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode("utf-8") if isinstance(r1, bytes) else r1
+    if phone not in active_orders:
+        return await event.answer("❌ Order is no longer active.", alert=True)
+
+    auths, err = await _load_authorizations(phone)
+    if err:
+        return await event.answer(f"❌ {err}", alert=True)
+
+    others = _other_authorizations(auths)
+    if not others:
+        return await event.answer("ℹ️ No other devices to terminate.", alert=True)
+
+    # Newest device = buyer's new phone. Keep it, terminate the rest.
+    to_kill = _hashes_keep_newest(auths)
+
+    if not to_kill:
+        return await event.answer("✅ Only your newest device is logged in — nothing else to remove.", alert=True)
+
+    done, failed = await _terminate_hashes(phone, to_kill)
+    await event.answer(
+        f"✅ Terminated {done} other device(s). Kept your newest device.",
+        alert=True,
+    )
+    if failed:
+        logger.warning(f"reset_all partial failures for {phone}: {failed}")
+    await _show_sessions(event, phone)
+
+
+@bot.on(events.CallbackQuery(pattern=r"^reset_panel\|(.+)$"))
+async def cb_reset_panel(event):
+    """Terminate every non-panel device so the buyer can log in cleanly."""
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode("utf-8") if isinstance(r1, bytes) else r1
+    if phone not in active_orders:
+        return await event.answer("❌ Order is no longer active.", alert=True)
+
+    auths, err = await _load_authorizations(phone)
+    if err:
+        return await event.answer(f"❌ {err}", alert=True)
+
+    to_kill = _hashes_all_others(auths)
+    if not to_kill:
+        return await event.answer("ℹ️ Only the panel device is logged in.", alert=True)
+
+    done, failed = await _terminate_hashes(phone, to_kill)
+    await event.answer(
+        f"✅ Removed {done} device(s). Only the panel device remains — you can log in now.",
+        alert=True,
+    )
+    if failed:
+        logger.warning(f"reset_panel partial failures for {phone}: {failed}")
+    await _show_sessions(event, phone)
