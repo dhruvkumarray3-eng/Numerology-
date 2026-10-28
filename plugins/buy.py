@@ -28,7 +28,7 @@ from config import (
     P_NO, P_YES, P_INR, P_TIME, P_FLAG, P_OTP, P_2FA, P_PHONE, AUTO_CANCEL_SECONDS,
     OTP_REGEX, bot, logger, API_ID, API_HASH, LZT_API_KEY, USDT_TO_INR
 )
-from utils.keyboards import style_btn, matches_menu, SEARCH_EMOJI_ID
+from utils.keyboards import style_btn, style_url, matches_menu, SEARCH_EMOJI_ID
 from utils.livecount import register_live, unregister_live
 from utils.markup import format_dual_from_inr, format_dual_price
 from utils.states import active_orders, session_buy_state, get_user_lock
@@ -564,7 +564,7 @@ async def _lzt_access_card(event, country=None, mode=None, detail=None):
         f"{detail_line}</blockquote>"
     )
     btns = [
-        [style_btn("\U0001F4B3 Buy Market Access", "https://lolz.live/payment/method?service_id=8&service_type=user_upgrade", "success", icon=5409320020058584473)],
+        [style_url("\U0001F4B3 Buy Market Access", "https://lolz.live/payment/method?service_id=8&service_type=user_upgrade", "success", icon=5409320020058584473)],
         [style_btn("\U0001F504 Try Again", f"pg_c|{mode or 'bulk'}|1", "primary", icon=5409320020058584473)],
         [style_btn("\U0001F519 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)],
     ]
@@ -1387,6 +1387,109 @@ async def cb_finish_order(event):
         unregister_live(f"order:{phone}")
         del active_orders[phone]
     await event.edit("✅ <b>Order completed successfully! Thank you.</b>")
+
+
+@bot.on(events.CallbackQuery(pattern=r"^cancel_order\|(.+)"))
+async def cb_cancel_order(event):
+    """Admin: cancel an active order and refund the buyer's balance."""
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode('utf-8') if isinstance(r1, bytes) else r1
+    if not is_admin(event.sender_id):
+        return await event.answer("❌ Admins only.", alert=True)
+    order = active_orders.get(phone)
+    if not order:
+        return await event.answer("❌ This order is no longer active.", alert=True)
+
+    uid = order.get('uid')
+    price = float(order.get('price') or 0)
+    was_paid = bool(order.get('paid'))
+
+    try:
+        if order.get('client'):
+            await order['client'].disconnect()
+    except Exception:
+        pass
+    unregister_live(f"order:{phone}")
+    active_orders.pop(phone, None)
+
+    refunded = 0.0
+    if was_paid and price > 0 and uid:
+        try:
+            from database import update_balance
+            update_balance(uid, price)
+            refunded = price
+        except Exception as ex:
+            logger.error(f"cancel_order refund failed: {ex}")
+
+    try:
+        await event.edit(
+            f"❌ <b>Order cancelled by admin.</b>\n\n"
+            f"📱 <b>Phone:</b> <code>+{phone}</code>\n"
+            f"💰 <b>Refunded:</b> {format_dual_from_inr(refunded) if refunded else '—'}"
+        )
+    except Exception:
+        pass
+    if uid:
+        try:
+            await bot.send_message(
+                uid,
+                f"❌ <b>Your order was cancelled by support.</b>\n\n"
+                f"📱 <b>Phone:</b> <code>+{phone}</code>\n"
+                f"💰 <b>Refunded to balance:</b> "
+                f"{format_dual_from_inr(refunded) if refunded else '—'}",
+            )
+        except Exception:
+            pass
+    return await event.answer("✅ Cancelled" + (" and refunded." if refunded else "."), alert=True)
+
+
+@bot.on(events.CallbackQuery(pattern=r"^get_qr_(.+)"))
+async def cb_get_qr(event):
+    """Send a Telegram QR-login link so the buyer can sign in without an OTP."""
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode('utf-8') if isinstance(r1, bytes) else r1
+    order = active_orders.get(phone)
+    if not order:
+        return await event.answer("❌ Order expired or completed.", alert=True)
+    if event.sender_id != order.get('uid') and not is_admin(event.sender_id):
+        return await event.answer("❌ This is not your order.", alert=True)
+
+    client = order.get('client')
+    if client is None:
+        return await event.answer("❌ Session unavailable for this order.", alert=True)
+
+    try:
+        qr = await client.qr_login()
+    except Exception as ex:
+        logger.error(f"qr_login failed for {phone}: {ex}")
+        return await event.answer(
+            "❌ QR login is not available for this session. "
+            "Use the OTP code instead.", alert=True)
+
+    try:
+        import io
+        import qrcode
+        img = qrcode.make(qr.url)
+        buf = io.BytesIO()
+        buf.name = f"qr_{phone}.png"
+        img.save(buf)
+        buf.seek(0)
+        await bot.send_file(
+            event.sender_id, buf,
+            caption=(f"🔑 <b>QR Login</b> — <code>+{phone}</code>\n\n"
+                     f"Open Telegram → Settings → Devices → Scan QR, then scan "
+                     f"this code within 2 minutes."),
+        )
+    except Exception as ex:
+        logger.error(f"qr image failed: {ex}")
+        return await event.answer(f"❌ Could not build QR: {ex}", alert=True)
+
+    await event.answer("✅ QR sent — scan it in Telegram.", alert=True)
+    try:
+        await qr.wait(timeout=120)
+        await bot.send_message(event.sender_id, "✅ <b>QR login confirmed!</b>")
+    except Exception:
+        pass
 
 
 # =========================================================
