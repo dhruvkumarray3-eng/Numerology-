@@ -35,7 +35,7 @@ from config import (
     logger,
 )
 from database import cur, db, ensure_user, get_user_currency
-from utils.keyboards import style_btn, matches_menu, SEARCH_EMOJI_ID
+from utils.keyboards import style_btn, matches_menu, SEARCH_EMOJI_ID, pe
 from utils import temporasms
 from utils.markup import (
     apply_markup, get_markup_config, describe_markup,
@@ -551,23 +551,32 @@ async def _safe_edit(event, text, buttons=None):
 # --------------------------------------------------------------------------
 async def show_panel_hub(event):
     btns = [
-        [style_btn("💬 WhatsApp Account", b"pp_open|whatsapp", "success", icon=5408995930416362034)],
-        [style_btn("🔁 TG Number Change", b"pp_open|numchange", "primary", icon=5409119256107297715)],
-        [style_btn(f"🧩 All Apps OTP — {len(ALL_APPS)} Apps", b"pp_open|allotp", "success", icon=5409320020058584473)],
+        [style_btn("💬 WhatsApp Account", b"pp_open|whatsapp", "success", icon="whatsapp")],
+        [style_btn("🔁 TG Number Change", b"pp_open|numchange", "primary", icon="numchange")],
+        [style_btn(f"🧩 All Apps OTP — {len(ALL_APPS)} Apps", b"pp_open|allotp", "success", icon="allapps_otp")],
         [style_btn("🔍 Search All Services", b"all_apps_menu", "success", icon=SEARCH_EMOJI_ID)],
-        [style_btn("🆘 Help", b"pp_help", "primary", icon=6129732880529628243)],
-        [style_btn("🔙 Back", b"dashboard_main", "danger", icon=6129812419028982717)],
+        [style_btn("🆘 Help", b"pp_help", "primary", icon="help")],
+        [style_btn("🔙 Back", b"dashboard_main", "danger", icon="back")],
     ]
-    status = "✅ Live" if temporasms.configured() else "⚠️ TEMPORASMS_API_KEY missing"
+    status = (pe("check", chr(0x2705)) + " Live") if temporasms.configured() else (pe("warning", chr(0x26A0) + chr(0xFE0F)) + " TEMPORASMS_API_KEY missing")
+    brand = pe("crown", "💚")
+    i_apps = pe("apps", "📱")
+    i_globe = pe("globe", "🌍")
+    i_chart = pe("chart", "📊")
+    i_money = pe("money", "💸")
+    i_tg = pe("telegram", "✈️")
+    i_lock = pe("lock", "🔑")
+    i_stats = pe("stats", "📈")
     msg = (
-        "<blockquote expandable>💚 <b>VTH PANEL SMS &amp; Virtual Number Activation</b>\n\n"
-        f"📱 <b>{len(ALL_APPS)} curated apps & platforms</b> — any other app on request\n"
-        "🌍 Numbers from many countries\n"
-        "📊 Live stock &amp; prices\n"
-        "💸 Auto refund if no SMS arrives\n"
-        "✈️ OTP delivered straight into chat\n\n"
-        f"🔑 <b>Panel status:</b> {status}\n"
-        "📈 <b>Rates:</b> cheapest country first</blockquote>"
+        f"<blockquote expandable>{brand} <b>VENDOR SELLINGS RDX</b> — "
+        f"<b>SMS &amp; Virtual Number Activation</b>\n\n"
+        f"{i_apps} <b>{len(ALL_APPS)} curated apps &amp; platforms</b> — any other app on request\n"
+        f"{i_globe} Numbers from many countries\n"
+        f"{i_chart} Live stock &amp; prices\n"
+        f"{i_money} Auto refund if no SMS arrives\n"
+        f"{i_tg} OTP delivered straight into chat\n\n"
+        f"{i_lock} <b>Panel status:</b> {status}\n"
+        f"{i_stats} <b>Rates:</b> cheapest country first</blockquote>"
     )
     await _safe_edit(event, msg, btns)
 
@@ -599,7 +608,7 @@ async def show_terms(event, key, country=None):
 
 async def show_guide(event, key):
     p = PANELS[key]
-    msg = f"<blockquote expandable>📖 <b>{p['title']} — Guide</b>\n\n{p['guide']}</blockquote>"
+    msg = f"<blockquote expandable>{pe('doc', chr(0x1F4D6))} <b>{p['title']} — Guide</b>\n\n{p['guide']}</blockquote>"
     btns = [
         [style_btn("✅ Agree & Continue", f"pp_agree|{key}", "success", icon=5408995930416362034)],
         [style_btn("🔙 Back", f"pp_open|{key}", "danger", icon=6129812419028982717)],
@@ -663,16 +672,21 @@ async def show_allotp_hub(event, page=1, query=None):
     ])
     btns.append([style_btn("\U0001F519 Back", b"pp_hub", "danger", icon=6129812419028982717)])
 
-    status = "\u2705 Live" if temporasms.configured() else "\u26a0\ufe0f TEMPORASMS_API_KEY missing"
-    search_line = f"\n\U0001F50E Filter: <b>{html.escape(query)}</b>" if query else ""
+    status = (pe("check", chr(0x2705)) + " Live") if temporasms.configured() else (pe("warning", chr(0x26A0) + chr(0xFE0F)) + " TEMPORASMS_API_KEY missing")
+    search_line = f"\n{pe('find', chr(0x1F50E))} Filter: <b>{html.escape(query)}</b>" if query else ""
+    i_apps = pe("apps", chr(0x1F4F1))
+    i_globe = pe("globe", chr(0x1F30D))
+    i_chart = pe("chart", chr(0x1F4CA))
+    i_money = pe("money", chr(0x1F4B8))
+    i_lock = pe("lock", chr(0x1F511))
     msg = (
-        f"<blockquote expandable>\U0001F9E9 <b>All Apps OTP \u2014 {len(ALL_APPS)} apps & platforms</b>\n\n"
-        "\U0001F4F1 Pick any app, then pick a country \u2014 a fresh number is reserved "
+        f"<blockquote expandable>{pe('allapps', chr(0x1F9E9))} <b>All Apps OTP \u2014 {len(ALL_APPS)} apps &amp; platforms</b>\n\n"
+        f"{i_apps} Pick any app, then pick a country \u2014 a fresh number is reserved "
         "and the OTP lands right here in this chat.\n\n"
-        "\U0001F30D Numbers from many countries\n"
-        "\U0001F4CA Live stock & prices\n"
-        "\U0001F4B8 Auto refund if no SMS arrives\n"
-        f"\U0001F511 <b>Panel status:</b> {status}{search_line}\n\n"
+        f"{i_globe} Numbers from many countries\n"
+        f"{i_chart} Live stock &amp; prices\n"
+        f"{i_money} Auto refund if no SMS arrives\n"
+        f"{i_lock} <b>Panel status:</b> {status}{search_line}\n\n"
         f"<i>Page {page}/{total_pages} \u00b7 {total} apps</i></blockquote>"
     )
     await _safe_edit(event, msg, btns)
@@ -704,13 +718,13 @@ async def start_app_search(event):
     panel_state.setdefault(uid, {})["panel"] = "allotp"
     panel_state[uid]["mode"] = "app_search"
     msg = (
-        "<blockquote expandable>\U0001F50D <b>Search App \u2014 All Apps OTP</b>\n\n"
+        f"<blockquote expandable>{pe('search', chr(0x1F50D))} <b>Search App \u2014 All Apps OTP</b>\n\n"
         "Send the app name (e.g. <code>telegram</code>, <code>instagram</code>, "
         "<code>chatgpt</code>, <code>discord</code>).</blockquote>"
     )
     btns = [
-        [style_btn("\U0001F4DA Browse All Apps", b"pp_apps|1", "success", icon=5409320020058584473)],
-        [style_btn("\U0001F519 Back", b"pp_open|allotp", "danger", icon=6129812419028982717)],
+        [style_btn(chr(0x1F4DA) + " Browse All Apps", b"pp_apps|1", "success", icon="apps")],
+        [style_btn(chr(0x1F519) + " Back", b"pp_open|allotp", "danger", icon="back")],
     ]
     await _safe_edit(event, msg, btns)
 
@@ -728,12 +742,12 @@ async def start_country_search(event, key="allotp"):
     if PANELS[key].get("dynamic_apps"):
         app_line = f" \u2014 {_app_icon(_selected_app(uid))} {html.escape(_clean_name(_app_label(_selected_app(uid))))}"
     msg = (
-        f"<blockquote expandable>\U0001F50D <b>Search Country{app_line}</b>\n\n"
+        f"<blockquote expandable>{pe('search', chr(0x1F50D))} <b>Search Country{app_line}</b>\n\n"
         "Send a country name, ISO code or dial code \u2014 e.g. <code>Japan</code>, "
         "<code>JP</code>, <code>JPN</code>, <code>+81</code>, <code>India</code>, "
         "<code>+91</code>.</blockquote>"
     )
-    btns = [[style_btn("\U0001F519 Back", f"pp_open|{key}", "danger", icon=6129812419028982717)]]
+    btns = [[style_btn(chr(0x1F519) + " Back", f"pp_open|{key}", "danger", icon="back")]]
     await _safe_edit(event, msg, btns)
 
 
@@ -845,7 +859,7 @@ async def show_countries(event, key, page=1, query=None):
     else:
         btns.append([style_btn("🔙 Back", b"pp_hub", "danger", icon=6129812419028982717)])
 
-    live_line = "🟢 Live rates" if live else "🟡 Cached rates (panel busy)"
+    live_line = (pe("check", chr(0x1F7E2)) + " Live rates") if live else (pe("warning", chr(0x1F7E1)) + " Cached rates (panel busy)")
     search_line = f"\n🔎 Filter: <b>{html.escape(query)}</b>" if query else ""
     if dynamic:
         service_line = (f"{p['icon']} <b>Service: All Apps OTP</b>\n"
@@ -875,7 +889,7 @@ async def start_search(event, key):
     panel_state.setdefault(uid, {})["mode"] = "search"
     panel_state[uid]["panel"] = key
     msg = (
-        f"<blockquote expandable>🔍 <b>Search Country — {PANELS[key]['title']}</b>\n\n"
+        f"<blockquote expandable>{pe('search', chr(0x1F50D))} <b>Search Country — {PANELS[key]['title']}</b>\n\n"
         "Send a country name, ISO code or dial code \u2014 e.g. <code>Japan</code>, "
         "<code>JP</code>, <code>JPN</code>, <code>+81</code>, <code>India</code>, "
         "<code>+91</code>.</blockquote>"
@@ -1050,11 +1064,11 @@ async def buy(event, key, code):
     )
 
     msg = (
-        f"<blockquote expandable>✅ <b>Number reserved — {PANELS[key]['title']}</b>\n\n"
-        f"📞 <b>Number:</b> <code>{html.escape(phone)}</code>\n"
+        f"<blockquote expandable>{pe('check', chr(0x2705))} <b>Number reserved \u2014 {PANELS[key]['title']}</b>\n\n"
+        f"{pe('phone', chr(0x1F4DE))} <b>Number:</b> <code>{html.escape(phone)}</code>\n"
         f"{_flag(code)} <b>Country:</b> {html.escape(_clean_name(match['name']))}\n"
-        f"💳 <b>Paid:</b> {format_dual_from_inr(display_inr)}\n"
-        f"🆔 <b>Order:</b> <code>{html.escape(order_id)}</code>\n\n"
+        f"{pe('money', chr(0x1F4B3))} <b>Paid:</b> {format_dual_from_inr(display_inr)}\n"
+        f"{pe('orders', chr(0x1F194))} <b>Order:</b> <code>{html.escape(order_id)}</code>\n\n"
         "Use this number on the platform, then tap <b>Get OTP</b>.</blockquote>"
     )
     btns = [
@@ -1108,9 +1122,9 @@ async def _auto_otp(uid, key, order_id, phone, price):
             return
         sent = await bot.send_message(
             uid,
-            f"<blockquote expandable>🔢 <b>OTP received — {PANELS[key]['title']}</b>\n\n"
-            f"📞 <b>Number:</b> <code>{html.escape(phone)}</code>\n"
-            f"🔑 <b>Code:</b> <code>{html.escape(result['otp'])}</code>\n\n"
+            f"<blockquote expandable>{pe('lock', chr(0x1F522))} <b>OTP received \u2014 {PANELS[key]['title']}</b>\n\n"
+            f"{pe('phone', chr(0x1F4DE))} <b>Number:</b> <code>{html.escape(phone)}</code>\n"
+            f"{pe('key', chr(0x1F511))} <b>Code:</b> <code>{html.escape(result['otp'])}</code>\n\n"
             "<i>\u2728 Tap the code to copy it \u2014 then enter it on the platform right away, it expires quickly.</i></blockquote>",
             buttons=[
                 [style_btn("\U0001F4CB Copy Code", f"copy_otp|{result['otp']}", "success", icon=5409098988156629257)],
@@ -1142,7 +1156,7 @@ async def get_otp_now(event):
         if not _mark_order_received(order_id, result["otp"]):
             return await event.answer("⚠️ This order is no longer active.", alert=True)
         msg = (
-            "<blockquote expandable>🔢 <b>OTP received</b>\n\n"
+            f"<blockquote expandable>{pe('lock', chr(0x1F522))} <b>OTP received</b>\n\n"
             f"📞 <b>Number:</b> <code>{html.escape(st.get('phone') or '—')}</code>\n"
             f"🔑 <b>Code:</b> <code>{html.escape(result['otp'])}</code></blockquote>"
         )
@@ -1229,9 +1243,9 @@ async def refund(event):
                                 order_id=order_id, amount=price)
     panel_state.get(uid, {}).pop("order_id", None)
     msg = (
-        "<blockquote expandable>💸 <b>Order cancelled &amp; refunded</b>\n\n"
-        f"🆔 <b>Order:</b> <code>{html.escape(order_id)}</code>\n"
-        f"💰 <b>Refunded:</b> {format_dual_from_inr(price)}\n\n"
+        f"<blockquote expandable>{pe('money', chr(0x1F4B8))} <b>Order cancelled &amp; refunded</b>\n\n"
+        f"{pe('orders', chr(0x1F194))} <b>Order:</b> <code>{html.escape(order_id)}</code>\n"
+        f"{pe('balance', chr(0x1F4B0))} <b>Refunded:</b> {format_dual_from_inr(price)}\n\n"
         "<i>The amount is back in your balance instantly.</i></blockquote>"
     )
     btns = [
@@ -1243,13 +1257,13 @@ async def refund(event):
 
 async def show_help(event):
     msg = (
-        "<blockquote expandable>🆘 <b>Panel Help</b>\n\n"
-        "• <b>No SMS?</b> Wait up to 2 minutes, then tap Cancel &amp; Refund.\n"
-        "• <b>Wrong country?</b> Go back and pick another one.\n"
-        "• <b>Balance low?</b> Top up from the Recharge menu.\n"
-        "• <b>Number rejected?</b> Some platforms block virtual numbers — "
+        f"<blockquote expandable>{pe('help', chr(0x1F198))} <b>Panel Help</b>\n\n"
+        "\u2022 <b>No SMS?</b> Wait up to 2 minutes, then tap Cancel &amp; Refund.\n"
+        "\u2022 <b>Wrong country?</b> Go back and pick another one.\n"
+        "\u2022 <b>Balance low?</b> Top up from the Recharge menu.\n"
+        "\u2022 <b>Number rejected?</b> Some platforms block virtual numbers \u2014 "
         "try a different country.\n\n"
-        "💬 Still stuck? Contact support from the main menu.</blockquote>"
+        f"{pe('support', chr(0x1F4AC))} Still stuck? Contact support from the main menu.</blockquote>"
     )
     btns = [[style_btn("🔙 Back", b"pp_hub", "danger", icon=6129812419028982717)]]
     await _safe_edit(event, msg, btns)
@@ -1394,12 +1408,12 @@ def register_product_panels(bot):
     async def cmd_rates(e):
         cfg = get_markup_config()
         msg = (
-            "<blockquote expandable>📈 <b>Live Panel Rates</b>\n\n"
-            "💬 WhatsApp · 🔁 Number Change · 🧩 All Apps OTP\n"
-            "🌍 All countries, cheapest first\n"
-            f"⚙️ {describe_markup(cfg)}\n"
-            f"💱 <b>Rate:</b> ₹{price_breakdown(100, cfg)['rate']:g} = 1 USDT\n\n"
-            "<i>Every price is shown in <b>₹INR</b> and <b>USDT</b>. "
+            f"<blockquote expandable>{pe('stats', chr(0x1F4C8))} <b>Live Panel Rates</b>\n\n"
+            f"{pe('whatsapp', chr(0x1F4AC))} WhatsApp \u00b7 {pe('numchange', chr(0x1F501))} Number Change \u00b7 {pe('allapps', chr(0x1F9E9))} All Apps OTP\n"
+            f"{pe('globe', chr(0x1F30D))} All countries, cheapest first\n"
+            f"{pe('settings', chr(0x2699) + chr(0xFE0F))} {describe_markup(cfg)}\n"
+            f"{pe('money', chr(0x1F4B1))} <b>Rate:</b> \u20b9{price_breakdown(100, cfg)['rate']:g} = 1 USDT\n\n"
+            "<i>Every price is shown in <b>\u20b9INR</b> and <b>USDT</b>. "
             "Open a panel to see the live price for your country.</i></blockquote>"
         )
         btns = [[style_btn("🧩 Open Panels", b"pp_hub", "success", icon=5409320020058584473)]]
