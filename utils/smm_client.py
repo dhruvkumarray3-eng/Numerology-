@@ -249,6 +249,67 @@ async def get_smm_service_details(service_id, server=1):
             return s
     return None
 
+async def search_smm_services(query, server=1, platform=None, limit=60):
+    """Search the whole SMM catalogue for services matching ``query``.
+
+    Mirrors the "search any service" behaviour users expect (like searching a
+    YouTube service by name): the query is matched case-insensitively against
+    the service name, its category and its numeric service id.  When
+    ``platform`` is given the results are limited to that platform, otherwise
+    every platform on the server is searched.
+
+    Results are ranked so the most relevant matches come first:
+
+      1. name starts with the query
+      2. name contains the query
+      3. category contains the query
+      4. service id matches exactly
+
+    Returns a list of raw provider service dicts.
+    """
+    services = await fetch_smm_services(server)
+    if not services:
+        return []
+
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+
+    # Multi-word queries: every token must appear somewhere in the haystack.
+    tokens = [t for t in q.replace("|", " ").split() if t]
+
+    def _haystack(s):
+        return " ".join([
+            str(s.get('name', '')),
+            str(s.get('category', '')),
+            str(s.get('service', '')),
+        ]).lower()
+
+    scored = []
+    for s in services:
+        cat = str(s.get('category', ''))
+        if platform and platform not in ("all", "*") and detect_platform(cat) != platform:
+            continue
+        hay = _haystack(s)
+        if not all(tok in hay for tok in tokens):
+            continue
+        name = str(s.get('name', '')).lower()
+        if name.startswith(q):
+            rank = 0
+        elif q in name:
+            rank = 1
+        elif q in cat.lower():
+            rank = 2
+        elif q == str(s.get('service', '')).lower():
+            rank = 3
+        else:
+            rank = 4
+        scored.append((rank, name, s))
+
+    scored.sort(key=lambda t: (t[0], t[1]))
+    return [s for _, _, s in scored[:limit]]
+
+
 def get_service_panel_rate(service, server=1):
     """Raw provider (panel) rate per 1000, converted to INR. No owner markup."""
     rate_raw = float(service.get('rate', 0) or 0)

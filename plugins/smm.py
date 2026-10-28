@@ -9,11 +9,19 @@ from utils.smm_client import (
     SMM_SERVERS, get_smm_platforms, get_categories_for_platform,
     get_services_for_category, get_smm_service_details, get_service_inr_rate,
     create_smm_order, PLATFORM_ICONS, PLATFORM_PREMIUM_ICONS,
-    is_server_enabled,
+    is_server_enabled, search_smm_services, detect_platform,
 )
 
 # User state dictionary for SMM orders
 smm_order_state = {}
+
+# Search state: uid -> {'server': int, 'platform': str|'all'}
+# A user who taps a Search button is asked to type a query; the next text
+# message is routed to the SMM search instead of the order flow.
+smm_search_state = {}
+
+# Owner-supplied premium emoji id used on every Search button.
+SEARCH_EMOJI_ID = 5229102316145106683
 
 # ── Step 1: Select Server ──
 async def show_smm_servers(event):
@@ -79,6 +87,7 @@ async def show_smm_platforms_menu(event, server=1):
     if plat_row:
         btns.append(plat_row)
         
+    btns.append([style_btn("🔍 𝐒ᴇᴀᴧᴄʜ 𝐀ʟʟ 𝐒ᴇʀᴠɪᴄᴇs", f"smm_search|{server}|all", "success", icon=SEARCH_EMOJI_ID)])
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐒ᴇʀᴠᴇʀs", b"smm_menu_main", "danger", icon=6129812419028982717)])
     
     msg = (f"<blockquote>🌐 <b>{srv['name']} — 𝐒ᴇʟᴇᴄᴛ 𝐏ʟᴀᴛғᴏʀᴍ</b>\n\n"
@@ -115,6 +124,7 @@ async def show_platform_categories(event, server, platform, page):
     if nav:
         btns.append(nav)
         
+    btns.append([style_btn(f"🔍 𝐒ᴇᴀᴧᴄʜ ɪɴ {platform}", f"smm_search|{server}|{platform}", "success", icon=SEARCH_EMOJI_ID)])
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐏ʟᴀᴛғᴏʀᴍs", f"smm_srv|{server}", "danger", icon=6129812419028982717)])
     
     total_pages = max(1, (total + limit - 1) // limit)
@@ -155,6 +165,7 @@ async def show_category_services(event, server, platform, cat_idx, page):
     if nav:
         btns.append(nav)
         
+    btns.append([style_btn(f"🔍 𝐒ᴇᴀᴧᴄʜ 𝐒ᴇʀᴠɪᴄᴇs", f"smm_search|{server}|{platform}", "success", icon=SEARCH_EMOJI_ID)])
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐂ᴀᴛᴇɢᴏʀɪᴇs", f"smm_plat|{server}|{platform}|1", "danger", icon=6129812419028982717)])
     
     total_pages = max(1, (total + limit - 1) // limit)
@@ -193,6 +204,103 @@ async def show_service_card(event, server, platform, cat_idx, service_id):
     try: await event.edit(msg, buttons=btns)
     except MessageNotModifiedError: pass
 
+# ── Search: prompt + results ──
+async def show_smm_search_prompt(event, server, platform):
+    """Ask the user to type a keyword for the SMM service search."""
+    srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
+    scope = "all platforms" if platform in ("all", "*") else platform
+    msg = (f"<blockquote>🔍 <b>Search SMM Services</b>\n\n"
+           f"🌐 <b>Server:</b> <code>{html.escape(srv['name'])}</code>\n"
+           f"📂 <b>Scope:</b> <code>{html.escape(scope)}</code>\n\n"
+           f"✍️ <b>Type a keyword</b> — e.g. <code>youtube views</code>, "
+           f"<code>instagram followers</code>, <code>telegram members</code>, "
+           f"<code>tiktok likes</code>.</blockquote>")
+    back = (f"smm_srv|{server}" if platform in ("all", "*")
+            else f"smm_plat|{server}|{platform}|1")
+    btns = [
+        [style_btn("🔍 Search Again", f"smm_search|{server}|{platform}", "primary", icon=SEARCH_EMOJI_ID)],
+        [style_btn("🔙 Back", back, "danger", icon=6129812419028982717)],
+    ]
+    try:
+        await event.edit(msg, buttons=btns)
+    except MessageNotModifiedError:
+        pass
+
+
+async def _cat_idx_for(server, platform, cat_name):
+    """Return the index of ``cat_name`` inside its platform's category list."""
+    try:
+        cats = await get_categories_for_platform(platform, server)
+    except Exception:
+        return 0
+    for i, c in enumerate(cats):
+        if c['name'].strip() == (cat_name or '').strip():
+            return i
+    return 0
+
+
+async def show_smm_search_results(event, uid, server, platform, query, edit=True):
+    """Render ranked search results as tappable service buttons."""
+    results = await search_smm_services(query, server, platform)
+    srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
+    scope = "all platforms" if platform in ("all", "*") else platform
+    back = (f"smm_srv|{server}" if platform in ("all", "*")
+            else f"smm_plat|{server}|{platform}|1")
+
+    if not results:
+        msg = (f"<blockquote>🔍 <b>No results found</b>\n\n"
+               f"🔎 <b>Query:</b> <code>{html.escape(query)}</code>\n"
+               f"🌐 <b>Scope:</b> <code>{html.escape(scope)}</code>\n\n"
+               f"<i>Try a shorter or different keyword — e.g. <code>views</code>, "
+               f"<code>followers</code>, <code>likes</code>.</i></blockquote>")
+        btns = [
+            [style_btn("🔍 Search Again", f"smm_search|{server}|{platform}", "primary", icon=SEARCH_EMOJI_ID)],
+            [style_btn("🔙 Back", back, "danger", icon=6129812419028982717)],
+        ]
+        await _smm_send(event, msg, btns, edit)
+        return
+
+    shown = results[:8]
+    btns = []
+    for s in shown:
+        s_id = s.get('service')
+        s_name = str(s.get('name', 'Service'))
+        rate_inr = get_service_inr_rate(s, server)
+        cat_name = str(s.get('category', ''))
+        plat = detect_platform(cat_name) or (platform if platform not in ("all", "*") else "Other Services")
+        cat_idx = await _cat_idx_for(server, plat, cat_name)
+        short_name = s_name[:26] + '..' if len(s_name) > 28 else s_name
+        btns.append([style_btn(f"{short_name} — {P_INR}{rate_inr}/1k",
+                               f"smm_srv_info|{server}|{plat}|{cat_idx}|{s_id}",
+                               "primary", icon="cart")])
+
+    btns.append([style_btn("🔍 Search Again", f"smm_search|{server}|{platform}", "success", icon=SEARCH_EMOJI_ID)])
+    btns.append([style_btn("🔙 Back", back, "danger", icon=6129812419028982717)])
+
+    msg = (f"<blockquote>🔍 <b>Search Results</b>\n\n"
+           f"🔎 <b>Query:</b> <code>{html.escape(query)}</code>\n"
+           f"🌐 <b>Scope:</b> <code>{html.escape(scope)}</code>\n"
+           f"📊 <b>Matches:</b> <code>{len(results)}</code> (showing {len(shown)})\n\n"
+           f"<i>Tap a service to view details and order.</i></blockquote>")
+    await _smm_send(event, msg, btns, edit)
+
+
+async def _smm_send(event, msg, btns, edit=True):
+    """Edit the current panel when possible, otherwise send a fresh message."""
+    if edit:
+        try:
+            await event.edit(msg, buttons=btns)
+            return
+        except MessageNotModifiedError:
+            return
+        except Exception:
+            pass
+    try:
+        await event.respond(msg, buttons=btns)
+    except Exception:
+        await event.reply(msg, buttons=btns)
+
+
 def register_smm(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^/smm(?:@\w+)?$"))
     async def cmd_smm(e):
@@ -200,6 +308,32 @@ def register_smm(bot):
         # did nothing.  show_smm_servers() works for both messages and
         # callbacks, so it is safe to reuse here.
         await show_smm_servers(e)
+
+    @bot.on(events.CallbackQuery(pattern=r"^smm_search\|(\d+)\|([^|]+)$"))
+    async def cb_smm_search(e):
+        p = e.pattern_match
+        server = int(p.group(1).decode())
+        platform = p.group(2).decode()
+        uid = e.sender_id
+        # Only one flow at a time: a pending order is abandoned when searching.
+        smm_order_state.pop(uid, None)
+        smm_search_state[uid] = {'server': server, 'platform': platform}
+        await e.answer("\U0001F50D Send me a keyword to search.")
+        await show_smm_search_prompt(e, server, platform)
+
+    @bot.on(events.NewMessage(func=lambda e: e.sender_id in smm_search_state
+                              and not (e.text or "").startswith('/')))
+    async def msg_smm_search_query(e):
+        uid = e.sender_id
+        state = smm_search_state.pop(uid, None)
+        if not state:
+            return
+        query = (e.text or "").strip()
+        if len(query) < 2:
+            smm_search_state[uid] = state
+            return await e.reply(f"{P_NO} <b>Query too short.</b> Send at least 2 characters.")
+        await show_smm_search_results(e, uid, state['server'], state['platform'], query, edit=False)
+        raise events.StopPropagation
 
     @bot.on(events.CallbackQuery(pattern=b"^smm_menu_main$"))
     async def cb_smm_main(e):
@@ -286,6 +420,9 @@ def register_smm(bot):
     @bot.on(events.NewMessage(func=lambda e: e.sender_id in smm_order_state and not (e.text or "").startswith('/')))
     async def msg_smm_order_inputs(e):
         uid = e.sender_id
+        # A search in progress takes priority over the order flow.
+        if uid in smm_search_state:
+            return
         state = smm_order_state.get(uid)
         if not state: return
         
