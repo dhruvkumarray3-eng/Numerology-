@@ -40,15 +40,15 @@ async def show_more_content(event):
         f"into a .session file, or read an existing session.\n"
         f"🎟 <b>Redeem</b> — redeem a gift code and get balance instantly.\n"
         f"🎁 <b>Refer &amp; Earn</b> — invite friends and earn commission.\n"
-        f"🤖 <b>Get your own Bots</b> — bot news and updates.\n\n"
+        f"🤖 <b>Get the Best Bots</b> — bot news and updates.\n\n"
         f"<i>Choose an option below.</i></blockquote>"
     )
     btns = [
         [style_btn("🧩 Read & Generate Sessions", b"mc_sessions", "primary", icon=5409320020058584473)],
         [style_btn("🎟 Redeem", b"mc_redeem", "success", icon=5409098988156629257)],
         [style_btn("🎁 Refer & Earn", b"view_referrals", "success", icon=5354889508674360491)],
-        # ---- Get your own Bots (colourful link hub) ----
-        [style_url("🤖 Get your own Bots ↗️", UPDATES_URL, "success", icon=5409320020058584473)],
+        # ---- Get the Best Bots (colourful link hub) ----
+        [style_url("🤖 Get the Best Bots ↗️", UPDATES_URL, "success", icon=5409320020058584473)],
         [style_url("📢 Updates Channel ↗️", MAIN_CHANNEL_URL, "primary", icon=6129732880529628243)],
         [style_url("🛠 Bot Setup Support ↗️", SUPPORT_URL, "danger", icon=6129812419028982717)],
         [style_btn("🔙 Back", b"dashboard_main", "danger", icon=6129812419028982717)],
