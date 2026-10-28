@@ -35,7 +35,7 @@ from config import (
     logger,
 )
 from database import cur, db, ensure_user, get_user_currency
-from utils.keyboards import style_btn, matches_menu
+from utils.keyboards import style_btn, matches_menu, SEARCH_EMOJI_ID
 from utils import temporasms
 from utils.markup import (
     apply_markup, get_markup_config, describe_markup,
@@ -554,7 +554,7 @@ async def show_panel_hub(event):
         [style_btn("💬 WhatsApp Account", b"pp_open|whatsapp", "success", icon=5408995930416362034)],
         [style_btn("🔁 TG Number Change", b"pp_open|numchange", "primary", icon=5409119256107297715)],
         [style_btn(f"🧩 All Apps OTP — {len(ALL_APPS)} Apps", b"pp_open|allotp", "success", icon=5409320020058584473)],
-        [style_btn("🔍 Search All Services", b"all_apps_menu", "success", icon=5409098988156629257)],
+        [style_btn("🔍 Search All Services", b"all_apps_menu", "success", icon=SEARCH_EMOJI_ID)],
         [style_btn("🆘 Help", b"pp_help", "primary", icon=6129732880529628243)],
         [style_btn("🔙 Back", b"dashboard_main", "danger", icon=6129812419028982717)],
     ]
@@ -629,7 +629,7 @@ async def show_allotp_hub(event, page=1, query=None):
         )
         btns = [
             [style_btn("\U0001F4DA Browse All Apps", b"pp_apps|1", "success", icon=5409320020058584473)],
-            [style_btn("\U0001F50D Search App", b"pp_appsearch", "primary", icon=5409098988156629257)],
+            [style_btn("\U0001F50D Search App", b"pp_appsearch", "primary", icon=SEARCH_EMOJI_ID)],
             [style_btn("\U0001F519 Back", b"pp_hub", "danger", icon=6129812419028982717)],
         ]
         custom = _custom_slug(query)
@@ -658,8 +658,8 @@ async def show_allotp_hub(event, page=1, query=None):
     btns.append(nav)
 
     btns.append([
-        style_btn("\U0001F50D Search App", b"pp_appsearch", "primary", icon=5409098988156629257),
-        style_btn("\U0001F30D Search Country", b"pp_csearch", "success", icon=5409098988156629257),
+        style_btn("\U0001F50D Search App", b"pp_appsearch", "primary", icon=SEARCH_EMOJI_ID),
+        style_btn("\U0001F30D Search Country", b"pp_csearch", "success", icon=SEARCH_EMOJI_ID),
     ])
     btns.append([style_btn("\U0001F519 Back", b"pp_hub", "danger", icon=6129812419028982717)])
 
@@ -808,7 +808,7 @@ async def show_countries(event, key, page=1, query=None):
                 "<code>JPN</code>) or dial code (<code>+81</code>).</blockquote>"
             )
         btns = [
-            [style_btn("\U0001F50D Search Country", f"pp_search|{key}", "primary", icon=5409098988156629257)],
+            [style_btn("\U0001F50D Search Country", f"pp_search|{key}", "primary", icon=SEARCH_EMOJI_ID)],
             [style_btn("\U0001F504 Refresh", f"pp_open|{key}", "success", icon=5409320020058584473)],
             [style_btn("\U0001F519 Back", b"pp_hub", "danger", icon=6129812419028982717)],
         ]
@@ -834,7 +834,7 @@ async def show_countries(event, key, page=1, query=None):
     btns.append(nav)
 
     btns.append([
-        style_btn("🔍 Search Country", f"pp_search|{key}", "primary", icon=5409098988156629257),
+        style_btn("🔍 Search Country", f"pp_search|{key}", "primary", icon=SEARCH_EMOJI_ID),
         style_btn("🔄 Refresh", f"pp_open|{key}", "success", icon=5409320020058584473),
     ])
     if dynamic:

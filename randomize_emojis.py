@@ -27,11 +27,33 @@ def replace_icon(match):
 
 def replace_existing_icon(match):
     prefix = match.group(1)
+    if _is_search_call(prefix):
+        return prefix + f"icon={SEARCH_EMOJI_ID}"
     return f"{prefix}icon={random.choice(emoji_ids)}"
+
+SEARCH_EMOJI_ID = 5229102316145106683
+
+
+def _is_search_call(inner):
+    """True when a style_btn(...) body belongs to a Search button.
+
+    Search buttons must always keep the owner-supplied emoji id, so this
+    script must never randomise them.
+    """
+    return "search" in inner.lower() or str(SEARCH_EMOJI_ID) in inner
+
 
 for filepath in files:
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
+
+    # Never touch Search buttons: pin their icon to the owner-supplied id.
+    content = re.sub(
+        r"(style_btn\([^)]*?search[^)]*?icon=)\d+",
+        lambda m: m.group(1) + str(SEARCH_EMOJI_ID),
+        content,
+        flags=re.IGNORECASE,
+    )
     
     # 1. Replace existing icons
     content = re.sub(r"(style_btn\([^)]*?)icon=\d+", replace_existing_icon, content)
@@ -40,6 +62,8 @@ for filepath in files:
     # Match style_btn("...", "...", "...") where it ends with ) and does NOT have icon=
     def add_icon(m):
         inner = m.group(1)
+        if _is_search_call(inner):
+            return f"style_btn({inner}, icon={SEARCH_EMOJI_ID})" if "icon=" not in inner else m.group(0)
         if "icon=" not in inner:
             return f"style_btn({inner}, icon={random.choice(emoji_ids)})"
         return m.group(0)

@@ -7,7 +7,7 @@ from utils.states import session_buy_state, deposit_input, active_orders, waitin
 from plugins.start import send_main_menu
 from utils.terms import get_terms_message
 from utils.helpers import check_channel_joined
-from utils.keyboards import style_btn, style_url
+from utils.keyboards import style_btn, style_url, SEARCH_EMOJI_ID
 from utils.lzt import COUNTRY_TO_LZT
 
 async def send_stock_page(event, page=1):
@@ -61,7 +61,7 @@ async def send_stock_page(event, page=1):
     btns = []
     if nav:
         btns.append(nav)
-    btns.append([style_btn("\U0001F50D Search Country", "search_country_btn", "primary", icon=5409098988156629257)])
+    btns.append([style_btn("\U0001F50D Search Country", "search_country_btn", "primary", icon=SEARCH_EMOJI_ID)])
     btns.append([style_btn("\U0001F519 Back", "dashboard_main", "danger", icon=6129812419028982717)])
 
     if isinstance(event, events.CallbackQuery.Event):

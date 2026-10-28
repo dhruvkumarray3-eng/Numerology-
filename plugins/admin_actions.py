@@ -20,7 +20,7 @@ from database import (
     set_change_number_fee
 )
 from config import *
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, SEARCH_EMOJI_ID
 from utils.states import admin_state
 from utils.lzt import lzt_client, validate_token_format, token_fingerprint
 from plugins.admin import admin_panel_handler
@@ -86,7 +86,7 @@ async def render_search_settings(event):
     btns = [
         [style_btn(f"📡 Live Search: {live}", "adm_ss_toggle|live_search_enabled",
                    "success" if cfg.get("live_search_enabled") == "1" else "danger",
-                   icon=5409320020058584473),
+                   icon=SEARCH_EMOJI_ID),
          style_btn(f"🔁 Both Cheap: {both}", "adm_ss_toggle|both_cheap",
                    "success" if cfg.get("both_cheap") == "1" else "danger",
                    icon=5409320020058584473)],

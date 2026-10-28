@@ -28,7 +28,7 @@ from config import (
     P_NO, P_YES, P_INR, P_TIME, P_FLAG, P_OTP, P_2FA, P_PHONE, AUTO_CANCEL_SECONDS,
     OTP_REGEX, bot, logger, API_ID, API_HASH, LZT_API_KEY, USDT_TO_INR
 )
-from utils.keyboards import style_btn, matches_menu
+from utils.keyboards import style_btn, matches_menu, SEARCH_EMOJI_ID
 from utils.livecount import register_live, unregister_live
 from utils.markup import format_dual_from_inr, format_dual_price
 from utils.states import active_orders, session_buy_state, get_user_lock
@@ -406,7 +406,7 @@ async def show_buy_menu(event):
            f"{live_line}"
            f"🏛 <b>𝐎𝐥𝐝 / 𝐀𝐠𝐞𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭𝐬:</b> 𝐅𝐢𝐥𝐭𝐞𝐫 𝐛𝐲 𝐒𝐩𝐞𝐜𝐢𝐟𝐢𝐜 𝐘𝐞𝐚𝐫 (2025, 2024, 2023...).</blockquote>")
     btns = [
-        [style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "search_country_btn", "primary", icon=5409098988156629257)],
+        [style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "search_country_btn", "primary", icon=SEARCH_EMOJI_ID)],
         [style_btn("\U0001f4ac \U0001d401\U0001d42e\U0001d432 \U0001d416\U0001d40f \U0001d400\U0001d41c\U0001d41c\U0001d428\U0001d42e\U0001d427\U0001d42d", "buy_wp_acc", "success", icon=5408995930416362034)],
         [
             style_btn("✅ 𝓖𝓸𝓸𝓭 𝓠𝓾𝓪𝓵𝓲𝓽𝔂 𝓣𝓖 𝓐𝓬𝓬", "pg_c|nonspam|1", "success", icon=5409320020058584473),
@@ -462,7 +462,7 @@ async def _no_stock_card(event, mode=None, country=None, reason=None):
         f"{reason_line}</blockquote>"
     )
     btns = [
-        [style_btn("\U0001F50D Search Country", "search_country_btn", "primary", icon=5409098988156629257)],
+        [style_btn("\U0001F50D Search Country", "search_country_btn", "primary", icon=SEARCH_EMOJI_ID)],
         [style_btn("\u2705 Good Quality Accounts", "pg_c|nonspam|1", "success", icon=5409320020058584473),
          style_btn("\U0001F4B0 Cheap Accounts", "pg_c|spam|1", "primary", icon=5408995930416362034)],
         [style_btn("\U0001F4F1 Basic Telegram Accounts", "mtg_home", "success", icon=5409320020058584473)],
@@ -599,7 +599,7 @@ async def show_countries_for_year(event, year, page):
     if offset + limit < total: nav.append(style_btn("𝐍𝐞𝐱𝐭 ➡️", f"c_by_yr|{year}|{page+1}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
     f_btns.append([style_btn("\U0001F50D Search Country", "search_country_btn",
-                              "primary", icon=5409098988156629257)])
+                              "primary", icon=SEARCH_EMOJI_ID)])
     
     f_btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐘𝐞𝐚𝐫𝐬", "by_years_menu", "danger", icon=6129812419028982717)])
     
@@ -630,7 +630,7 @@ async def show_countries(event, mode, page):
     
     nav = []
     if page > 1: nav.append(style_btn("⬅️ 𝐏𝐫𝐞𝐯", f"pg_c|{mode}|{page-1}", "primary", icon=6129627894349045589))
-    nav.append(style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡", "search_country_btn", "primary", icon=5409098988156629257))
+    nav.append(style_btn("🔍 𝐒𝐞𝐚𝐫𝐜𝐡", "search_country_btn", "primary", icon=SEARCH_EMOJI_ID))
     if offset + limit < total: nav.append(style_btn("𝐍𝐞𝐱𝐭 ➡️", f"pg_c|{mode}|{page+1}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
     
@@ -1257,7 +1257,7 @@ async def process_combined_text_input(event):
                     "Try a country name (<code>Japan</code>), a 2-letter code "
                     "(<code>JP</code>), a 3-letter code (<code>JPN</code>) or a "
                     "dial code (<code>+81</code>).",
-                    buttons=[[style_btn("\U0001F50D Search Again", "search_country_btn", "primary", icon=5409098988156629257)],
+                    buttons=[[style_btn("\U0001F50D Search Again", "search_country_btn", "primary", icon=SEARCH_EMOJI_ID)],
                              [style_btn("\U0001F519 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)]],
                 )
 

@@ -20,7 +20,7 @@ from config import (
     logger,
 )
 from database import cur, db, get_user_currency, update_balance
-from utils.keyboards import style_btn, pe
+from utils.keyboards import style_btn, pe, SEARCH_EMOJI_ID
 
 # Per-app premium icon (custom emoji id).  Falls back to a generic phone icon.
 APP_ICONS = {
@@ -187,7 +187,7 @@ async def show_all_apps(event):
             row = []
     if row:
         btns.append(row)
-    btns.append([style_btn("🔍 Search App", b"aa_appsearch", "primary", icon=5409098988156629257)])
+    btns.append([style_btn("🔍 Search App", b"aa_appsearch", "primary", icon=SEARCH_EMOJI_ID)])
     btns.append([style_btn("🔙 Back", b"buy_menu_main", "danger", icon=6129812419028982717)])
 
     msg = (
@@ -220,7 +220,7 @@ async def show_countries_for_app(event, app_slug):
         btns.append(row)
     btns.append([
         style_btn("🔍 Search Country", f"aa_search|{app_slug}", "primary",
-                  icon=5409098988156629257),
+                  icon=SEARCH_EMOJI_ID),
     ])
     btns.append([style_btn("🔙 Back", b"all_apps_menu", "danger", icon=6129812419028982717)])
 
@@ -403,7 +403,7 @@ def register_all_apps(bot):
                 if row:
                     btns.append(row)
                 btns.append([style_btn("🔍 Search Again", b"aa_appsearch", "primary",
-                                       icon=5409098988156629257)])
+                                       icon=SEARCH_EMOJI_ID)])
                 btns.append([style_btn("🔙 Back", b"all_apps_menu", "danger",
                                        icon=6129812419028982717)])
                 msg = (f"<blockquote expandable>🔍 <b>Results for</b> "
@@ -420,7 +420,7 @@ def register_all_apps(bot):
                 f"<blockquote>😕 No app matched <b>{html.escape(query)}</b>.\n"
                 "Try another name.</blockquote>",
                 buttons=[[style_btn("🔍 Search Again", b"aa_appsearch", "primary",
-                                    icon=5409098988156629257)],
+                                    icon=SEARCH_EMOJI_ID)],
                          [style_btn("🔙 Back", b"all_apps_menu", "danger",
                                     icon=6129812419028982717)]],
             )
@@ -493,7 +493,7 @@ def register_all_apps(bot):
             )
         btns = [
             [style_btn("🔍 Search Again", f"aa_search|{slug}", "primary",
-                       icon=5409098988156629257)],
+                       icon=SEARCH_EMOJI_ID)],
             [style_btn("🔙 Back", f"aa_app|{slug}", "danger",
                        icon=6129812419028982717)],
         ]
