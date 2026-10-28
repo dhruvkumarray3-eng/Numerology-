@@ -320,6 +320,9 @@ PREMIUM_EMOJIS = {
     "card": 5409271925014801629,
     "phone": 5409119256107297715,
     "star": 5409320020058584473,
+    "money": 5409320020058584473,
+    "usdt": 5409271925014801629,
+    "stats": 6129627894349045589,
     # --- owner-supplied premium emoji ids (verified, premium account required) ---
     "premium": 5796209712009581332,
     "whatsapp": 5334998226636390258,
@@ -410,6 +413,9 @@ PE_TROPHY = tg_emoji("trophy", "🏆")
 PE_CARD = tg_emoji("card", "💳")
 PE_PHONE = tg_emoji("phone", "📱")
 PE_STAR = tg_emoji("star", "⭐")
+PE_MONEY = tg_emoji("money", "💰")
+PE_USDT = tg_emoji("usdt", "💲")
+PE_STATS = tg_emoji("stats", "📊")
 
 P_YES = PE_CHECK
 P_NO = '❌'

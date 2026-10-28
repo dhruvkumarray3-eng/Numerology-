@@ -58,7 +58,7 @@ async def send_bep20_invoice(uid, amt, rate_text=None):
             "<blockquote>\u26A0\uFE0F <b>Payment not configured</b>\n\n"
             "Owner has not set the USDT (BEP-20) wallet address yet.\n"
             "Please contact support.</blockquote>",
-            buttons=[[Button.inline("\u274C \U0001D402\U0001D41A\U0001D427\U0001D41C\U0001D41E\U0001D425", "cancel_action")]],
+            buttons=[[Button.inline("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action")]],
         )
 
     if rate_text is None:
@@ -80,7 +80,7 @@ async def send_bep20_invoice(uid, amt, rate_text=None):
            f"<blockquote>{PE_GIFT} <b>\U0001D400\U0001D405\U0001D413\U0001D404\U0001D411 \U0001D40F\U0001D400\U0001D418\U0001D408\U0001D40D\U0001D406:</b> "
            f"\U0001D412\U0001D41E\U0001D427\U0001D41D \U0001D41A \U0001D41C\U0001D425\U0001D41E\U0001D41A\U0001D42B \U0001D42C\U0001D41C\U0001D42B\U0001D41E\U0001D41E\U0001D427\U0001D42C\U0001D421\U0001D428\U0001D42D \U0001D428\U0001D42B \U0001D413\U0001D40D\U0001D413 \U0001D421\U0001D41A\U0001D42C\U0001D421 \U0001D421\U0001D41E\U0001D42B\U0001D41E.</blockquote>")
 
-    btns = [[Button.inline("\u274C \U0001D402\U0001D41A\U0001D427\U0001D41C\U0001D41E\U0001D425", "cancel_action")]]
+    btns = [[Button.inline("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action")]]
 
     # 1) custom QR (URL or Telegram file_id) if owner provided one
     _qr = get_trust_wallet_qr()

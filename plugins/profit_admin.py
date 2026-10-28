@@ -41,6 +41,11 @@ SERVICE_EMOJI = {
     "lzt": chr(0x2708) + chr(0xFE0F),
 }
 
+
+def _svc_pe(service):
+    """Premium-emoji snippet for a service (message text only)."""
+    return pe(SERVICE_ICONS.get(service), SERVICE_EMOJI.get(service, "\u2728"))
+
 # text-entry state: uid -> {"kind": ..., "service": ..., "field": ...}
 pf_state = {}
 
@@ -97,7 +102,7 @@ async def show_profit_home(event, note=None):
     rows = []
     for service in SERVICE_ORDER:
         rows.append(
-            f"{SERVICE_EMOJI[service]} <b>{SERVICES[service]}</b> — {_profit_line(service)}\n"
+            f"{_svc_pe(service)} <b>{SERVICES[service]}</b> — {_profit_line(service)}\n"
             f"     <i>{_example_line(service)}</i>"
         )
 
@@ -156,7 +161,7 @@ async def show_service(event, service):
         )
 
     msg = (
-        f"<blockquote expandable>{SERVICE_EMOJI[service]} "
+        f"<blockquote expandable>{_svc_pe(service)} "
         f"<b>{SERVICES[service]} — Profit Settings</b>\n\n"
         f"{i_chart} <b>Status:</b> {state}\n"
         f"{i_money} <b>Rule:</b> {describe_service_markup(service)}\n"
@@ -226,7 +231,7 @@ def _preview_table(cost, service=None):
     for key in targets:
         b = service_price_breakdown(cost, key)
         lines.append(
-            f"{SERVICE_EMOJI[key]} <b>{SERVICES[key]}</b>\n"
+            f"{_svc_pe(key)} <b>{SERVICES[key]}</b>\n"
             f"     cost {format_inr(cost)} → user pays <b>{format_inr(b['inr'])}</b> · "
             f"{format_usdt(b['usdt'])}\n"
             f"     you keep <b>{format_inr(b['profit_inr'])}</b>"
@@ -240,7 +245,7 @@ async def show_preview(event, cost=100, service=None):
     i_stats = pe("stats", chr(0x1F4C8))
     i_globe = pe("globe", chr(0x1F30D))
 
-    title = (f"{SERVICE_EMOJI[service]} {SERVICES[service]}" if service
+    title = (f"{_svc_pe(service)} {SERVICES[service]}" if service
              else "All services")
     msg = (
         f"<blockquote expandable>{i_money} <b>LIVE PRICE PREVIEW</b> — {title}\n\n"
@@ -361,7 +366,7 @@ def register_profit_admin(bot):
         }.get(field, "value")
         await _render(
             e,
-            f"<blockquote>{SERVICE_EMOJI[service]} <b>{SERVICES[service]}</b>\n\n"
+            f"<blockquote>{_svc_pe(service)} <b>{SERVICES[service]}</b>\n\n"
             f"Send the {label}.</blockquote>",
             [[style_btn(chr(0x1F519) + " Cancel", f"pf_svc|{service}", "danger", icon="back")]],
         )

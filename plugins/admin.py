@@ -8,7 +8,7 @@ from telethon import events, Button, TelegramClient
 from telethon.tl.functions.account import GetPasswordRequest
 from telethon.errors import SessionPasswordNeededError
 from database import cur, db, is_bot_online, is_admin, has_perm, ADMIN_ID, get_flag_by_country_name, get_country_info, update_balance, get_bot_mode, get_change_number_fee, get_lzt_margin, set_lzt_margin
-from config import PE_CROWN, PE_CHECK, PE_GIFT, PE_LOCATION, PE_LIGHTNING, P_USERS, P_PKG, P_WAIT, P_ON, P_YES, P_NO, P_WARN, P_DOC, P_FLAG, P_MONEY, P_PHONE, P_GLOBE, P_2FA, P_CAL, P_OTP, P_CARD, P_TG, P_ACC, P_USDT, P_UPI, P_CART, P_GIFT, P_STATS, P_OFF, API_ID, API_HASH, bot, is_super_admin
+from config import PE_CROWN, PE_CHECK, PE_GIFT, PE_LOCATION, PE_LIGHTNING, P_USERS, P_PKG, P_WAIT, P_ON, P_YES, P_NO, P_WARN, P_DOC, P_FLAG, PE_MONEY, PE_USDT, PE_STATS, P_MONEY, P_PHONE, P_GLOBE, P_2FA, P_CAL, P_OTP, P_CARD, P_TG, P_ACC, P_USDT, P_UPI, P_CART, P_GIFT, P_STATS, P_OFF, API_ID, API_HASH, bot, is_super_admin
 from utils.keyboards import style_btn, SEARCH_EMOJI_ID
 from utils.smm_client import is_server_enabled, SMM_SERVERS
 
@@ -101,9 +101,9 @@ async def admin_panel_handler(event):
               f"{PE_GIFT} \U0001d400\u1d20\u1d00\u026a\u029f\u1d00\u0299\u029f\u1d07 \U0001d412\u1d1b\u1d0f\u1d04\u1d0b: <b>{total_stock}</b>\n"
               f"{PE_LIGHTNING} \U0001d40f\u1d07\u0274\u1d05\u026a\u0274\u0262 \U0001d403\u1d07\u1d18\u1d0fs\u026a\u1d1bs: <b>{pending_deposits}</b>\n"
               f"{PE_CHECK} <b>\U0001d400\u1d05\u1d0d\u026a\u0274 \U0001d408\U0001d403:</b> <code>{uid}</code>\n"
-              f"{P_MONEY} <b>\U0001d40f\u0280\u1d0f\u0493\u026a\u1d1b:</b> {_profit_rule}\n"
-              f"{P_USDT} <b>1 USDT:</b> \u20b9{_usdt_rate:g}\n"
-              f"{P_STATS} <b>\U0001d40f\u0280\u1d0f\u0493\u026a\u1d1b \u1d07\u1d00\u0280\u0274\u1d07\u1d05:</b> \u20b9{_earned:,.0f}\n"
+              f"{PE_MONEY} <b>\U0001d40f\u0280\u1d0f\u0493\u026a\u1d1b:</b> {_profit_rule}\n"
+              f"{PE_USDT} <b>1 USDT:</b> \u20b9{_usdt_rate:g}\n"
+              f"{PE_STATS} <b>\U0001d40f\u0280\u1d0f\u0493\u026a\u1d1b \u1d07\u1d00\u0280\u0274\u1d07\u1d05:</b> \u20b9{_earned:,.0f}\n"
               f"{PE_GIFT} <b>\U0001d40e\u1d21\u0274\u1d07\u0280 \U0001d408\U0001d403:</b> <code>{ADMIN_ID}</code>"
               + (f"\n{PE_CROWN} <b>\U0001d412\u1d1c\u1d18\u1d07\u0280 \U0001d400\u1d05\u1d0d\u026a\u0274 \U0001d408\U0001d403:</b> <code>{uid}</code>" if is_super_admin(uid) else "")
               + "</blockquote>")
