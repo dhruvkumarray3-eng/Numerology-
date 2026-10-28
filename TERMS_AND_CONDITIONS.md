@@ -1,4 +1,4 @@
-# Selfish Otp Bot Ares THE GOD OF WAR — Terms & Conditions
+# Vendor Sellings by verified owner @Vendor_masterz — Terms & Conditions
 
 **Last updated:** 30 September 2026
 
