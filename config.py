@@ -329,6 +329,9 @@ PREMIUM_EMOJIS = {
     "server": 5981035310241288157,
     "source_codes": 5951663025336356427,
     "more_content": 5289947142142577318,
+    # Owner-supplied premium emoji used on every Search button.
+    "search": 5229102316145106683,
+    "find": 5229102316145106683,
 }
 
 CUSTOM_PREMIUM_EMOJIS = {

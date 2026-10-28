@@ -9,7 +9,7 @@ from telethon.tl.functions.account import GetPasswordRequest
 from telethon.errors import SessionPasswordNeededError
 from database import cur, db, is_bot_online, is_admin, has_perm, ADMIN_ID, get_flag_by_country_name, get_country_info, update_balance, get_bot_mode, get_change_number_fee, get_lzt_margin, set_lzt_margin
 from config import PE_CROWN, PE_CHECK, PE_GIFT, PE_LOCATION, PE_LIGHTNING, P_USERS, P_PKG, P_WAIT, P_ON, P_YES, P_NO, P_WARN, P_DOC, P_FLAG, P_MONEY, P_PHONE, P_GLOBE, P_2FA, P_CAL, P_OTP, P_CARD, P_TG, P_ACC, P_USDT, P_UPI, P_CART, P_GIFT, P_STATS, P_OFF, API_ID, API_HASH, bot, is_super_admin
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, SEARCH_EMOJI_ID
 from utils.smm_client import is_server_enabled, SMM_SERVERS
 
 async def admin_panel_handler(event):
@@ -69,7 +69,7 @@ async def admin_panel_handler(event):
         btns.append(r5)
         btns.append([style_btn("📢 Channels & FSub", "adm_channels_mgr", "success", icon=6129627894349045589), style_btn("Support URL", "adm_supporturl", "primary", icon=5409098988156629257)])
         btns.append([style_btn("💳 Auto-UPI / IMAP", "adm_autoupi", "success", icon=5409271925014801629), style_btn("🌐 LZT Panel Settings", "adm_lzt_settings", "primary", icon=5409166771330494453)])
-        btns.append([style_btn("⚙️ Search & Quality Settings", "adm_search_settings", "success", icon=5409320020058584473)])
+        btns.append([style_btn("⚙️ Search & Quality Settings", "adm_search_settings", "success", icon=SEARCH_EMOJI_ID)])
         btns.append([style_btn("📧 Temp Mail (API)", "adm_tempmail", "primary", icon=5796209712009581332)])
         btns.append([style_btn("💰 Trust Wallet / USDT", "adm_trustwallet", "success", icon=5409271925014801629), style_btn("🏦 UPI Settings", "adm_upi", "primary", icon=5409098988156629257)])
         btns.append([style_btn("📦 Add Source Code (ZIP)", "adm_addsrc", "success", icon=5951663025336356427), style_btn("🗑 Delete Source Code", "adm_delsrc", "danger", icon=6129888444245089008)])

@@ -3,6 +3,11 @@ from telethon.tl.types import ReplyKeyboardMarkup, KeyboardButtonRow, KeyboardBu
 from config import TERMS_URL, JOIN_URLS, USE_PREMIUM_EMOJIS
 from database import is_admin, get_support_url, get_fsub_urls
 
+# Owner-supplied premium emoji id used on EVERY Search button in the bot.
+# Import this constant instead of hard-coding the id so a single change
+# updates every search button at once.
+SEARCH_EMOJI_ID = 5229102316145106683
+
 # ---------------------------------------------------------------------------
 # Premium (custom) emoji support
 #

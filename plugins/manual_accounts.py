@@ -30,7 +30,7 @@ from database import (
     cur, db, ensure_user, is_admin, has_perm, get_log_channels_db, get_user_currency,
 )
 from utils.flags import flag_for, clean_name
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, SEARCH_EMOJI_ID
 from utils.markup import format_dual_from_inr
 from utils.helpers import get_bot_instance
 from utils import manual_stock as ms
@@ -110,7 +110,7 @@ async def show_home(event, page=1):
         )
         btns = [
             [style_btn("🔍 Search Country", b"mtg_search", "primary",
-                       icon=5409098988156629257)],
+                       icon=SEARCH_EMOJI_ID)],
             [style_btn("🧩 All Panels", b"pp_hub", "primary", icon=5409320020058584473)],
             [style_btn("🔙 Back to Buy Menu", b"buy_menu_main", "danger", icon=6129812419028982717)],
         ]
@@ -135,7 +135,7 @@ async def show_home(event, page=1):
     btns.append(nav)
     btns.append([
         style_btn("🔍 Search Country", b"mtg_search", "primary",
-                  icon=5409098988156629257),
+                  icon=SEARCH_EMOJI_ID),
         style_btn("🔄 Refresh", b"mtg_home", "success", icon=5409320020058584473),
     ])
     btns.append([style_btn("🔙 Back", b"buy_menu_main", "danger",
@@ -619,7 +619,7 @@ def register_manual_accounts(bot):
             )
         btns = [
             [style_btn("🔍 Search Again", b"mtg_search", "primary",
-                       icon=5409098988156629257)],
+                       icon=SEARCH_EMOJI_ID)],
             [style_btn("🔙 Back", b"mtg_home", "danger",
                        icon=6129812419028982717)],
         ]
