@@ -1771,6 +1771,110 @@ class LZTClient:
 
         return None
 
+    async def telegram_reset_authorizations(self, item_id):
+        """Reset ALL Telegram authorizations for a purchased item.
+
+        Mirrors LZT Market's official endpoint::
+
+            POST https://api.lzt.market/{item_id}/telegram-reset-authorizations
+
+        This is the same "terminate other sessions" behaviour the LZT website
+        offers for a bought account.  Unlike the per-hash Telethon path, LZT
+        performs the reset server-side and terminates *every* active session
+        (including the panel one), so the buyer simply logs in again afterwards.
+
+        Returns ``(ok, message)`` where ``ok`` is a bool and ``message`` is a
+        human-readable, already-escaped-safe string suitable for the UI.
+
+        Documented responses:
+          * 200 - authorizations reset
+          * 401 - invalid/expired token
+          * 403 - NoPermission ("You do not have permission ...")
+          * 403 - TelegramFreshAuthorization ("Too new authorization. Wait at
+                  least 24 hours after authorization (Telegram limitation)")
+          * 404 - item id not specified / not found
+        """
+        if not item_id:
+            return False, "This order has no LZT item id, so the market reset is unavailable."
+
+        url = f"{LZT_BASE_URL}/{item_id}/telegram-reset-authorizations"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url,
+                    headers=self.get_headers(),
+                    timeout=30,
+                ) as resp:
+                    # LZT usually returns JSON, but some error paths return an
+                    # empty body or plain text, so parse defensively.
+                    raw = await resp.text()
+                    data = None
+                    try:
+                        data = json.loads(raw) if raw else None
+                    except Exception:
+                        data = None
+
+                    if resp.status == 200:
+                        # Success payloads vary; treat any 2xx-ish JSON without
+                        # an explicit error as success.
+                        if isinstance(data, dict) and data.get("error"):
+                            err = str(data.get("error"))
+                            return False, f"LZT could not reset sessions: {err}"
+                        return True, (
+                            "✅ LZT Market reset all Telegram authorizations for "
+                            "this account. Log in again on your phone."
+                        )
+
+                    body_low = (raw or "").lower()
+
+                    if resp.status == 401:
+                        return False, (
+                            "❌ LZT rejected the API key (HTTP 401). The token is "
+                            "invalid, expired or revoked. Regenerate it in Admin → "
+                            "LZT Panel Settings."
+                        )
+
+                    if resp.status == 403:
+                        # The 24h Telegram limitation is the most common and the
+                        # most confusing failure, so surface it explicitly.
+                        if "too new" in body_low or "fresh" in body_low or "24 hour" in body_low:
+                            return False, (
+                                "⏳ Telegram will not let this session be reset yet. "
+                                "A new authorization must be at least 24 hours old "
+                                "before it can be terminated (Telegram limitation). "
+                                "Try again later, or use the per-device option to "
+                                "remove older sessions instead."
+                            )
+                        if "permission" in body_low or "no permission" in body_low:
+                            return False, (
+                                "❌ LZT refused the reset: no permission. This "
+                                "usually means the account was not bought through "
+                                "this API key or the item is no longer owned by you."
+                            )
+                        return False, (
+                            f"❌ LZT refused the reset (HTTP 403): {raw[:200]}"
+                        )
+
+                    if resp.status == 404:
+                        return False, (
+                            "❌ LZT item not found (HTTP 404). The order id may be "
+                            "wrong or the item was removed."
+                        )
+
+                    if resp.status == 429:
+                        return False, (
+                            "⏳ LZT rate limit hit (HTTP 429). Wait a minute and try "
+                            "again."
+                        )
+
+                    return False, f"❌ LZT reset failed (HTTP {resp.status}): {raw[:200]}"
+
+        except Exception as e:
+            logger.error(f"LZT telegram-reset-authorizations error for {item_id}: {e}")
+            return False, f"❌ Could not reach LZT to reset sessions: {e}"
+
+
 lzt_client = LZTClient()
 
 # ==========================================

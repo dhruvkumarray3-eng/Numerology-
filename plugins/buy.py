@@ -1511,6 +1511,13 @@ def _sessions_message(phone, auths):
         "",
     ]
 
+    order = active_orders.get(phone) or {}
+    if order.get("is_lzt") and order.get("item_id"):
+        lines.append(
+            f"🌐 <i>{_sty('LZT Market Reset')} — {_sty('official LZT method, wipes every device server-side')}.</i>"
+        )
+        lines.append("")
+
     idx = 0
     for auth in auths:
         if getattr(auth, "current", False):
@@ -1550,6 +1557,17 @@ def _sessions_buttons(phone, auths):
         btns.append([
             style_btn(f"📱 {_sty('Keep Only Panel Device')}",
                       f"reset_panel|{phone}", "primary", icon=5409166771330494453),
+        ])
+
+    # LZT-market-style reset: the official server-side endpoint that wipes
+    # *every* authorization (including the panel session) in one call.  This
+    # mirrors exactly what lzt.market does for a bought account, and is offered
+    # in addition to the per-device Telethon controls above.
+    order = active_orders.get(phone) or {}
+    if order.get("is_lzt") and order.get("item_id"):
+        btns.append([
+            style_btn(f"🌐 {_sty('LZT Market Reset (All Devices)')}",
+                      f"lzt_reset|{phone}", "danger", icon=6129888444245089008),
         ])
 
     btns.append([
@@ -1743,3 +1761,83 @@ async def cb_reset_panel(event):
     if failed:
         logger.warning(f"reset_panel partial failures for {phone}: {failed}")
     await _show_sessions(event, phone)
+
+
+@bot.on(events.CallbackQuery(pattern=r"^lzt_reset\|(.+)$"))
+async def cb_lzt_reset(event):
+    """LZT-market-style termination: reset ALL authorizations server-side.
+
+    Uses the official ``POST /{item_id}/telegram-reset-authorizations`` endpoint
+    exactly like lzt.market does for a purchased account.  Unlike the Telethon
+    per-hash path, LZT wipes *every* session (including the panel one), so after
+    this the buyer just logs in again on their own phone.
+    """
+    r1 = event.pattern_match.group(1)
+    phone = r1.decode("utf-8") if isinstance(r1, bytes) else r1
+    if phone not in active_orders:
+        return await event.answer("❌ Order is no longer active.", alert=True)
+
+    order = active_orders.get(phone) or {}
+    item_id = order.get("item_id")
+    if not order.get("is_lzt") or not item_id:
+        return await event.answer(
+            "ℹ️ LZT reset is only available for accounts bought from the LZT market.",
+            alert=True,
+        )
+
+    await event.answer("🌐 Asking LZT to reset all sessions...")
+
+    try:
+        from utils.lzt import lzt_client as _lzt
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error(f"Could not import lzt_client: {exc}")
+        return await event.answer(f"❌ LZT client unavailable: {exc}", alert=True)
+
+    ok, message = await _lzt.telegram_reset_authorizations(item_id)
+
+    if ok:
+        # The panel session is gone now, so the cached device list is stale.
+        session_auth_cache.pop(phone, None)
+        await event.answer("✅ LZT reset all sessions. Log in again on your phone.", alert=True)
+        msg = (
+            "<blockquote expandable>"
+            f"🌐 <b>{_sty('LZT MARKET RESET DONE')}</b>\n\n"
+            f"📱 <b>{_sty('Phone')}:</b> <code>+{html.escape(str(phone))}</code>\n\n"
+            f"{html.escape(message)}\n\n"
+            f"<i>{_sty('Every device was terminated, including the panel session')}. "
+            f"{_sty('Open Telegram and log in with your phone number')}.</i>"
+            "</blockquote>"
+        )
+        btns = [
+            [style_btn(f"⬅️ {_sty('Back to Order')}", f"refresh_order|{phone}", "success",
+                       icon=6129812419028982717)],
+        ]
+        try:
+            await event.edit(msg, buttons=btns)
+        except MessageNotModifiedError:
+            pass
+        except Exception:
+            await event.respond(msg, buttons=btns)
+        return
+
+    # Failure: show the reason inline (e.g. the 24h Telegram limitation) and
+    # keep the device list reachable so the buyer can try the per-device path.
+    await event.answer(message, alert=True)
+    try:
+        await event.edit(
+            "<blockquote expandable>"
+            f"⚠️ <b>{_sty('LZT RESET FAILED')}</b>\n\n"
+            f"{html.escape(message)}\n\n"
+            f"<i>{_sty('You can still remove individual devices from the list')}.</i>"
+            "</blockquote>",
+            buttons=[
+                [style_btn(f"🔄 {_sty('Back to Devices')}", f"reset_sessions|{phone}", "primary",
+                           icon=5409320020058584473)],
+                [style_btn(f"⬅️ {_sty('Back to Order')}", f"refresh_order|{phone}", "success",
+                           icon=6129812419028982717)],
+            ],
+        )
+    except MessageNotModifiedError:
+        pass
+    except Exception:
+        pass
