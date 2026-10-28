@@ -73,6 +73,7 @@ async def admin_panel_handler(event):
         btns.append([style_btn("📧 Temp Mail (API)", "adm_tempmail", "primary", icon=5796209712009581332)])
         btns.append([style_btn("💰 Trust Wallet / USDT", "adm_trustwallet", "success", icon=5409271925014801629), style_btn("🏦 UPI Settings", "adm_upi", "primary", icon=5409098988156629257)])
         btns.append([style_btn("📦 Add Source Code (ZIP)", "adm_addsrc", "success", icon=5951663025336356427), style_btn("🗑 Delete Source Code", "adm_delsrc", "danger", icon=6129888444245089008)])
+        btns.append([style_btn("💰 Profit & Pricing (INR · USDT)", "pf_home", "success", icon="money")])
         btns.append([style_btn(f"🔄 Change Num Fee: ₹{chg_fee}", "adm_setchangefee", "success", icon=5409320020058584473), style_btn("Set USDT Rate", "adm_usdtrate", "primary", icon=5409098988156629257)])
         btns.append([style_btn("Payments", "adm_payments", "primary", icon=5409098988156629257), style_btn("Manage Admins", "adm_manageadmins", "primary", icon=5409098988156629257)])
         btns.append([style_btn("𝐁ᴀᴄᴋup Users", "adm_backupusr", "primary", icon=5409098988156629257), style_btn("Restore Users", "adm_restoreusr", "primary", icon=5409098988156629257)])
@@ -80,12 +81,29 @@ async def admin_panel_handler(event):
         btns.append([style_btn("🆘 Help & All Commands", b"help_admin", "success", icon=6129732880529628243)])
         btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴀɪɴ 𝐌ᴇɴᴜ", b"dashboard_main", "danger", icon=6129812419028982717)])
 
+    # Live profit snapshot: global rule, USDT rate and profit earned so far.
+    try:
+        from utils.markup import describe_markup as _describe_markup, get_usdt_rate as _get_usdt_rate
+        _profit_rule = _describe_markup()
+        _usdt_rate = _get_usdt_rate()
+    except Exception:
+        _profit_rule = "\u2014"
+        _usdt_rate = 0
+    try:
+        _earned = cur.execute(
+            "SELECT COALESCE(SUM(profit),0) FROM panel_orders").fetchone()[0] or 0
+    except Exception:
+        _earned = 0
+
     header = (f"<blockquote>{PE_CROWN} <b>\U0001d400\u1d05\u1d20\u1d00\u0274\u1d04\u1d07\u1d05 \U0001d400\u1d05\u1d0d\u026a\u0274 \U0001d403\u1d00s\u029c\u0299\u1d0f\u1d00\u0280\u1d05</b>\n\n"
               f"{PE_LIGHTNING} <b>\U0001d40c\u1d0f\u1d05\u1d07:</b> {mode_text}\n"
               f"{PE_CHECK} \U0001d414s\u1d07\u0280s: <b>{total_users}</b>\n"
               f"{PE_GIFT} \U0001d400\u1d20\u1d00\u026a\u029f\u1d00\u0299\u029f\u1d07 \U0001d412\u1d1b\u1d0f\u1d04\u1d0b: <b>{total_stock}</b>\n"
               f"{PE_LIGHTNING} \U0001d40f\u1d07\u0274\u1d05\u026a\u0274\u0262 \U0001d403\u1d07\u1d18\u1d0fs\u026a\u1d1bs: <b>{pending_deposits}</b>\n"
               f"{PE_CHECK} <b>\U0001d400\u1d05\u1d0d\u026a\u0274 \U0001d408\U0001d403:</b> <code>{uid}</code>\n"
+              f"{P_MONEY} <b>\U0001d40f\u0280\u1d0f\u0493\u026a\u1d1b:</b> {_profit_rule}\n"
+              f"{P_USDT} <b>1 USDT:</b> \u20b9{_usdt_rate:g}\n"
+              f"{P_STATS} <b>\U0001d40f\u0280\u1d0f\u0493\u026a\u1d1b \u1d07\u1d00\u0280\u0274\u1d07\u1d05:</b> \u20b9{_earned:,.0f}\n"
               f"{PE_GIFT} <b>\U0001d40e\u1d21\u0274\u1d07\u0280 \U0001d408\U0001d403:</b> <code>{ADMIN_ID}</code>"
               + (f"\n{PE_CROWN} <b>\U0001d412\u1d1c\u1d18\u1d07\u0280 \U0001d400\u1d05\u1d0d\u026a\u0274 \U0001d408\U0001d403:</b> <code>{uid}</code>" if is_super_admin(uid) else "")
               + "</blockquote>")
