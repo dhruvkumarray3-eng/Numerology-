@@ -83,6 +83,9 @@ PREMIUM_ICONS = {
     "source": 5951663025336356427,
     "source_codes": 5951663025336356427,
     "src": 5951663025336356427,
+    # Owner-supplied premium emoji used on every Search button.
+    "search": 5229102316145106683,
+    "find": 5229102316145106683,
     "more": 5289947142142577318,
     "more_content": 5289947142142577318,
     "content": 5289947142142577318,
