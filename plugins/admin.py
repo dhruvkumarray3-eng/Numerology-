@@ -55,7 +55,8 @@ async def admin_panel_handler(event):
     r3 = []
     if is_super_admin(uid) or has_perm(uid, 'p_stats'):
         r3.extend([style_btn("Statistics", "adm_stats", "primary", icon=5409098988156629257), style_btn("Broadcast", "adm_bcast", "primary", icon=5409098988156629257)])
-        r3.append(style_btn("User Info", "adm_userinfo", "primary", icon=5409098988156629257))
+        r3.append(style_btn("\U0001F50D User History (Deposits \u00b7 Orders \u00b7 Timeline)",
+                            "uh_open", "success", icon="search"))
     if r3: btns.append(r3)
 
     r4 = []

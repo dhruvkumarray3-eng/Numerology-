@@ -41,6 +41,7 @@ def register_all_handlers(bot):
     register_product_panels(bot)
     register_admin_extras(bot)
     register_profit_admin(bot)
+    register_user_history(bot)
     register_help(bot)
     register_manual_accounts(bot)
     register_stickers(bot)

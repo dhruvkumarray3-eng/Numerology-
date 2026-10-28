@@ -910,27 +910,24 @@ async def admin_actions(event):
 
             elif action_data == "userinfo" and has_perm(uid, 'p_stats'):
                 t_uid = int((await get_reply(f"{P_ACC} <b>Enter User ID:</b>")).text)
-                u_row = cur.execute("SELECT balance, total_deposited, joined_date, banned, discount FROM users WHERE user_id=?", (t_uid,)).fetchone()
-                if not u_row: return await conv.send_message(f"{P_NO} User not found.")
-                
-                o_row = cur.execute("SELECT COUNT(*), SUM(price) FROM orders WHERE user_id=?", (t_uid,)).fetchone()
-                up_row = cur.execute("SELECT SUM(amount) FROM upi_orders WHERE user_id=? AND status='success'", (t_uid,)).fetchone()
-                
-                bal, dep, joined, is_banned, disc = u_row
-                o_count = o_row[0] if o_row else 0
-                o_spent = o_row[1] if o_row and o_row[1] else 0
-                u_upi = up_row[0] if up_row and up_row[0] else 0
-                
-                msg = (f"{PE_USER} <b>USER INFO:</b> <code>{t_uid}</code>\n\n"
-                       f"{P_MONEY} Balance: {P_INR}{bal}\n"
-                       f"{P_CARD} Total Deposited: {P_INR}{dep}\n"
-                       f"{P_UPI} UPI Deposited: {P_INR}{u_upi}\n"
-                       f"{P_CART} Total Orders: {o_count}\n"
-                       f"{P_USDT} Total Spent: {P_INR}{o_spent}\n"
-                       f"{P_GIFT} Discount: {disc}%\n"
-                       f"{P_CAL} Joined: {joined}\n"
-                       f"{P_OFF} Banned: {'Yes' if is_banned else 'No'}")
-                await conv.send_message(msg)
+                # Delegate to the full User History console (profile, deposits,
+                # purchases, wallet and a merged timeline with premium emojis).
+                from plugins.user_history import show_user
+
+                class _UHAdapter:
+                    def __init__(self, conversation):
+                        self.conv = conversation
+
+                    async def edit(self, text, buttons=None):
+                        return await self.conv.send_message(text, buttons=buttons)
+
+                    async def respond(self, text, buttons=None):
+                        return await self.conv.send_message(text, buttons=buttons)
+
+                    async def answer(self, *a, **k):
+                        return None
+
+                await show_user(_UHAdapter(conv), t_uid, "overview")
 
             elif action_data == "addadmin" and is_super_admin(uid):
                 new_ad = int((await get_reply(f"{P_ACC} <b>Enter User ID for new Admin:</b>")).text)
