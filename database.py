@@ -231,11 +231,31 @@ def _migrate_user_prefs():
             cur.execute("ALTER TABLE users ADD COLUMN currency TEXT DEFAULT 'INR'")
         if "language" not in cols:
             cur.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'en'")
+        # Remembers that the bottom reply keyboard was already sent, so the
+        # tiny carrier message is not re-sent on every /start.
+        if "menu_installed" not in cols:
+            cur.execute("ALTER TABLE users ADD COLUMN menu_installed INTEGER DEFAULT 0")
         db.commit()
     except Exception as e:
         logger.warning(f"User prefs migration skipped: {e}")
 
 _migrate_user_prefs()
+
+def is_menu_installed(uid):
+    """True if the reply keyboard carrier was already sent to this user."""
+    try:
+        row = cur.execute("SELECT menu_installed FROM users WHERE user_id=?", (uid,)).fetchone()
+        return bool(row and row[0])
+    except Exception:
+        return False
+
+def set_menu_installed(uid, flag=1):
+    """Remember / forget that the reply keyboard is installed for this user."""
+    try:
+        cur.execute("UPDATE users SET menu_installed=? WHERE user_id=?", (1 if flag else 0, uid))
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Could not persist menu_installed for {uid}: {e}")
 
 def get_user_currency(uid):
     try:

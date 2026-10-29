@@ -109,16 +109,30 @@ check("send_main_menu calls install_persistent_menu()",
 check("install is skipped for callback re-renders",
       "if not isinstance(event, events.CallbackQuery.Event):" in start_src)
 
-# The install must be invisible: a carrier message is sent and then deleted,
-# and its text is the U+2063 invisible separator (no "menu ready" notice).
-check("install uses an invisible carrier text",
-      '_INVISIBLE_TEXT = "\\u2063"' in start_src)
-check("install deletes the carrier message",
-      "await carrier.delete()" in start_src)
+# The install must be silent (no "menu ready" sentence), but the carrier
+# message itself must NOT be deleted: Telegram drops a reply keyboard as soon
+# as the message that installed it is deleted, which made the menu flash in
+# and then vanish.
+check("install uses a tiny carrier text",
+      '_MENU_CARRIER_TEXT = "\\u2328\\ufe0f"' in start_src)
+check("install does NOT delete the carrier message",
+      "carrier.delete()" not in start_src)
 check("no visible 'menu ready' notice is sent",
       "use the buttons below the message box" not in start_src)
 check("install does not leave a visible caption",
       "\u2328\ufe0f <b>" not in start_src)
+check("install is skipped when already installed",
+      "if not force and (uid in _menu_installed or is_menu_installed(uid)):" in start_src)
+check("install remembers the keyboard per user in the DB",
+      "set_menu_installed(uid, 1)" in start_src)
+check("close handler forgets the install",
+      "_menu_installed.discard(e.sender_id)" in start_src)
+
+# The keyboard must stay collapsible so the user can hide it while typing.
+kb_src = pathlib.Path(ROOT, "utils", "keyboards.py").read_text(encoding="utf-8")
+check("reply keyboard is not pinned persistent",
+      "persistent=True" not in kb_src)
+check("reply keyboard is resized", "resize=True" in kb_src)
 
 # ---------------------------------------------------------------------------
 # 5. Dashboard buttons restored from the 28 Oct menu

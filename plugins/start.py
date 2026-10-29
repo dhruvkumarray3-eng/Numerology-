@@ -1,10 +1,9 @@
-import asyncio
 import html
 from telethon import events, types, Button
 from telethon.errors import MessageNotModifiedError
 from database import (
     cur, db, ensure_user, is_user_banned, is_bot_online, is_admin,
-    get_support_url, get_start_image_url,
+    get_support_url, get_start_image_url, is_menu_installed, set_menu_installed,
 )
 from utils.keyboards import get_persistent_menu, get_terms_buttons, get_join_buttons, style_btn, style_url
 from utils.terms import get_terms_message
@@ -16,22 +15,33 @@ from config import (PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL
 from utils.states import session_buy_state, deposit_input
 
 # Telegram does not allow a single message to carry both an inline keyboard
-# and a reply keyboard.  The reply keyboard is therefore installed by a
-# throw-away "carrier" message that is deleted immediately afterwards: the
-# keyboard itself lives in the chat state, not in the message, so it stays
-# on screen after the carrier is gone.  The carrier text is an invisible
-# separator (U+2063) so even a failed delete leaves nothing readable behind.
-_INVISIBLE_TEXT = "\u2063"
+# and a reply keyboard, so the bottom menu needs a small "carrier" message of
+# its own.
+#
+# IMPORTANT: the carrier must NOT be deleted.  Telegram binds a reply keyboard
+# to the message that installed it - deleting that message removes the
+# keyboard again, which is exactly what made the menu flash in and then vanish.
+# The carrier is therefore kept, but made as small as possible (a single
+# keyboard emoji) and sent only once per user, so it never piles up.
+_MENU_CARRIER_TEXT = "\u2328\ufe0f"
+
+# Users whose reply keyboard is already installed during this process run.
+# The keyboard lives in the chat state, so re-sending it on every /start would
+# only litter the chat with duplicate carrier messages.
+_menu_installed = set()
 
 
-async def install_persistent_menu(bot, event, uid):
-    """Silently (re)install the bottom reply keyboard.
+async def install_persistent_menu(bot, event, uid, force=False):
+    """Install the bottom reply keyboard (once per user, unless forced).
 
-    No visible message is left in the chat: the carrier message is deleted
-    right after Telegram registers the keyboard.  Only called on fresh
-    renders (/start, channel-join verification) because a reply keyboard
-    persists until it is replaced or explicitly cleared.
+    The keyboard itself is a chat-level state: it stays on screen while the
+    user scrolls, and Telegram's own keyboard toggle lets them hide it again
+    when they want to type.  We deliberately do *not* pin it with
+    ``persistent=True`` - that would stop the user from ever hiding it.
     """
+    if not force and (uid in _menu_installed or is_menu_installed(uid)):
+        return None
+
     chat = getattr(event, "chat_id", None) if event is not None else None
     if chat is None:
         chat = uid
@@ -42,22 +52,16 @@ async def install_persistent_menu(bot, event, uid):
         logger.warning("Could not build persistent menu: %s", ex)
         return None
 
-    carrier = None
     try:
         carrier = await bot.send_message(
-            chat, _INVISIBLE_TEXT, buttons=menu, link_preview=False
+            chat, _MENU_CARRIER_TEXT, buttons=menu, link_preview=False, silent=True
         )
     except Exception as ex:
         logger.warning("Could not install persistent menu: %s", ex)
         return None
 
-    # Give Telegram a moment to persist the keyboard, then remove the carrier.
-    try:
-        await asyncio.sleep(0.3)
-        await carrier.delete()
-    except Exception as ex:
-        # The keyboard is already installed; an empty bubble is harmless.
-        logger.debug("Persistent-menu carrier not deleted: %s", ex)
+    _menu_installed.add(uid)
+    set_menu_installed(uid, 1)
     return carrier
 
 
@@ -234,13 +238,17 @@ def register_start(bot):
 
     @bot.on(events.NewMessage(pattern=r"(?i)^(🔻 𝐂ʟᴏsᴇ|❌ 𝐇ɪᴅᴇ|/hide|/close)$"))
     async def handle_close_keyboard(e):
+        # Forget the install so the next /start (or /menu) brings it back.
+        _menu_installed.discard(e.sender_id)
+        set_menu_installed(e.sender_id, 0)
         await e.respond("🔽 <i>Keyboard closed. Tap /menu or /start anytime to reopen.</i>", buttons=Button.clear())
 
     @bot.on(events.NewMessage(pattern=r"(?i)^/menu$"))
     async def handle_menu_cmd(e):
         uid = e.sender_id
         if not uid: return
-        await e.respond("✨ <i>Menu shortcuts opened below 👇</i>", buttons=get_persistent_menu(uid))
+        # Re-install silently: the reply keyboard is the menu, no extra notice.
+        await install_persistent_menu(bot, e, uid, force=True)
 
     @bot.on(events.NewMessage(pattern=r"(?i)^/setsticker$"))
     async def cmd_set_sticker(e):
