@@ -20,6 +20,7 @@ from plugins.help_menu import register_help
 from plugins.manual_accounts import register_manual_accounts
 from plugins.stickers import register_stickers
 from plugins.tempmail import register_tempmail
+from plugins.user_history import register_user_history
 
 def register_all_handlers(bot):
     # Standard Handler Registrations
