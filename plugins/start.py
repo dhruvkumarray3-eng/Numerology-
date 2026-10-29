@@ -3,7 +3,7 @@ from telethon import events, types, Button
 from telethon.errors import MessageNotModifiedError
 from database import (
     cur, db, ensure_user, is_user_banned, is_bot_online, is_admin,
-    get_support_url, get_start_image_url, get_source_codes, get_panels,
+    get_support_url, get_start_image_url,
 )
 from utils.keyboards import get_persistent_menu, get_terms_buttons, get_join_buttons, style_btn, style_url
 from utils.terms import get_terms_message
@@ -13,6 +13,29 @@ from config import (PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL
                     PE_ID, PE_USER, PE_TARGET, PE_TAG, PE_TROPHY, PE_CARD, PE_STAR,
                     ADMIN_ID, is_super_admin)
 from utils.states import session_buy_state, deposit_input
+
+async def install_persistent_menu(bot, event, uid):
+    """(Re)install the bottom reply keyboard (the persistent menu).
+
+    Telegram keeps a reply keyboard until it is replaced or explicitly
+    cleared, so this only needs to run on a fresh render (/start, channel
+    verification).  A single Telegram message cannot carry a reply keyboard
+    *and* an inline keyboard, so the menu is sent as its own tiny message
+    right after the dashboard.
+    """
+    try:
+        menu = get_persistent_menu(uid)
+        text = ("\u2328\ufe0f <b>\U0001D426\U0001D41E\U0001D427\U0001D42E "
+                "\U0001D42B\U0001D41E\U0001D41A\U0001D41D\U0001D432</b> \u2014 "
+                "<i>use the buttons below the message box.</i>")
+        if isinstance(event, events.CallbackQuery.Event) or event is None:
+            chat = event.chat_id if event is not None else uid
+            return await bot.send_message(chat, text, buttons=menu, parse_mode="html")
+        return await event.respond(text, buttons=menu, parse_mode="html")
+    except Exception as ex:
+        logger.warning("Could not install persistent menu: %s", ex)
+        return None
+
 
 async def send_main_menu(bot, event, uid):
     me = await bot.get_me()
@@ -87,14 +110,14 @@ async def send_main_menu(bot, event, uid):
     buttons = [
         [style_btn("\U0001F4F2 \U0001D401\U0001D42E\U0001D432 \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D", b"open_buy_categories", "success", icon=5841670626577748398)],
         [style_btn("\U0001F4F1 \U0001D413\U0001D41E\U0001D425\U0001D41E\U0001D420\U0001D42B\U0001D41A\U0001D426 \U0001D401\U0001D41A\U0001D42C\U0001D422\U0001D41C \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D\U0001D42C", b"mtg_home", "success", icon=5330237710655306682)],
+        [style_btn("\U0001F4F1 \U0001D400\U0001D425\U0001D425 \U0001D400\U0001D429\U0001D429\U0001D42C \U0001D400\U0001D41C\U0001D41C\U0001D428\U0001D42E\U0001D427\U0001D42D\U0001D42C", b"all_apps_menu", "success", icon=5409320020058584473)],
         [style_btn("\U0001F4AC \U0001D416\U0001D421\U0001D41A\U0001D42D\U0001D42C\U0001D400\U0001D429\U0001D429 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425", b"pp_open|whatsapp", "success", icon=5334998226636390258)],
         [style_btn("\U0001F9E9 \U0001D400\U0001D425\U0001D425 \U0001D400\U0001D429\U0001D429\U0001D42C \U0001D40E\U0001D413\U0001D40F", b"pp_open|allotp", "primary", icon=5373130604147654226)],
         [style_btn("\U0001F680 \U0001D412\U0001D40C\U0001D40C & \U0001D40C\U0001D41E\U0001D41D\U0001D422\U0001D41A \U0001D412\U0001D41E\U0001D42B\U0001D42F\U0001D422\U0001D41C\U0001D41E\U0001D42C", b"smm_menu_main", "success", icon=5408995930416362034)],
     ]
-    if get_source_codes():
-        buttons.append([style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D412\U0001D428\U0001D42E\U0001D42B\U0001D41C\U0001D41E \U0001D402\U0001D428\U0001D41D\U0001D41E\U0001D42C", b"src_code_menu", "danger", icon=5951663025336356427)])
-    if get_panels():
-        buttons.append([style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425\U0001D42C", b"panels_menu", "primary", icon=5409098988156629257)])
+    # Always visible: both menus degrade gracefully when nothing is listed.
+    buttons.append([style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D412\U0001D428\U0001D42E\U0001D42B\U0001D41C\U0001D41E \U0001D402\U0001D428\U0001D41D\U0001D41E\U0001D42C", b"src_code_menu", "danger", icon=5951663025336356427)])
+    buttons.append([style_btn("\U0001F6D2 \U0001D401\U0001D42E\U0001D432 \U0001D40F\U0001D41A\U0001D427\U0001D41E\U0001D425\U0001D42C", b"panels_menu", "primary", icon=5409098988156629257)])
     buttons.extend([
         [style_btn("\U0001F5A5 \U0001D412\U0001D41E\U0001D42B\U0001D42F\U0001D41E\U0001D42B\U0001D42C", b"servers_menu", "primary", icon=5981035310241288157)],
         [style_btn("\U0001F4E6 \U0001D40C\U0001D428\U0001D42B\U0001D41E \U0001D402\U0001D428\U0001D427\U0001D42D\U0001D41E\U0001D427\U0001D42D", b"more_content", "danger", icon=5289947142142577318)],
@@ -106,6 +129,11 @@ async def send_main_menu(bot, event, uid):
     
     edit_id = event.message_id if isinstance(event, events.CallbackQuery.Event) else None
     await send_preview_on_top(bot, uid, msg, start_img, buttons=buttons, edit_msg_id=edit_id)
+
+    # Re-install the bottom reply keyboard on fresh renders only.  Callback
+    # re-renders (Back / Dashboard buttons) skip it so the chat is not spammed.
+    if not isinstance(event, events.CallbackQuery.Event):
+        await install_persistent_menu(bot, event, uid)
 
 
 def register_start(bot):
