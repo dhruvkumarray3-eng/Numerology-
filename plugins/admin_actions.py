@@ -168,15 +168,32 @@ async def channels_manager_menu(event):
     except: await bot.send_message(event.chat_id, msg, buttons=btns)
 
 async def run_stock_check(event):
-    msg = await event.respond("🔄 <b>Checking Stock...</b>\nPlease wait, this may take a while.", parse_mode="html")
+    try:
+        msg = await event.respond(
+            "\U0001F504 <b>Checking Stock...</b>\nPlease wait, this may take a while.",
+            parse_mode="html")
+    except Exception as exc:
+        logger.warning(f"stock check: could not post progress message: {exc}")
+        msg = None
+
+    async def _say(text):
+        """Edit the progress message when we have one, else stay silent."""
+        if msg is None:
+            return
+        try:
+            await msg.edit(text, parse_mode="html")
+        except Exception:
+            pass
+
     stock_items = cur.execute("SELECT phone, session_file FROM stock WHERE available=1").fetchall()
     total = len(stock_items)
     if total == 0:
-        return await msg.edit("⚠️ <b>No stock to check.</b>", parse_mode="html")
-    
+        return await _say("\u26a0\ufe0f <b>No stock to check.</b>")
+
     dead = 0
     alive = 0
     for idx, (phone, sess) in enumerate(stock_items):
+        client = None
         try:
             client = TelegramClient(sess, API_ID, API_HASH)
             await client.connect()
@@ -188,14 +205,18 @@ async def run_stock_check(event):
             cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
             db.commit()
         finally:
-            try: await client.disconnect()
-            except: pass
-        
+            if client is not None:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+
         if (idx + 1) % 5 == 0:
-            try: await msg.edit(f"🔄 <b>Checking Stock...</b> {idx+1}/{total}\n✅ Alive: {alive}\n❌ Dead: {dead}", parse_mode="html")
-            except: pass
-            
-    await msg.edit(f"✅ <b>Stock Check Complete!</b>\n\nTotal Checked: {total}\n✅ Alive: {alive}\n❌ Dead (Removed): {dead}", parse_mode="html")
+            await _say(f"\U0001F504 <b>Checking Stock...</b> {idx+1}/{total}\n"
+                       f"\u2705 Alive: {alive}\n\u274c Dead: {dead}")
+
+    await _say(f"\u2705 <b>Stock Check Complete!</b>\n\nTotal Checked: {total}\n"
+               f"\u2705 Alive: {alive}\n\u274c Dead (Removed): {dead}")
 
 async def detect_account_year(client):
     """Detect account creation year from earliest dialog/message."""
@@ -316,9 +337,34 @@ async def admin_actions(event):
     chat = event.chat_id
     
     if action_data == "adminmain":
-        await event.delete()
-        class FakeEvent: chat_id = chat; sender_id = uid
-        return await admin_panel_handler(FakeEvent())
+        try:
+            await event.delete()
+        except Exception:
+            pass
+
+        class _DashboardEvent:
+            """Minimal event whose edit() posts a fresh dashboard message.
+
+            The old version only had chat_id/sender_id, so
+            ``admin_panel_handler`` always raised on ``event.edit`` and relied
+            on its bare ``except`` to fall back to ``send_message``.
+            """
+            def __init__(self):
+                self.chat_id = chat
+                self.sender_id = uid
+                self.id = None
+                self.client = bot
+
+            async def edit(self, text, buttons=None, **kw):
+                return await bot.send_message(chat, text, buttons=buttons, **kw)
+
+            async def respond(self, text, buttons=None, **kw):
+                return await bot.send_message(chat, text, buttons=buttons, **kw)
+
+            async def reply(self, text, buttons=None, **kw):
+                return await bot.send_message(chat, text, buttons=buttons, **kw)
+
+        return await admin_panel_handler(_DashboardEvent())
 
     if action_data == "servers" and has_perm(uid, 'p_settings'):
         from plugins.servers import parse_servers
@@ -650,7 +696,16 @@ async def admin_actions(event):
     elif action_data == "test_imap" and has_perm(uid, 'p_settings'):
         await event.answer("Testing IMAP...", alert=False)
         from utils.imap_verifier import get_imap_credentials
-        u, p = get_imap_credentials()
+        try:
+            u, p = get_imap_credentials()
+        except Exception as cred_err:
+            return await event.answer(
+                f"\u274c IMAP settings unreadable: {cred_err}", alert=True)
+        if not u or not p:
+            return await event.answer(
+                "\u274c IMAP not configured.\n\nSet it with "
+                "Admin Panel \u2192 Auto-UPI / IMAP \u2192 Change Gmail "
+                "(or IMAP_USER / IMAP_PASS env vars).", alert=True)
         try:
             import ssl, imaplib
             context = ssl.create_default_context()
@@ -798,6 +853,44 @@ async def admin_actions(event):
         await bot.send_file(chat, "users_backup.csv", caption=f"{P_USERS} <b>Users Backup CSV</b>")
         os.remove("users_backup.csv")
         return await event.answer("✅ Backup Generated!", alert=True)
+
+    # ------------------------------------------------------------------
+    # Safety net: only the wizards below are allowed to open a blocking
+    # conversation.  Without this guard an unknown ``adm_*`` payload (a
+    # stale button from an older deployment, a typo, a forwarded callback)
+    # would silently open a 10-minute conversation that swallows every
+    # message the admin types.
+    # ------------------------------------------------------------------
+    _WIZARDS = (
+        "ap_add_country", "walletaddr", "walletqr", "walletqr_clear",
+        "addsrc", "delsrc", "userinfo", "addadmin", "editadminreq",
+        "setchangefee", "addpay", "delpay", "addzip", "addstock",
+        "supporturl", "bcast", "bal", "discount", "refpct", "usdtrate",
+        "setlztkey", "setrubrate", "setlztmargin", "restoreusr",
+        "add_fsub", "add_logch", "set_all_fsub", "change_upi",
+        "change_gmail", "ban",
+    )
+    _is_wizard = (
+        action_data in _WIZARDS
+        or action_data.startswith(("msedit|", "apset|"))
+    )
+    if not _is_wizard:
+        try:
+            await event.answer(
+                "\u26a0\ufe0f This button is out of date.\n"
+                "Open /admin again.", alert=True)
+        except Exception:
+            pass
+        try:
+            await event.edit(
+                "<blockquote>\u26a0\ufe0f <b>Unknown action.</b>\n\n"
+                "This button belongs to an older version of the panel.\n"
+                "Please reopen the Admin Panel.</blockquote>",
+                buttons=[[style_btn("\U0001F519 Back to Admin", "adm_adminmain",
+                                    "danger", icon=6129812419028982717)]])
+        except Exception:
+            pass
+        return
 
     async with bot.conversation(chat, timeout=600) as conv:
         async def get_reply(txt):
