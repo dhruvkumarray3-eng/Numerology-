@@ -59,6 +59,7 @@ def details_message(
     extra_block="",
     balance_text=None,
     note=None,
+    rate_label="Rate",
 ):
     """Build the stock-details card.
 
@@ -66,12 +67,13 @@ def details_message(
     country_label  -> already formatted "🇮🇳 India"
     stock_text     -> "12 numbers available" / "Out of stock"
     rate_text      -> "₹25.00 / 0.30 USDT"
+    rate_label     -> label in front of rate_text ("Rate" or "Your total price")
     """
     parts = [
         f"<blockquote expandable>📦 <b>{html.escape(str(title))}</b>\n\n",
         f"🌍 <b>Country:</b> {country_label}\n",
         f"📊 <b>Stock:</b> {stock_text}\n",
-        f"💵 <b>Rate:</b> {rate_text}\n",
+        f"💵 <b>{html.escape(str(rate_label))}:</b> {rate_text}\n",
     ]
     if balance_text:
         parts.append(f"👛 <b>Your balance:</b> {balance_text}\n")

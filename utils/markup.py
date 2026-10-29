@@ -288,25 +288,72 @@ SERVICES = {
 
 SERVICE_ORDER = ("whatsapp", "numchange", "allotp", "smm", "lzt")
 
+# ---------------------------------------------------------------------------
+# Per-server profit overrides
+# ---------------------------------------------------------------------------
+# A "server" is one of the catalogues the user picks from the Servers screen.
+# The owner asked to be able to set a separate margin for *every* server, not
+# just every service.  Server targets reuse the exact same storage scheme as
+# services (``markup_svc_<key>_<field>``) so the admin console, the preview and
+# the reset logic all work unchanged.
+SERVER_TARGETS = {
+    "srv_bulk": "Server-1 \u00b7 Bulk TG",
+    "srv_nonspam": "Server-2 \u00b7 Good Quality TG",
+    "srv_numchange": "Server-3 \u00b7 TG Number Change",
+    "srv_spam": "Server-4 \u00b7 Cheap / Phishing",
+    "srv_whatsapp": "WhatsApp Server",
+    "srv_allotp": "All Apps OTP Server",
+}
+
+SERVER_ORDER = ("srv_bulk", "srv_nonspam", "srv_numchange", "srv_spam",
+                "srv_whatsapp", "srv_allotp")
+
+# SERVERS_CONFIG / buy.py "mode" -> server target key.
+MODE_TO_SERVER = {
+    "bulk": "srv_bulk",
+    "nonspam": "srv_nonspam",
+    "numchange": "srv_numchange",
+    "spam": "srv_spam",
+    "whatsapp": "srv_whatsapp",
+    "allotp": "srv_allotp",
+}
+
+# Every price target the owner can tune (services + servers).
+TARGETS = {**SERVICES, **SERVER_TARGETS}
+
+
+def label_for(target):
+    """Display name for a service *or* server pricing target."""
+    return TARGETS.get(target) or SERVICES.get(target) or str(target)
+
+
+def is_server_target(target):
+    return target in SERVER_TARGETS
+
+
+def server_target_for_mode(mode):
+    """Map a server/buy mode ('bulk', 'spam', ...) to its pricing target."""
+    return MODE_TO_SERVER.get(str(mode or "").strip().lower())
+
 
 def _svc_key(service, field):
     return f"markup_svc_{service}_{field}"
 
 
 def is_service_override(service):
-    """True when this service has its own profit numbers switched on."""
-    if service not in SERVICES:
+    """True when this service/server has its own profit numbers switched on."""
+    if service not in TARGETS:
         return False
     return str(_get(_svc_key(service, "enabled"), "0")).strip() in ("1", "true", "yes", "on")
 
 
 def get_service_config(service):
-    """Profit configuration that applies to one service.
+    """Profit configuration that applies to one service *or* server.
 
     Returns the global config (plus ``service``/``override`` metadata) when the
-    service has no override enabled, otherwise the service's own numbers.
+    target has no override enabled, otherwise the target's own numbers.
     """
-    if service not in SERVICES:
+    if service not in TARGETS:
         cfg = dict(get_markup_config())
         cfg.update({"service": service, "override": False})
         return cfg
@@ -343,8 +390,8 @@ def get_service_config(service):
 
 def set_service_markup(service, mode=None, percent=None, fixed=None,
                        currency=None, enabled=True):
-    """Persist a per-service profit override. Only provided fields change."""
-    if service not in SERVICES:
+    """Persist a per-service / per-server profit override."""
+    if service not in TARGETS:
         return {}
     changed = {}
     if enabled:
@@ -378,8 +425,8 @@ def set_service_markup(service, mode=None, percent=None, fixed=None,
 
 
 def reset_service_markup(service):
-    """Drop a service's override so it follows the global profit again."""
-    if service not in SERVICES:
+    """Drop a target's override so it follows the global profit again."""
+    if service not in TARGETS:
         return False
     ok = True
     for field in ("enabled", "mode", "percent", "fixed", "currency"):
@@ -388,12 +435,12 @@ def reset_service_markup(service):
 
 
 def reset_all_markup():
-    """Reset the global profit to defaults and clear every service override."""
+    """Reset the global profit to defaults and clear every service/server override."""
     _set(K_MODE, DEFAULT_MARKUP_MODE)
     _set(K_PERCENT, DEFAULT_MARKUP_PERCENT)
     _set(K_FIXED, DEFAULT_MARKUP_FIXED)
     _set(K_CURRENCY, DEFAULT_MARKUP_CURRENCY)
-    for service in SERVICES:
+    for service in TARGETS:
         reset_service_markup(service)
     return get_markup_config()
 
@@ -406,6 +453,19 @@ def service_profit_in_inr(real_price_inr, service):
 def apply_service_markup(real_price_inr, service, minimum=1.0):
     """Real cost -> customer price (INR) using that service's profit rules."""
     return apply_markup(real_price_inr, get_service_config(service), minimum=minimum)
+
+
+def apply_server_markup(real_price_inr, mode, minimum=1.0):
+    """Real cost -> customer price (INR) for a *server* mode.
+
+    Uses the server's own override when the owner enabled one.  When no
+    server-specific override exists we fall back to the LZT / global rule so
+    pricing keeps working exactly as before.
+    """
+    key = server_target_for_mode(mode)
+    if key and is_service_override(key):
+        return apply_markup(real_price_inr, get_service_config(key), minimum=minimum)
+    return apply_service_markup(real_price_inr, "lzt", minimum=minimum)
 
 
 def service_price_breakdown(real_price_inr, service):

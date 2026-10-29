@@ -253,23 +253,18 @@ async def show_details(event, app_slug, country_iso):
 
     count, price, provider = await get_stock(app_slug, country_iso)
     # NEVER expose the raw panel cost.  The only price the buyer sees is
-    # panel cost + owner margin, presented as one all-inclusive total.
-    total_text = None
+    # panel cost + owner margin, presented as ONE all-inclusive total in
+    # INR + USDT.  The "All Apps OTP" service margin applies here.
+    rate_text = None
     if price is not None:
         try:
-            from utils.markup import price_breakdown, format_dual_from_inr
-            bd = price_breakdown(price * 100.0)
-            total_text = format_dual_from_inr(bd["inr"])
+            from utils.markup import format_service_dual_price
+            rate_text = format_service_dual_price(price, "allotp")
         except Exception as _pb_ex:
             logger.debug(f"price breakdown failed: {_pb_ex}")
-    rate_text = total_text or "\U0001F7E1 Live rate unavailable \u2014 tap Refresh"
+    rate_text = rate_text or "\U0001F7E1 Live rate unavailable \u2014 tap Refresh"
 
     extra_block = f"{_ensure_emoji(app_label)} <b>App:</b> {html.escape(app_label)}"
-    if total_text:
-        extra_block += (
-            f"\n\U0001F4B0 <b>Your total price:</b> "
-            f"{total_text} <i>(all-inclusive)</i>"
-        )
     if not provider_configured():
         extra_block += "\n\u26a0\ufe0f <i>No OTP provider configured on the host.</i>"
 
@@ -280,6 +275,7 @@ async def show_details(event, app_slug, country_iso):
         rate_text=rate_text,
         kind=stock_card.KIND_OTP,
         extra_block=extra_block,
+        rate_label="Your total price",
     )
     btns = [
         [style_btn("\u2705 Buy Now", f"aa_confirm|{app_slug}|{country_iso}", "success",

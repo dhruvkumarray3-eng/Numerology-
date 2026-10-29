@@ -17,7 +17,7 @@ from config import ADMIN_ID, logger
 from database import is_admin
 from utils.keyboards import style_btn, pe
 from utils.markup import (
-    SERVICES, SERVICE_ORDER,
+    SERVICES, SERVICE_ORDER, SERVER_TARGETS, SERVER_ORDER, TARGETS, label_for,
     get_markup_config, describe_markup, set_markup,
     get_service_config, set_service_markup, reset_service_markup,
     reset_all_markup, describe_service_markup,
@@ -41,10 +41,31 @@ SERVICE_EMOJI = {
     "lzt": chr(0x2708) + chr(0xFE0F),
 }
 
+# server target -> premium icon key / emoji
+SERVER_ICONS = {
+    "srv_bulk": "server",
+    "srv_nonspam": "check",
+    "srv_numchange": "numchange",
+    "srv_spam": "money",
+    "srv_whatsapp": "whatsapp",
+    "srv_allotp": "allapps_otp",
+}
+
+SERVER_EMOJI = {
+    "srv_bulk": chr(0x1F4E6),
+    "srv_nonspam": chr(0x2705),
+    "srv_numchange": chr(0x1F501),
+    "srv_spam": chr(0x1F4B0),
+    "srv_whatsapp": chr(0x1F4AC),
+    "srv_allotp": chr(0x1F9E9),
+}
+
 
 def _svc_pe(service):
-    """Premium-emoji snippet for a service (message text only)."""
-    return pe(SERVICE_ICONS.get(service), SERVICE_EMOJI.get(service, "\u2728"))
+    """Premium-emoji snippet for a service or server (message text only)."""
+    icon = SERVICE_ICONS.get(service) or SERVER_ICONS.get(service)
+    emoji = SERVICE_EMOJI.get(service) or SERVER_EMOJI.get(service, "\u2728")
+    return pe(icon, emoji)
 
 # text-entry state: uid -> {"kind": ..., "service": ..., "field": ...}
 pf_state = {}
@@ -105,14 +126,22 @@ async def show_profit_home(event, note=None):
             f"{_svc_pe(service)} <b>{SERVICES[service]}</b> — {_profit_line(service)}\n"
             f"     <i>{_example_line(service)}</i>"
         )
+    server_rows = []
+    for srv in SERVER_ORDER:
+        server_rows.append(
+            f"{_svc_pe(srv)} <b>{SERVER_TARGETS[srv]}</b> — {_profit_line(srv)}"
+        )
 
     head = (
         f"<blockquote expandable>{i_money} <b>PROFIT &amp; PRICING</b> — "
         f"<b>INR · USDT</b>\n\n"
         f"{i_chart} <b>Global rule:</b> {describe_markup(cfg)}\n"
         f"{i_globe} <b>USDT rate:</b> {format_inr(rate)} = 1 USDT\n"
-        f"{i_stats} <b>Services priced separately:</b> {len(SERVICE_ORDER)}\n\n"
+        f"{i_stats} <b>Services priced separately:</b> {len(SERVICE_ORDER)} · "
+        f"<b>Servers:</b> {len(SERVER_ORDER)}\n\n"
         + "\n".join(rows)
+        + f"\n\n{i_globe} <b>SERVER MARGINS</b>\n"
+        + "\n".join(server_rows)
         + f"\n\n{i_check} <i>Users always see BOTH ₹INR and USDT. "
           f"The real panel cost is never shown to them.</i>"
     )
@@ -125,6 +154,12 @@ async def show_profit_home(event, note=None):
         btns.append([style_btn(
             f"{SERVICE_EMOJI[service]} {SERVICES[service]} · {_profit_line(service)}",
             f"pf_svc|{service}", "primary", icon=SERVICE_ICONS[service])])
+    btns.append([style_btn(chr(0x1F5A5) + chr(0xFE0F) + " — SERVER MARGINS —",
+                           "pf_home", "primary", icon="servers")])
+    for srv in SERVER_ORDER:
+        btns.append([style_btn(
+            f"{SERVER_EMOJI[srv]} {SERVER_TARGETS[srv]} · {_profit_line(srv)}",
+            f"pf_svc|{srv}", "primary", icon=SERVER_ICONS[srv])])
     btns.append([
         style_btn(chr(0x1F4B8) + " Live Price Preview", "pf_preview", "success", icon="money"),
         style_btn(chr(0x2699) + chr(0xFE0F) + " Set Global Profit", "pf_global", "success", icon="settings"),
@@ -140,8 +175,8 @@ async def show_profit_home(event, note=None):
 # Per-service screen
 # ---------------------------------------------------------------------------
 async def show_service(event, service):
-    if service not in SERVICES:
-        return await show_profit_home(event, "⚠️ Unknown service.")
+    if service not in TARGETS:
+        return await show_profit_home(event, "⚠️ Unknown service/server.")
 
     cfg = get_service_config(service)
     rate = get_usdt_rate()
@@ -162,7 +197,7 @@ async def show_service(event, service):
 
     msg = (
         f"<blockquote expandable>{_svc_pe(service)} "
-        f"<b>{SERVICES[service]} — Profit Settings</b>\n\n"
+        f"<b>{label_for(service)} — Profit Settings</b>\n\n"
         f"{i_chart} <b>Status:</b> {state}\n"
         f"{i_money} <b>Rule:</b> {describe_service_markup(service)}\n"
         f"{i_globe} <b>USDT rate:</b> {format_inr(rate)} = 1 USDT\n\n"
@@ -231,7 +266,7 @@ def _preview_table(cost, service=None):
     for key in targets:
         b = service_price_breakdown(cost, key)
         lines.append(
-            f"{_svc_pe(key)} <b>{SERVICES[key]}</b>\n"
+            f"{_svc_pe(key)} <b>{label_for(key)}</b>\n"
             f"     cost {format_inr(cost)} → user pays <b>{format_inr(b['inr'])}</b> · "
             f"{format_usdt(b['usdt'])}\n"
             f"     you keep <b>{format_inr(b['profit_inr'])}</b>"
@@ -245,7 +280,7 @@ async def show_preview(event, cost=100, service=None):
     i_stats = pe("stats", chr(0x1F4C8))
     i_globe = pe("globe", chr(0x1F30D))
 
-    title = (f"{_svc_pe(service)} {SERVICES[service]}" if service
+    title = (f"{_svc_pe(service)} {label_for(service)}" if service
              else "All services")
     msg = (
         f"<blockquote expandable>{i_money} <b>LIVE PRICE PREVIEW</b> — {title}\n\n"
@@ -355,8 +390,8 @@ def register_profit_admin(bot):
             return await e.answer("Admins only.", alert=True)
         service = e.pattern_match.group(1).decode()
         field = e.pattern_match.group(2).decode()
-        if service not in SERVICES:
-            return await e.answer("Unknown service.", alert=True)
+        if service not in TARGETS:
+            return await e.answer("Unknown service/server.", alert=True)
         pf_state[e.sender_id] = {"kind": "service", "service": service, "field": field}
         await e.answer("Send the value")
         label = {
@@ -366,7 +401,7 @@ def register_profit_admin(bot):
         }.get(field, "value")
         await _render(
             e,
-            f"<blockquote>{_svc_pe(service)} <b>{SERVICES[service]}</b>\n\n"
+            f"<blockquote>{_svc_pe(service)} <b>{label_for(service)}</b>\n\n"
             f"Send the {label}.</blockquote>",
             [[style_btn(chr(0x1F519) + " Cancel", f"pf_svc|{service}", "danger", icon="back")]],
         )

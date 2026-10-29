@@ -944,22 +944,14 @@ async def show_stock_details(event, key, code):
     real_price = match.get("price")
     stock = match.get("stock") or 0
 
+    # ONE price only: panel cost + owner margin, service-aware, in INR + USDT.
+    # The panel's real cost and the owner's profit are never shown separately.
     if real_price is None:
         rate_text = "\U0001F7E1 Live rate unavailable \u2014 tap Refresh"
     else:
-        rate_text = format_dual_price(real_price, cfg)
+        rate_text = _price_label(real_price, uid, cfg, service=key)
 
-    # Show the user ONE total price: panel cost + owner profit combined.
-    total_line = ""
-    if real_price is not None:
-        try:
-            bd = price_breakdown(real_price, cfg)
-            total_line = (f"\U0001F4B5 <b>Your total price:</b> "
-                          f"{format_dual_from_inr(bd['inr'])} <i>(all-inclusive)</i>")
-        except Exception as _pb_ex:
-            logger.debug(f"price breakdown failed: {_pb_ex}")
-
-    extra_block = total_line
+    extra_block = ""
     if p.get("dynamic_apps"):
         app = _selected_app(uid)
         if app:
@@ -987,6 +979,7 @@ async def show_stock_details(event, key, code):
         kind=stock_card.KIND_OTP,
         extra_block=extra_block,
         balance_text=format_dual_from_inr(_balance(uid)),
+        rate_label="Your total price",
     )
     btns = [
         [style_btn("\u2705 Buy Now", f"pp_confirm|{key}|{code}", "success",

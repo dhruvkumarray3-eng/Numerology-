@@ -153,7 +153,14 @@ def main():
         check("home lists all services",
               all(mk.SERVICES[s] in e.text for s in mk.SERVICE_ORDER))
         btns = list(all_buttons(e.btns))
-        check("home has 5 service buttons + 4 actions", len(btns) == 9, len(btns))
+        expected = (len(mk.SERVICE_ORDER) + 1 + len(mk.SERVER_ORDER) + 4)
+        check("home has service + server buttons + actions",
+              len(btns) == expected, (len(btns), expected))
+        check("home lists every server",
+              all(mk.SERVER_TARGETS[s] in e.text for s in mk.SERVER_ORDER))
+        check("home has a server button for each server",
+              all(any(b.data == f"pf_svc|{s}".encode() for b in btns)
+                  for s in mk.SERVER_ORDER))
         check("every home button has an icon",
               all(button_icon(b) for b in btns),
               [b.text for b in btns if not button_icon(b)])
@@ -173,6 +180,15 @@ def main():
                   [b.text for b in btns if not button_icon(b)])
             check(f"{svc} has percent button",
                   any(b.data == f"pf_set|{svc}|percent".encode() for b in btns))
+
+        # each server screen (per-server margin)
+        for srv in mk.SERVER_ORDER:
+            e = FakeEvent()
+            await pa.show_service(e, srv)
+            check(f"{srv} screen shows label", mk.SERVER_TARGETS[srv] in e.text)
+            btns = list(all_buttons(e.btns))
+            check(f"{srv} has percent button",
+                  any(b.data == f"pf_set|{srv}|percent".encode() for b in btns))
 
         # global screen
         e = FakeEvent()
