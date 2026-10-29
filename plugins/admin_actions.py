@@ -698,31 +698,29 @@ async def admin_actions(event):
         return await event.edit(msg, buttons=btns)
 
     elif action_data == "test_imap" and has_perm(uid, 'p_settings'):
-        await event.answer("Testing IMAP...", alert=False)
-        from utils.imap_verifier import get_imap_credentials
+        # NOTE: an IMAP login is a *blocking* network call.  It used to run
+        # inline on the event loop, so a slow Gmail handshake froze the bot and
+        # the callback query timed out before event.answer() could fire - which
+        # is exactly why "Test IMAP" looked like it did nothing at all.
+        await event.answer("\U0001F50C Testing IMAP connection\u2026", alert=False)
         try:
-            u, p = get_imap_credentials()
-        except Exception as cred_err:
+            from utils.imap_verifier import test_imap_connection
+            ok, res = await asyncio.wait_for(test_imap_connection(), timeout=45)
+        except asyncio.TimeoutError:
             return await event.answer(
-                f"\u274c IMAP settings unreadable: {cred_err}", alert=True)
-        if not u or not p:
-            return await event.answer(
-                "\u274c IMAP not configured.\n\nSet it with "
-                "Admin Panel \u2192 Auto-UPI / IMAP \u2192 Change Gmail "
-                "(or IMAP_USER / IMAP_PASS env vars).", alert=True)
-        try:
-            import ssl, imaplib
-            context = ssl.create_default_context()
-            mail = imaplib.IMAP4_SSL("imap.gmail.com", 993, ssl_context=context)
-            mail.login(u, p)
-            mail.select("INBOX")
-            status, data = mail.search(None, "ALL")
-            total = len(data[0].split())
-            mail.logout()
-            await event.answer(f"✅ IMAP Connected!\n📧 {u}\nTotal Inbox Emails: {total}", alert=True)
+                "\u274C IMAP test timed out after 45s.\n\n"
+                "The mail server could not be reached. Check the container's "
+                "internet access or your Gmail App Password.", alert=True)
         except Exception as imap_err:
-            await event.answer(f"❌ IMAP Connection Failed: {imap_err}", alert=True)
-        return
+            return await event.answer(f"\u274C IMAP test failed: {imap_err}", alert=True)
+
+        if ok:
+            return await event.answer(
+                f"\u2705 IMAP Connected!\n"
+                f"\U0001F4E7 {res['user']}\n"
+                f"\U0001F4E5 Inbox: {res['total']} emails\n"
+                f"\U0001F310 {res['host']}:{res['port']}", alert=True)
+        return await event.answer(f"\u274C {res}", alert=True)
 
     elif action_data == "stats" and has_perm(uid, 'p_stats'):
         u_row = cur.execute("SELECT COUNT(*) FROM users").fetchone()
@@ -1490,17 +1488,67 @@ async def admin_actions(event):
                 await conv.send_message(f"{P_YES} <b>UPI ID Updated:</b> <code>{new_upi}</code>")
 
             elif action_data == "change_gmail" and has_perm(uid, 'p_settings'):
-                resp = await get_reply(f"📧 <b>Enter Gmail Address and 16-digit App Password:</b>\n\n<i>Format:</i> <code><email> <16-digit-app-password></code>\n<i>Example:</i> <code>myemail@gmail.com dqwo agxp srsw fdax</code>")
-                text = resp.text.strip()
+                resp = await get_reply(
+                    "\U0001F4E7 <b>Enter Gmail Address and 16-digit App Password:</b>\n\n"
+                    "<i>Format:</i> <code><email> <16-digit-app-password></code>\n"
+                    "<i>Example:</i> <code>myemail@gmail.com dqwo agxp srsw fdax</code>\n\n"
+                    "<i>Get it from: Google Account \u2192 Security \u2192 2-Step Verification "
+                    "\u2192 App passwords \u2192 Mail \u2192 Other</i>")
+                text = (resp.text or "").strip()
                 parts = text.split(None, 1)
-                if len(parts) >= 2:
-                    g_email, g_pass = parts[0], parts[1]
-                    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_user', ?)", (g_email,))
-                    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_pass', ?)", (g_pass,))
-                    db.commit()
-                    await conv.send_message(f"{P_YES} <b>Gmail IMAP Credentials Updated!</b>\n• Email: <code>{g_email}</code>\n• App Password: <code>{g_pass[:4]} **** **** {g_pass[-4:]}</code>")
+                if len(parts) < 2:
+                    await conv.send_message(
+                        f"{P_NO} <b>Invalid format.</b>\n\nSend both the Gmail address and the "
+                        "16-character App Password on one line:\n"
+                        "<code>myemail@gmail.com dqwo agxp srsw fdax</code>")
                 else:
-                    await conv.send_message(f"{P_NO} Invalid format. Provide both Gmail and 16-digit App Password.")
+                    from utils.imap_verifier import clean_app_password, test_imap_connection
+
+                    g_email = parts[0].strip()
+                    g_pass = clean_app_password(parts[1])
+
+                    if "@" not in g_email or "." not in g_email.split("@")[-1]:
+                        await conv.send_message(
+                            f"{P_NO} <b>That is not a valid email address.</b>\n"
+                            f"Got: <code>{g_email}</code>")
+                    elif len(g_pass) != 16:
+                        await conv.send_message(
+                            f"{P_NO} <b>Invalid App Password.</b>\n\n"
+                            f"A Gmail App Password is exactly <b>16 characters</b> "
+                            f"(you entered {len(g_pass)}).\n\n"
+                            "<i>Do not use your normal Gmail password \u2014 it will not work "
+                            "over IMAP. Generate an App Password instead.</i>")
+                    else:
+                        cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_user', ?)", (g_email,))
+                        cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_pass', ?)", (g_pass,))
+                        db.commit()
+
+                        await conv.send_message(
+                            f"{P_YES} <b>Gmail IMAP Credentials Saved!</b>\n"
+                            f"\u2022 Email: <code>{g_email}</code>\n"
+                            f"\u2022 App Password: <code>{g_pass[:4]} **** **** {g_pass[-4:]}</code>\n\n"
+                            "\u23F3 <i>Testing the connection now\u2026</i>")
+
+                        try:
+                            ok, res = await asyncio.wait_for(test_imap_connection(), timeout=45)
+                        except asyncio.TimeoutError:
+                            ok, res = False, "Connection timed out after 45s."
+                        except Exception as t_err:
+                            ok, res = False, f"{type(t_err).__name__}: {t_err}"
+
+                        if ok:
+                            await conv.send_message(
+                                f"{PE_CHECK} <b>IMAP Login Successful!</b>\n\n"
+                                f"\U0001F4E7 <b>Account:</b> <code>{res['user']}</code>\n"
+                                f"\U0001F4E5 <b>Inbox:</b> {res['total']} emails\n"
+                                f"\U0001F310 <b>Server:</b> {res['host']}:{res['port']}\n\n"
+                                "<i>Auto-UPI verification is now live. Users can pay via UPI and "
+                                "their UTR will be checked against this inbox.</i>")
+                        else:
+                            await conv.send_message(
+                                f"{P_NO} <b>Credentials saved, but the login test failed.</b>\n\n"
+                                f"<blockquote>{res}</blockquote>\n\n"
+                                "<i>Fix the issue and tap \u201cTest IMAP Connection\u201d again.</i>")
 
             elif action_data == "ban" and has_perm(uid, 'p_bal'):
                 t_uid = int((await get_reply(f"{P_ACC} <b>User ID:</b>")).text)

@@ -1,0 +1,198 @@
+"""Regression tests for the Auto-UPI / IMAP gateway and the Recharge menu.
+
+Covers the three bugs reported from the live bot:
+
+1. "Test IMAP" did nothing  -> the login ran inline on the event loop and the
+   callback query timed out.  The handler must now offload to a thread and be
+   wrapped in ``asyncio.wait_for``.
+2. "I set IMAP but it never tested"  -> a copy-pasted Gmail App Password keeps
+   the spaces Google displays (``abcd efgh ijkl mnop``), which makes
+   ``imaplib`` fail with AUTHENTICATIONFAILED.  Passwords must be normalised.
+3. "Recharge never offered that method"  -> ``deposit_menu`` only rendered the
+   USDT (BEP-20) button, so the UPI / Auto-verify flow was unreachable.
+"""
+
+import asyncio
+import io
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+PASS = 0
+FAIL = 0
+
+
+def check(name, cond, extra=""):
+    global PASS, FAIL
+    if cond:
+        PASS += 1
+        print(f"  \u2705 {name}")
+    else:
+        FAIL += 1
+        print(f"  \u274c {name} {extra}")
+
+
+def section(title):
+    print(f"\n=== {title} ===")
+
+
+# ---------------------------------------------------------------------------
+section("1. App password normalisation")
+from utils.imap_verifier import clean_app_password, get_imap_credentials
+
+check("spaces removed", clean_app_password("dqwo agxp srsw fdax") == "dqwoagxpsrswfdax")
+check("newlines/tabs removed", clean_app_password("dqwo\nagxp\tsrsw fdax") == "dqwoagxpsrswfdax")
+check("non-breaking space removed", clean_app_password("dqwo\u00a0agxp srsw fdax") == "dqwoagxpsrswfdax")
+check("quotes stripped", clean_app_password('"dqwo agxp srsw fdax"') == "dqwoagxpsrswfdax")
+check("empty stays empty", clean_app_password("") == "" and clean_app_password(None) == "")
+check("already clean untouched", clean_app_password("dqwoagxpsrswfdax") == "dqwoagxpsrswfdax")
+
+# ---------------------------------------------------------------------------
+section("2. Credentials are read back cleaned from the settings table")
+import database
+from database import cur, db
+
+cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_user', ?)",
+            ("owner.test@gmail.com",))
+cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_pass', ?)",
+            ("dqwo agxp srsw fdax",))
+db.commit()
+
+u, p = get_imap_credentials()
+check("email read", u == "owner.test@gmail.com", u)
+check("password de-spaced", p == "dqwoagxpsrswfdax", p)
+check("password is 16 chars", len(p) == 16, len(p))
+
+# ---------------------------------------------------------------------------
+section("3. test_imap_connection never raises and explains failures")
+from utils.imap_verifier import test_imap_connection, _sync_test_connection
+
+# Force a guaranteed-failure login: valid shape, wrong credentials.
+cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_pass', ?)",
+            ("aaaabbbbccccdddd",))
+db.commit()
+
+ok, res = _sync_test_connection(timeout=15)
+check("returns a tuple", isinstance(ok, bool) and (isinstance(res, dict) or isinstance(res, str)))
+check("wrong password -> not ok", ok is False, res)
+check("reason is human readable", isinstance(res, str) and len(res) > 10, res)
+print(f"     reason: {res}")
+
+# Not configured at all
+cur.execute("DELETE FROM settings WHERE key='gmail_user'")
+cur.execute("DELETE FROM settings WHERE key='gmail_pass'")
+db.commit()
+os.environ.pop("IMAP_USER", None)
+os.environ.pop("IMAP_PASS", None)
+
+ok2, res2 = _sync_test_connection(timeout=5)
+check("unconfigured -> not ok", ok2 is False, res2)
+check("unconfigured message mentions Change Gmail",
+      "Change Gmail" in res2 or "not configured" in res2.lower(), res2)
+
+# Async wrapper works and does not block the loop
+async def _async_probe():
+    return await test_imap_connection(timeout=5)
+
+ok3, res3 = asyncio.run(_async_probe())
+check("async wrapper returns same shape", ok3 is False and isinstance(res3, str), res3)
+
+# ---------------------------------------------------------------------------
+section("4. Admin panel handlers are non-blocking and validating")
+src = io.open("plugins/admin_actions.py", encoding="utf-8").read()
+
+test_block_start = src.index('elif action_data == "test_imap"')
+test_block = src[test_block_start:test_block_start + 1400]
+check("test_imap uses asyncio.wait_for", "asyncio.wait_for" in test_block)
+check("test_imap uses test_imap_connection", "test_imap_connection" in test_block)
+check("test_imap has no inline imaplib login", "mail.login" not in test_block)
+check("test_imap handles timeout", "TimeoutError" in test_block)
+
+gm_start = src.index('elif action_data == "change_gmail"')
+gm_block = src[gm_start:gm_start + 3200]
+check("change_gmail normalises password", "clean_app_password" in gm_block)
+check("change_gmail validates 16 chars", "len(g_pass) != 16" in gm_block)
+check("change_gmail validates email", '"@" not in g_email' in gm_block)
+check("change_gmail auto-tests after save", "test_imap_connection" in gm_block)
+check("change_gmail uses INSERT OR REPLACE", "INSERT OR REPLACE INTO settings" in gm_block)
+
+# ---------------------------------------------------------------------------
+section("5. Recharge menu exposes the UPI / Auto-verify method")
+dsrc = io.open("plugins/deposit.py", encoding="utf-8").read()
+
+menu_start = dsrc.index("async def deposit_menu(event):")
+menu_end = dsrc.index("def _bep20_qr_bytes", menu_start)
+menu = dsrc[menu_start:menu_end]
+
+check("menu offers UPI button", "dep_choose_UPI" in menu)
+check("menu still offers USDT BEP-20", "dep_choose_BEP20" in menu)
+check("menu reads live upi_id from settings", "key='upi_id'" in menu)
+check("menu hides UPI when unset", "if active_upi:" in menu)
+
+# The generic chooser must accept dep_choose_UPI
+check("generic chooser accepts UPI",
+      'r"^dep_choose_(?!BEP20$)(.+)$"' in dsrc)
+
+# ---------------------------------------------------------------------------
+section("6. Functional: deposit_menu renders the right buttons")
+from plugins.deposit import deposit_menu
+
+class _FakeEvent:
+    def __init__(self):
+        self.buttons = None
+        self.text = None
+
+    async def respond(self, text, buttons=None):
+        self.text = text
+        self.buttons = buttons
+
+    async def edit(self, text, buttons=None):
+        self.text = text
+        self.buttons = buttons
+
+
+def _flat(btns):
+    out = []
+    for row in btns or []:
+        for b in row:
+            data = getattr(b, "data", b"")
+            if isinstance(data, bytes):
+                data = data.decode(errors="ignore")
+            out.append((getattr(b, "text", ""), data))
+    return out
+
+
+# With a UPI id configured
+cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_id', ?)",
+            ("owner@fam",))
+db.commit()
+ev = _FakeEvent()
+asyncio.run(deposit_menu(ev))
+flat = _flat(ev.buttons)
+datas = [d for _, d in flat]
+check("UPI button present when upi_id set", "dep_choose_UPI" in datas, datas)
+check("BEP20 button present", "dep_choose_BEP20" in datas, datas)
+check("back button present", "dashboard_main" in datas, datas)
+check("UPI id shown in text", "owner@fam" in ev.text)
+
+# With no UPI id configured -> UPI button hidden, menu still works
+cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_id', ?)", ("",))
+db.commit()
+ev2 = _FakeEvent()
+asyncio.run(deposit_menu(ev2))
+datas2 = [d for _, d in _flat(ev2.buttons)]
+check("UPI hidden when no upi_id", "dep_choose_UPI" not in datas2, datas2)
+check("BEP20 still available", "dep_choose_BEP20" in datas2, datas2)
+
+# restore
+cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_id', ?)",
+            ("owner@fam",))
+db.commit()
+
+# ---------------------------------------------------------------------------
+print(f"\n{PASS} passed, {FAIL} failed")
+if FAIL:
+    print("=== SOME TESTS FAILED ===")
+    sys.exit(1)
+print("=== ALL TESTS PASSED ===")

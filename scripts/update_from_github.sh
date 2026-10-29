@@ -30,6 +30,7 @@ FILES=(
   "database.py"
   "requirements.txt"
   "plugins/admin_actions.py"
+  "plugins/deposit.py"
   "utils/imap_verifier.py"
   "utils/runtime_config.py"
   "utils/keyboards.py"

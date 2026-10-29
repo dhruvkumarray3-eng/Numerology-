@@ -35,6 +35,21 @@ def _setting(key):
     return ""
 
 
+def clean_app_password(pwd: str) -> str:
+    """Normalise a Gmail App Password.
+
+    Google *displays* app passwords as ``abcd efgh ijkl mnop`` (with spaces).
+    IMAP only accepts the 16 characters glued together, so a copy-pasted
+    password used to fail with ``AUTHENTICATIONFAILED``.  Strip every kind of
+    whitespace (spaces, tabs, newlines, non-breaking spaces) and any wrapping
+    quotes the user may have pasted along with it.
+    """
+    if not pwd:
+        return ""
+    cleaned = re.sub(r"[\s\u00a0\u200b\u200c\u200d\ufeff]+", "", str(pwd))
+    return cleaned.strip("\"'`")
+
+
 def get_imap_credentials():
     """Return the Gmail IMAP login the owner configured in the Admin Panel.
 
@@ -46,9 +61,71 @@ def get_imap_credentials():
     Returns ``("", "")`` when nothing is configured; callers must treat that
     as "gateway not configured" instead of attempting a login.
     """
-    user = _setting("gmail_user") or os.getenv("IMAP_USER", "")
-    pwd = _setting("gmail_pass") or os.getenv("IMAP_PASS", "")
-    return user.strip(), pwd.strip()
+    user = (_setting("gmail_user") or os.getenv("IMAP_USER", "")).strip()
+    pwd = clean_app_password(_setting("gmail_pass") or os.getenv("IMAP_PASS", ""))
+    return user, pwd
+
+
+def _imap_host_port():
+    """Resolve the IMAP server from settings, with sane Gmail defaults."""
+    host = (_setting("imap_host") or "imap.gmail.com").strip()
+    raw_port = (_setting("imap_port") or "993").strip()
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError):
+        port = 993
+    return host, port
+
+
+def _sync_test_connection(timeout=20):
+    """Open a real IMAP session and report what happened.
+
+    Returns ``(True, {...})`` on success or ``(False, "human readable reason")``.
+    Never raises: the admin panel must always get a usable answer.
+    """
+    user, pwd = get_imap_credentials()
+    if not user or not pwd:
+        return False, ("IMAP is not configured yet. Use "
+                       "Admin Panel → Auto-UPI / IMAP → Change Gmail first.")
+    host, port = _imap_host_port()
+    mail = None
+    try:
+        context = ssl.create_default_context()
+        mail = imaplib.IMAP4_SSL(host, port, ssl_context=context, timeout=timeout)
+        mail.login(user, pwd)
+        total = 0
+        try:
+            status, data = mail.select("INBOX", readonly=True)
+            if status == "OK" and data and data[0]:
+                total = int(str(data[0]).strip() or 0)
+        except Exception:
+            total = 0
+        return True, {"user": user, "host": host, "port": port, "total": total}
+    except imaplib.IMAP4.error as exc:
+        raw = str(exc)
+        low = raw.lower()
+        if "authenticationfailed" in low or "invalid credentials" in low or "username and password not accepted" in low:
+            return False, ("Gmail rejected the login. Make sure 2-Step Verification is ON "
+                           "and you are using a 16-character App Password "
+                           "(not your normal Gmail password).")
+        if "application-specific password required" in low:
+            return False, "Gmail requires an App Password for this account (2FA is enabled)."
+        return False, f"IMAP error: {raw}"
+    except (ssl.SSLError, OSError) as exc:
+        return False, f"Network/SSL error connecting to {host}:{port} — {exc}"
+    except Exception as exc:  # pragma: no cover - defensive
+        return False, f"{type(exc).__name__}: {exc}"
+    finally:
+        try:
+            if mail is not None:
+                mail.logout()
+        except Exception:
+            pass
+
+
+async def test_imap_connection(timeout=20):
+    """Async wrapper so the bot's event loop is never blocked by IMAP."""
+    return await asyncio.to_thread(_sync_test_connection, timeout)
 
 
 def imap_status():
@@ -84,7 +161,8 @@ def _sync_verify_utr(utr_query, max_age_mins=MAX_PAYMENT_AGE_MINUTES):
 
     try:
         context = ssl.create_default_context()
-        mail = imaplib.IMAP4_SSL("imap.gmail.com", 993, ssl_context=context)
+        host, port = _imap_host_port()
+        mail = imaplib.IMAP4_SSL(host, port, ssl_context=context, timeout=25)
         mail.login(email_user, email_pass)
         mail.select("INBOX")
 

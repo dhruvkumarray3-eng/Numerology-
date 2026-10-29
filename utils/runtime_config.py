@@ -118,7 +118,41 @@ def _load_cache() -> None:
 
 
 def get(key: str, default: str = "") -> str:
-    """Runtime value if the admin set one, else `default`."""
+    """Runtime value if the admin set one, else `default`.
+
+    IMPORTANT: this always reads the live ``settings`` row first.
+
+    The admin panel writes settings through ``database.cur`` (``INSERT OR
+    REPLACE INTO settings ...``), *not* through :func:`set`.  The old version
+    of this function served a module-level cache that was loaded exactly once
+    and never invalidated, so a UPI id / Gmail password / deposit mode saved in
+    the panel was invisible to every ``runtime_config.get()`` caller until the
+    process restarted.  Reading the row directly (primary-key lookup, tiny
+    table) makes panel changes take effect instantly.
+    """
+    try:
+        conn = _connect()
+        if conn is not None:
+            try:
+                row = conn.execute(
+                    "SELECT value FROM settings WHERE key=?", (key,)
+                ).fetchone()
+            finally:
+                conn.close()
+            if row and row[0] is not None and str(row[0]).strip() != "":
+                with _lock:
+                    _cache[str(key)] = str(row[0])
+                    _cache_loaded = True
+                return str(row[0]).strip()
+            # The row genuinely does not exist -> the cache must not resurrect
+            # a deleted value.
+            with _lock:
+                _cache.pop(key, None)
+            return default
+    except Exception:
+        pass
+
+    # Database unavailable: fall back to whatever we cached earlier.
     _load_cache()
     with _lock:
         value = _cache.get(key)
@@ -170,11 +204,7 @@ def clear(key: str) -> bool:
 
 def source_of(key: str) -> str:
     """'panel' when an admin override is stored, else 'env'."""
-    _load_cache()
-    with _lock:
-        if _cache.get(key):
-            return "panel"
-    return "env"
+    return "panel" if get(key, "") else "env"
 
 
 def mask(secret: str) -> str:

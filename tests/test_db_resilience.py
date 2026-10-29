@@ -107,7 +107,7 @@ check("runtime_config.get('upi_id')", runtime_config.get("upi_id") == "test-user
 
 user, pwd = get_imap_credentials()
 check("IMAP user resolved", user == "tester@gmail.com")
-check("IMAP password resolved", pwd == "abcd efgh ijkl mnop")
+check("IMAP password resolved (spaces stripped)", pwd == "abcdefghijklmnop")
 check("imap_status().configured", imap_status()["configured"] is True)
 
 # A closed DB must not make credentials look missing.
