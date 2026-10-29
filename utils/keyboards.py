@@ -159,10 +159,17 @@ def get_join_buttons():
     return buttons
 
 def get_persistent_menu(uid):
+    """Bottom reply keyboard.
+
+    Deliberately *not* marked ``persistent``: a persistent keyboard can never
+    be hidden by the user, but this menu has to stay collapsible so it can be
+    tucked away while typing (Telegram's own keyboard toggle reopens it).
+    ``resize`` keeps it compact instead of full keyboard height.
+    """
     from database import is_admin
     from telethon import Button
     buttons = [
-        [Button.text("🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ", resize=True, persistent=True, style="success", icon=5841670626577748398), Button.text("💳 𝐃ᴇᴘᴏsɪᴛ", style="primary", icon=5409271925014801629)],
+        [Button.text("🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ", resize=True, style="success", icon=5841670626577748398), Button.text("💳 𝐃ᴇᴘᴏsɪᴛ", style="primary", icon=5409271925014801629)],
         [Button.text("👤 𝐏ʀᴏғɪʟᴇ", style="primary", icon=6203982793379154737), Button.text("📦 𝐌ʏ 𝐎ʀᴅᴇʀs", style="primary", icon=5409098988156629257)],
         [Button.text("💰 𝐁ᴀʟᴀɴᴄᴇ", style="success", icon=5409320020058584473), Button.text("📊 𝐒ᴛᴏᴄᴋ", style="primary", icon=6129627894349045589)],
         [Button.text("🎁 𝐑ᴇғᴇʀ", style="success", icon=5354889508674360491), Button.text("📩 𝐒ᴜᴘᴘᴏʀᴛ", style="primary", icon=6129732880529628243)],
