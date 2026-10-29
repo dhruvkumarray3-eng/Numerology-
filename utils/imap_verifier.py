@@ -1,4 +1,5 @@
 import imaplib
+import os
 import ssl
 import email
 import email.utils
@@ -9,11 +10,21 @@ from database import cur, db
 from config import logger
 
 def get_imap_credentials():
+    """Return the Gmail IMAP login the owner configured in the Admin Panel.
+
+    Credentials are read **only** from the ``settings`` table (set via
+    Admin Panel -> Auto-UPI / IMAP -> Change Gmail) or from the environment.
+    They are never hard-coded: this repository is public, and a baked-in
+    app password would be a credential leak.
+
+    Returns ``("", "")`` when nothing is configured; callers must treat that
+    as "gateway not configured" instead of attempting a login.
+    """
     r_user = cur.execute("SELECT value FROM settings WHERE key='gmail_user'").fetchone()
     r_pass = cur.execute("SELECT value FROM settings WHERE key='gmail_pass'").fetchone()
-    user = r_user[0] if r_user and r_user[0] else "vinitgodaragodara3@gmail.com"
-    pwd = r_pass[0] if r_pass and r_pass[0] else "dqwo agxp srsw fdax"
-    return user, pwd
+    user = (r_user[0] if r_user and r_user[0] else "") or os.getenv("IMAP_USER", "")
+    pwd = (r_pass[0] if r_pass and r_pass[0] else "") or os.getenv("IMAP_PASS", "")
+    return user.strip(), pwd.strip()
 
 # Strict whitelist of official FamPay / Payment provider domains
 OFFICIAL_SENDER_DOMAINS = [
