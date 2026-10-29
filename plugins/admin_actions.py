@@ -681,7 +681,10 @@ async def admin_actions(event):
         msg = (f"{P_STATS} <b>ADVANCED STATS</b>\n\n{P_USERS} <b>Total Users:</b> {u}\n{P_PKG} <b>Accounts in Stock:</b> {s}\n"
                f"{P_MONEY} <b>Total UPI Revenue:</b> {P_INR}{r}\n\n{P_CARD} <b>Overall Users Balance:</b> {P_INR}{total_bal}\n"
                f"{P_CART} <b>Total Accounts Sold:</b> {total_orders}\n{P_USDT} <b>Overall Sales Amount:</b> {P_INR}{total_spent}")
-        return await event.edit(msg, buttons=[[style_btn("Back", "adm_adminmain", "danger", icon=6129888444245089008)]])
+        return await event.edit(msg, buttons=[
+            [style_btn("\U0001F4CA Panel Analytics (Revenue \u00b7 Profit)", "hub_do|panelstats", "success", icon="money")],
+            [style_btn("Back", "adm_adminmain", "danger", icon=6129888444245089008)],
+        ])
 
     elif action_data == "channels_mgr" and has_perm(uid, 'p_settings'):
         return await channels_manager_menu(event)
