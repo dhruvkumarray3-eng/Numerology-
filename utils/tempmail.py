@@ -1,28 +1,20 @@
-"""Temp Mail client — multi-provider, runtime-configurable.
+"""Temp Mail client — Grabmail.io only, runtime-configurable.
 
-Two providers are supported behind one API so the rest of the bot
-(``plugins/tempmail.py``, the admin panel) never has to know which one is
-live:
+Grabmail API (https://grabmail.io/api/v1):
+    GET  /me                          key health, plan, rate limits
+    GET  /domains                     public + premium pool
+    GET  /mailbox?address=...         {address, alias, count, next, messages}
+    GET  /message/{id}?mailbox=...    full body
+    DEL  /message/{id}?mailbox=...    delete
+    GET  /attachment/{id}?mailbox=... attachment
 
-  * **grabmail**  (default) — https://grabmail.io/api/v1
-      GET  /me                          key health, plan, rate limits
-      GET  /domains                     public + premium pool
-      GET  /mailbox?address=...         {address, alias, count, next, messages}
-      GET  /message/{id}?mailbox=...    full body
-      DEL  /message/{id}?mailbox=...    delete
-      A mailbox is never created — it exists the moment mail arrives, and
-      messages are deleted 5 days after arrival.  Public domains
-      (grabmail.io / mixozia.com / linqmail.com) work keyless; the 97-domain
-      premium pool needs a paid key.
+A mailbox is never created — it exists the moment mail arrives, and messages
+are deleted 5 days after arrival.  Public domains (grabmail.io / mixozia.com /
+linqmail.com) work keyless; the 97-domain premium pool needs a paid key.
 
-  * **mtempmail** (legacy) — https://mtempmail.com/api
-      GET  /domains/{key}/{type}
-      POST /emails/{key}
-      GET  /messages/{key}/{email}
-
-Which one is used, and with which key/base URL/domain, comes from
-``utils.runtime_config`` — i.e. the admin panel first, then the environment.
-That is what makes the API key editable from the bot instead of a redeploy.
+Which key/base URL/domain is used comes from ``utils.runtime_config`` — i.e.
+the admin panel first, then the environment.  That is what makes the API key
+editable from the bot instead of a redeploy.
 
 Public API (kept stable on purpose):
     get_domains(), create_email(), get_messages(), get_message(),
@@ -44,8 +36,8 @@ from utils import runtime_config
 
 _UA = "Numbott/1.0 (+temp-mail)"
 
-# Domain list cache, keyed per provider+key so switching providers never
-# shows the previous provider's domains.
+# Domain list cache, keyed per key+base URL so rotating a key never shows the
+# previous account's domains.
 _DOMAIN_CACHE: Dict[str, Any] = {"key": "", "ts": 0.0, "domains": []}
 _DOMAIN_TTL = 600
 
@@ -58,35 +50,31 @@ class TempMailError(Exception):
 #  Settings
 # ---------------------------------------------------------------------------
 def settings() -> Dict[str, Any]:
-    """Effective settings for the active provider (panel -> env -> default)."""
+    """Effective settings (panel -> env -> default)."""
     return runtime_config.tempmail_settings()
 
 
+def enabled() -> bool:
+    """True when the owner has Temp Mail switched ON in the admin panel."""
+    return bool(settings().get("enabled", True))
+
+
 def provider_name() -> str:
-    return settings().get("provider", "grabmail")
+    return "grabmail"
 
 
 def _require_key() -> str:
-    cfg = settings()
-    key = (cfg.get("api_key") or "").strip()
-    if not key and cfg.get("provider") != "grabmail":
-        raise TempMailError(
-            "Temp Mail API key is not configured. "
-            "Admin Panel → 📧 Temp Mail (API) → Change API Key."
-        )
-    return key
+    """Grabmail keys are optional — public domains work keyless."""
+    return (settings().get("api_key") or "").strip()
 
 
 def _base() -> str:
-    cfg = settings()
-    default = ("https://grabmail.io/api/v1"
-               if cfg.get("provider") == "grabmail" else "https://mtempmail.com/api")
-    return (cfg.get("base_url") or default).rstrip("/")
+    return (settings().get("base_url") or "https://grabmail.io/api/v1").rstrip("/")
 
 
 def _headers() -> Dict[str, str]:
     headers = {"User-Agent": _UA, "Accept": "application/json"}
-    key = (settings().get("api_key") or "").strip()
+    key = _require_key()
     if key:
         headers["Authorization"] = f"Bearer {key}"
     return headers
@@ -101,10 +89,8 @@ async def _request(
     *,
     params: Optional[Dict[str, Any]] = None,
     timeout: int = 25,
-    provider: Optional[str] = None,
 ) -> Dict[str, Any]:
     """JSON request with retry on 429/5xx. Error slugs are preserved."""
-    prov = provider or provider_name()
     url = f"{_base()}{path}"
     last_err: Optional[str] = None
 
@@ -139,7 +125,6 @@ async def _request(
                         raise TempMailError("Unexpected response from Temp Mail service.")
 
                     # Grabmail errors: {"error": slug, "message": "..."}
-                    # MTempMail errors: {"status": false, "message": "..."}
                     failed = (
                         resp.status >= 400
                         or data.get("status") is False
@@ -153,7 +138,7 @@ async def _request(
                             or slug
                             or f"request failed ({resp.status})"
                         )
-                        if slug == "unknown_domain" and prov == "grabmail":
+                        if slug == "unknown_domain":
                             msg = ("This domain is not available on your Grabmail plan. "
                                    "Premium domains need a paid key — pick grabmail.io, "
                                    "mixozia.com or linqmail.com instead.")
@@ -182,8 +167,7 @@ async def _request(
 async def get_domains(kind: str = "all", *, use_cache: bool = True) -> List[Dict[str, str]]:
     """Available domains as [{'domain': ..., 'type': ...}]."""
     cfg = settings()
-    prov = cfg.get("provider", "grabmail")
-    cache_key = f"{prov}:{(cfg.get('api_key') or '')[:12]}:{cfg.get('base_url', '')}"
+    cache_key = f"{(cfg.get('api_key') or '')[:12]}:{cfg.get('base_url', '')}"
 
     now = time.time()
     if (
@@ -195,23 +179,13 @@ async def get_domains(kind: str = "all", *, use_cache: bool = True) -> List[Dict
         return list(_DOMAIN_CACHE["domains"])
 
     cleaned: List[Dict[str, str]] = []
-
-    if prov == "grabmail":
-        data = await _request("GET", "/domains")
-        for dom in data.get("public") or []:
-            cleaned.append({"domain": str(dom), "type": "Free"})
-        premium = data.get("premium") or {}
-        if premium.get("unlocked"):
-            for dom in premium.get("domains") or []:
-                cleaned.append({"domain": str(dom), "type": "Premium"})
-    else:
-        data = await _request("GET", f"/domains/{_require_key()}/{kind}")
-        for d in ((data.get("data") or {}).get("domains")) or []:
-            if isinstance(d, dict) and d.get("domain"):
-                cleaned.append({
-                    "domain": str(d.get("domain", "")).strip(),
-                    "type": str(d.get("type", "Free")).strip(),
-                })
+    data = await _request("GET", "/domains")
+    for dom in data.get("public") or []:
+        cleaned.append({"domain": str(dom), "type": "Free"})
+    premium = data.get("premium") or {}
+    if premium.get("unlocked"):
+        for dom in premium.get("domains") or []:
+            cleaned.append({"domain": str(dom), "type": "Premium"})
 
     if cleaned:
         _DOMAIN_CACHE.update({"key": cache_key, "domains": cleaned, "ts": now})
@@ -227,51 +201,38 @@ def _random_local(n: int = 9) -> str:
 
 
 async def create_email(domain: Optional[str] = None) -> Dict[str, Any]:
-    """Create (or mint) a fresh disposable inbox.
+    """Mint a fresh disposable inbox.
 
     Grabmail has no "create" call — an address exists as soon as mail arrives.
     We therefore mint a random local part, do one read so the alias and the
-    premium hold are established, and return a payload shaped like the legacy
-    provider so callers do not change.
+    premium hold are established, and return a stable payload.
     """
     cfg = settings()
-    prov = cfg.get("provider", "grabmail")
     domain = (domain or cfg.get("domain") or "").strip().lstrip("@")
 
-    if prov == "grabmail":
-        if not domain:
-            domains = await get_domains()
-            domain = domains[0]["domain"] if domains else "grabmail.io"
-        address = f"{_random_local()}@{domain}"
-        alias = None
-        try:
-            data = await _request("GET", "/mailbox", params={"address": address, "limit": 1})
-            alias = data.get("alias")
-        except TempMailError as exc:
-            # A 404/429 must not stop the user: the address still receives mail.
-            logger.debug(f"grabmail pre-read skipped: {exc}")
-        return {
-            "email": address,
-            "id": address,
-            "alias": alias,
-            "domain": domain,
-            "provider": "grabmail",
-            "expire_at": "5 days (auto-deleted)",
-        }
-
-    path = f"/emails/{_require_key()}"
-    if domain:
-        path += f"?domain={domain}"
-    data = await _request("POST", path)
-    payload = data.get("data") or {}
-    if not payload.get("email"):
-        raise TempMailError("Could not create a temporary email. Please try again.")
-    payload.setdefault("provider", "mtempmail")
-    return payload
+    if not domain:
+        domains = await get_domains()
+        domain = domains[0]["domain"] if domains else "grabmail.io"
+    address = f"{_random_local()}@{domain}"
+    alias = None
+    try:
+        data = await _request("GET", "/mailbox", params={"address": address, "limit": 1})
+        alias = data.get("alias")
+    except TempMailError as exc:
+        # A 404/429 must not stop the user: the address still receives mail.
+        logger.debug(f"grabmail pre-read skipped: {exc}")
+    return {
+        "email": address,
+        "id": address,
+        "alias": alias,
+        "domain": domain,
+        "provider": "grabmail",
+        "expire_at": "5 days (auto-deleted)",
+    }
 
 
 def _normalise_message(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Map both providers' field names into one stable shape."""
+    """Map Grabmail's field names into one stable shape."""
     if not isinstance(raw, dict):
         return {}
     body = (
@@ -312,17 +273,8 @@ async def get_messages(email: str) -> List[Dict[str, Any]]:
     """Inbox messages for ``email``, newest first."""
     if not email:
         return []
-    cfg = settings()
-    prov = cfg.get("provider", "grabmail")
-
-    if prov == "grabmail":
-        data = await _request("GET", "/mailbox", params={"address": email, "limit": 50})
-        raw = data.get("messages") or []
-    else:
-        data = await _request("GET", f"/messages/{_require_key()}/{email}")
-        raw = data.get("messages") or data.get("data") or []
-        if isinstance(raw, dict):
-            raw = raw.get("messages") or []
+    data = await _request("GET", "/mailbox", params={"address": email, "limit": 50})
+    raw = data.get("messages") or []
 
     out: List[Dict[str, Any]] = []
     for item in raw:
@@ -339,55 +291,17 @@ async def get_messages(email: str) -> List[Dict[str, Any]]:
 
 async def get_message(email: str, message_id: Any) -> Dict[str, Any]:
     """Fetch one message with its full body."""
-    cfg = settings()
-    prov = cfg.get("provider", "grabmail")
-
-    if prov == "grabmail":
-        try:
-            data = await _request("GET", f"/message/{message_id}", params={"mailbox": email})
-            return _normalise_message(data)
-        except TempMailError as exc:
-            logger.debug(f"grabmail message fetch failed: {exc}")
-            return {"id": message_id, "from": "", "subject": "", "date": "",
-                    "body": "", "raw": {}}
-
-    # ---- legacy provider: try documented shapes, then the public web view
-    candidates = [
-        f"/messages/{_require_key()}/{email}/{message_id}",
-        f"/message/{_require_key()}/{email}/{message_id}",
-        f"/messages/{_require_key()}/{message_id}",
-        f"/message/{_require_key()}/{message_id}",
-    ]
-    for path in candidates:
-        try:
-            data = await _request("GET", path)
-        except TempMailError:
-            continue
-        payload = data.get("data") or data.get("message") or data
-        norm = _normalise_message(payload if isinstance(payload, dict) else {})
-        if norm.get("body"):
-            return norm
-
-    if message_id:
-        try:
-            url = f"https://mtempmail.com/view/{message_id}"
-            async with aiohttp.ClientSession(headers={"User-Agent": _UA}) as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=25)) as resp:
-                    if resp.status == 200:
-                        text = _strip_html(await resp.text())
-                        if text:
-                            return {"id": message_id, "from": "", "subject": "",
-                                    "date": "", "body": text, "raw": {}}
-        except Exception as exc:  # pragma: no cover - best effort
-            logger.debug(f"tempmail web fallback failed: {exc}")
-
-    return {"id": message_id, "from": "", "subject": "", "date": "", "body": "", "raw": {}}
+    try:
+        data = await _request("GET", f"/message/{message_id}", params={"mailbox": email})
+        return _normalise_message(data)
+    except TempMailError as exc:
+        logger.debug(f"grabmail message fetch failed: {exc}")
+        return {"id": message_id, "from": "", "subject": "", "date": "",
+                "body": "", "raw": {}}
 
 
 async def delete_message(email: str, message_id: Any) -> bool:
-    """Delete a message at once (Grabmail only; no-op elsewhere)."""
-    if settings().get("provider") != "grabmail":
-        return False
+    """Delete a message at once."""
     try:
         data = await _request("DELETE", f"/message/{message_id}", params={"mailbox": email})
         return bool(data.get("deleted"))
@@ -402,41 +316,39 @@ async def health() -> Dict[str, Any]:
     """Non-raising status snapshot for the admin panel."""
     cfg = settings()
     info: Dict[str, Any] = {
-        "provider": cfg.get("provider"),
+        "provider": "grabmail",
+        "enabled": cfg.get("enabled", True),
         "base_url": cfg.get("base_url"),
+        "website_url": cfg.get("website_url"),
         "domain": cfg.get("domain"),
         "source": cfg.get("source"),
         "key": runtime_config.mask(cfg.get("api_key", "")),
         "ok": False,
     }
     try:
-        if cfg.get("provider") == "grabmail":
-            if (cfg.get("api_key") or "").strip():
-                me = await _request("GET", "/me")
-                usage = me.get("usage") or {}
-                info.update({
-                    "ok": True,
-                    "plan": me.get("plan"),
-                    "premium": me.get("premium"),
-                    "left": usage.get("left"),
-                    "quota": usage.get("quota"),
-                    "limits": me.get("limits"),
-                })
-            else:
-                # No key: /me would answer 401, but the public domains are
-                # keyless and fully usable.  Probe /domains instead so the
-                # panel shows "Working" for the normal no-key setup.
-                data = await _request("GET", "/domains")
-                public = data.get("public") or []
-                info.update({
-                    "ok": bool(public),
-                    "plan": "free (no key)",
-                    "premium": False,
-                    "domains": len(public),
-                })
+        if (cfg.get("api_key") or "").strip():
+            me = await _request("GET", "/me")
+            usage = me.get("usage") or {}
+            info.update({
+                "ok": True,
+                "plan": me.get("plan"),
+                "premium": me.get("premium"),
+                "left": usage.get("left"),
+                "quota": usage.get("quota"),
+                "limits": me.get("limits"),
+            })
         else:
-            domains = await get_domains(use_cache=False)
-            info.update({"ok": bool(domains), "domains": len(domains)})
+            # No key: /me would answer 401, but the public domains are
+            # keyless and fully usable.  Probe /domains instead so the
+            # panel shows "Working" for the normal no-key setup.
+            data = await _request("GET", "/domains")
+            public = data.get("public") or []
+            info.update({
+                "ok": bool(public),
+                "plan": "free (no key)",
+                "premium": False,
+                "domains": len(public),
+            })
     except Exception as exc:
         info["error"] = str(exc)
     return info

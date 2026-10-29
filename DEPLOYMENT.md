@@ -65,13 +65,11 @@ jati hai — redeploy nahi chahiye.
 
 | Variable | Default | Kya karta hai |
 |---|---|---|
-| `TEMPMAIL_PROVIDER` | `grabmail` | `grabmail` ya `mtempmail` (purana). |
-| `GRABMAIL_API_KEY` | *(khaali)* | Grabmail key, `gm_live_...` format. |
+| `TEMPMAIL_ENABLED` | `on` | Master switch. `off` karne par users ko Free Temp Mail button nahi dikhega. Panel se bhi toggle ho sakta hai. |
+| `GRABMAIL_API_KEY` | *(khaali)* | Grabmail key, `gm_live_...` format. Optional — free domains bina key chalti hain. |
 | `GRABMAIL_BASE_URL` | `https://grabmail.io/api/v1` | API base. |
+| `GRABMAIL_WEBSITE_URL` | `https://grabmail.io` | Users ko dikhne wala website link. |
 | `GRABMAIL_DOMAIN` | `grabmail.io` | Free public domain. Khaali chhodo to `/domains` se auto-pick. |
-| `TEMPMAIL_API_KEY` | *(khaali)* | Sirf legacy `mtempmail` ke liye. |
-| `TEMPMAIL_BASE_URL` | `https://mtempmail.com/api` | Legacy base. |
-| `TEMPMAIL_DOMAIN` | *(khaali)* | Legacy domain. |
 
 Key kahan se: **https://grabmail.io → Dashboard → API Keys**.
 
@@ -81,9 +79,14 @@ Grabmail free plan ki limits (bot inhe handle karta hai, 429 par retry):
 - Premium `.com` domains ke liye paid plan chahiye
 - Messages 5 din baad auto-delete
 
-**Panel se badalna:** `Admin Panel → 📧 Temp Mail (API)` → Provider / API Key /
-Base URL / Domain, sab wahin se editable hai. "Test Create Inbox" button se
-turant verify kar sakte ho.
+**Panel se badalna:** `Admin Panel → 📧 Temp Mail (API)` → **Turn ON / Turn OFF**,
+API Key, Base URL, Website Link, Domain — sab wahin se editable hai, bina redeploy.
+"Test Create Inbox" button se turant verify kar sakte ho.
+
+**ON/OFF kaise kaam karta hai:** panel me **Turn OFF for users** dabao to
+user-side "Free Temp Mail" button gayab ho jata hai aur `/tempmail` bhi band ho
+jata hai. **Turn ON for users** dabao to turant wapas chalu. Setting database me
+save hoti hai, isliye restart/redeploy ke baad bhi bani rehti hai.
 
 ---
 

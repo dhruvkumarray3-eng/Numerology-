@@ -36,9 +36,10 @@ _cache_loaded = False
 # Keys the admin panel is allowed to write.  An allow-list keeps a typo in a
 # wizard from silently creating a settings row nobody reads.
 EDITABLE_KEYS = frozenset({
-    "tempmail_provider",
+    "tempmail_enabled",
     "tempmail_api_key",
     "tempmail_base_url",
+    "tempmail_website_url",
     "tempmail_domain",
     "tempmail_account_email",
     "tempmail_account_password",
@@ -166,32 +167,43 @@ def mask(secret: str) -> str:
 # ---------------------------------------------------------------------------
 #  Typed resolvers used by the clients
 # ---------------------------------------------------------------------------
-def tempmail_settings() -> dict:
-    """Effective Temp Mail settings (panel override -> env -> default)."""
-    provider = (
-        get("tempmail_provider")
-        or os.getenv("TEMPMAIL_PROVIDER", "").strip()
-        or "grabmail"
-    ).lower()
+def _as_bool(value: str, default: bool = True) -> bool:
+    """Parse a stored/env toggle ('1', 'on', 'true', 'yes')."""
+    if value is None or str(value).strip() == "":
+        return default
+    return str(value).strip().lower() not in ("0", "off", "false", "no", "disabled")
 
-    if provider == "grabmail":
-        default_key = os.getenv("GRABMAIL_API_KEY", "").strip()
-        default_base = os.getenv("GRABMAIL_BASE_URL", "https://grabmail.io/api/v1").strip()
-        default_domain = os.getenv("GRABMAIL_DOMAIN", "grabmail.io").strip()
-    else:  # mtempmail (legacy)
-        default_key = os.getenv("TEMPMAIL_API_KEY", "").strip()
-        default_base = os.getenv("TEMPMAIL_BASE_URL", "https://mtempmail.com/api").strip()
-        default_domain = os.getenv("TEMPMAIL_DOMAIN", "").strip()
+
+def tempmail_settings() -> dict:
+    """Effective Grabmail settings (panel override -> env -> default).
+
+    Only Grabmail is supported now; the old mtempmail provider was removed.
+    """
+    default_key = os.getenv("GRABMAIL_API_KEY", "").strip()
+    default_base = os.getenv("GRABMAIL_BASE_URL", "https://grabmail.io/api/v1").strip()
+    default_domain = os.getenv("GRABMAIL_DOMAIN", "grabmail.io").strip()
+    default_site = os.getenv("GRABMAIL_WEBSITE_URL", "https://grabmail.io").strip()
+
+    enabled_raw = get("tempmail_enabled")
+    if enabled_raw == "":
+        enabled_raw = os.getenv("TEMPMAIL_ENABLED", "")
 
     return {
-        "provider": provider,
+        "provider": "grabmail",
+        "enabled": _as_bool(enabled_raw, True),
         "api_key": get("tempmail_api_key") or default_key,
         "base_url": (get("tempmail_base_url") or default_base).rstrip("/"),
+        "website_url": (get("tempmail_website_url") or default_site).rstrip("/"),
         "domain": get("tempmail_domain") or default_domain,
         "account_email": get("tempmail_account_email") or os.getenv("TEMPMAIL_ACCOUNT_EMAIL", "").strip(),
         "account_password": get("tempmail_account_password") or os.getenv("TEMPMAIL_ACCOUNT_PASSWORD", "").strip(),
         "source": source_of("tempmail_api_key"),
     }
+
+
+def tempmail_enabled() -> bool:
+    """True when the owner has Temp Mail switched ON (default: ON)."""
+    return bool(tempmail_settings().get("enabled", True))
 
 
 def temporasms_settings() -> dict:

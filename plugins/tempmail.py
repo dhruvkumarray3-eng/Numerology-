@@ -1,4 +1,4 @@
-"""Free Temp Mail section (MTempMail API).
+"""Free Temp Mail section (Grabmail.io API).
 
 Users get a disposable inbox, can create fresh addresses, refresh, and read
 incoming verification mails / OTPs right inside the bot. Each inbox lives for
@@ -136,6 +136,25 @@ async def _edit_or_send(event, msg: str, buttons):
     return await event.respond(msg, buttons=buttons)
 
 
+async def _disabled_notice(event) -> None:
+    """Shown when the owner has switched Temp Mail OFF in the admin panel."""
+    text = (
+        "<blockquote>\U0001F6AB <b>Temp Mail is currently disabled</b>\n\n"
+        "The owner has switched the Free Temp Mail service OFF for now.\n"
+        "Please try again later.</blockquote>"
+    )
+    btns = [[style_btn("\U0001F519 Back", b"dashboard_main", "danger", icon=6129812419028982717)]]
+    await _edit_or_send(event, text, btns)
+
+
+def _tm_on() -> bool:
+    """Live ON/OFF flag from the admin panel (default ON)."""
+    try:
+        return tm.enabled()
+    except Exception:
+        return True
+
+
 def _home_text() -> str:
     return (
         f"<blockquote expandable>{PE_GIFT} <b>FREE TEMP MAIL</b>\n\n"
@@ -149,6 +168,8 @@ def _home_text() -> str:
 
 
 async def show_home(event):
+    if not _tm_on():
+        return await _disabled_notice(event)
     btns = [
         [style_btn("📧 Get Temp Mail", b"tm_new", "success", icon=5796209712009581332)],
     ]
@@ -261,6 +282,8 @@ def _start_live_inbox(event, sent_msg, email: str, expires: int, messages: List[
     register_live(key, event.client, chat_id, msg_id, _render, interval=5.0)
 
 async def create_inbox(event):
+    if not _tm_on():
+        return await _disabled_notice(event)
     uid = event.sender_id
     try:
         if isinstance(event, events.CallbackQuery.Event):
@@ -301,6 +324,8 @@ async def create_inbox(event):
 
 
 async def show_list(event):
+    if not _tm_on():
+        return await _disabled_notice(event)
     uid = event.sender_id
     inboxes = _user_inboxes(uid)
     if not inboxes:
@@ -323,6 +348,8 @@ async def show_list(event):
 
 
 async def show_inbox(event, email: str):
+    if not _tm_on():
+        return await _disabled_notice(event)
     uid = event.sender_id
     if not email:
         await show_home(event)
@@ -349,6 +376,8 @@ async def show_inbox(event, email: str):
 
 
 async def copy_email(event, email: str):
+    if not _tm_on():
+        return await _disabled_notice(event)
     """Deliver the address as a standalone <code> block.
 
     Telegram copies a <code> block to the clipboard the moment it is tapped,
@@ -370,6 +399,8 @@ async def copy_email(event, email: str):
 
 
 async def cancel_mail(event, email: str):
+    if not _tm_on():
+        return await _disabled_notice(event)
     uid = event.sender_id
     if not _owns_inbox(uid, email):
         try:
@@ -394,6 +425,8 @@ async def cancel_mail(event, email: str):
 
 
 async def show_message(event, email: str, message_id: str):
+    if not _tm_on():
+        return await _disabled_notice(event)
     try:
         msg = await tm.get_message(email, message_id)
     except Exception as exc:

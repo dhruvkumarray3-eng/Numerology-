@@ -133,12 +133,16 @@ def register_admin(bot):
         info = await tm.health()
         ok = info.get("ok")
         head = "\u2705 Working" if ok else "\u274c Not working"
+        on_txt = "\U0001F7E2 ON \u2014 users can use Free Temp Mail" if cfg.get("enabled") \
+            else "\U0001F534 OFF \u2014 button hidden from users"
         lines = [
             "<blockquote expandable>\U0001F4E7 <b>TEMP MAIL \u2014 API SETTINGS</b>\n\n",
-            f"\U0001F50C <b>Provider:</b> <code>{html.escape(str(cfg.get('provider')))}</code>\n",
+            f"\U0001F50C <b>Provider:</b> <code>grabmail.io</code>\n",
+            f"\U0001F6A6 <b>For users:</b> {on_txt}\n",
             f"\U0001F511 <b>API Key:</b> <code>{html.escape(runtime_config.mask(cfg.get('api_key', '')))}</code>",
             f" <i>({html.escape(cfg.get('source') or 'env')})</i>\n",
             f"\U0001F310 <b>Base URL:</b> <code>{html.escape(str(cfg.get('base_url')))}</code>\n",
+            f"\U0001F517 <b>Website Link:</b> <code>{html.escape(str(cfg.get('website_url') or '-'))}</code>\n",
             f"\U0001F5C2 <b>Domain:</b> <code>{html.escape(str(cfg.get('domain') or 'auto'))}</code>\n",
             f"\U0001F4E1 <b>Status:</b> {head}\n",
         ]
@@ -159,10 +163,18 @@ def register_admin(bot):
         return "".join(lines)
 
     def _tm_buttons():
+        from utils import runtime_config
+        is_on = runtime_config.tempmail_enabled()
+        toggle = (style_btn("\U0001F534 Turn OFF for users", "adm_tm_toggle", "danger",
+                            icon=5408832111773757273)
+                  if is_on else
+                  style_btn("\U0001F7E2 Turn ON for users", "adm_tm_toggle", "success",
+                            icon=5796209712009581332))
         return [
-            [style_btn("\U0001F50C Change Provider", "adm_tm_provider", "primary", icon=5409271925014801629),
-             style_btn("\U0001F511 Change API Key", "adm_tm_key", "success", icon=5796209712009581332)],
-            [style_btn("\U0001F310 Change Base URL", "adm_tm_base", "primary", icon=5409098988156629257),
+            [toggle],
+            [style_btn("\U0001F511 Change API Key", "adm_tm_key", "success", icon=5796209712009581332),
+             style_btn("\U0001F310 Change Base URL", "adm_tm_base", "primary", icon=5409098988156629257)],
+            [style_btn("\U0001F517 Change Website Link", "adm_tm_website", "primary", icon=5409098988156629257),
              style_btn("\U0001F5C2 Change Domain", "adm_tm_domain", "primary", icon=5409098988156629257)],
             [style_btn("\U0001F9EA Test Create Inbox", "adm_tm_test", "success", icon=5796209712009581332),
              style_btn("\U0001F504 Refresh", "adm_tm_refresh", "primary", icon=5408995930416362034)],
@@ -190,43 +202,15 @@ def register_admin(bot):
         except Exception:
             pass
 
-    @bot.on(events.CallbackQuery(pattern=r"^adm_tm_provider$"))
-    async def cb_adm_tm_provider(e):
-        if not is_admin(e.sender_id):
-            return
-        from utils import tempmail as tm
-        cur_prov = tm.provider_name()
-        text = ("<blockquote>\U0001F50C <b>Choose the Temp Mail provider</b>\n\n"
-                f"Active now: <code>{html.escape(cur_prov)}</code>\n\n"
-                "<b>grabmail</b> \u2014 grabmail.io, free public domains + 97 premium "
-                "domains on a paid plan, 5-day retention.\n"
-                "<b>mtempmail</b> \u2014 the older mtempmail.com API.</blockquote>")
-        btns = [
-            [style_btn("\u2705 grabmail.io", "adm_tm_setprov|grabmail", "success", icon=5796209712009581332)],
-            [style_btn("\U0001F4E7 mtempmail.com", "adm_tm_setprov|mtempmail", "primary", icon=5796209712009581332)],
-            [style_btn("\U0001F519 Back", "adm_tempmail", "danger", icon=6129812419028982717)],
-        ]
-        try:
-            await e.edit(text, buttons=btns)
-        except Exception:
-            pass
-
-    @bot.on(events.CallbackQuery(pattern=r"^adm_tm_setprov\|(\w+)$"))
-    async def cb_adm_tm_setprov(e):
+    @bot.on(events.CallbackQuery(pattern=r"^adm_tm_toggle$"))
+    async def cb_adm_tm_toggle(e):
         if not is_admin(e.sender_id):
             return
         from utils import runtime_config
-        prov = e.pattern_match.group(1).decode() if isinstance(e.pattern_match.group(1), bytes) else e.pattern_match.group(1)
-        if prov not in ("grabmail", "mtempmail"):
-            return await e.answer("Unknown provider", alert=True)
-        runtime_config.set("tempmail_provider", prov)
-        # A key from one provider is worthless (and unsafe) on the other, so a
-        # switch clears the saved base URL, domain AND key.  The new provider
-        # then falls back to its own env var until a key is entered here.
-        runtime_config.clear("tempmail_base_url")
-        runtime_config.clear("tempmail_domain")
-        runtime_config.clear("tempmail_api_key")
-        await e.answer(f"Provider set to {prov} \u2014 set its API key next", alert=False)
+        new_state = not runtime_config.tempmail_enabled()
+        runtime_config.set("tempmail_enabled", "on" if new_state else "off")
+        await e.answer("Temp Mail ON for users" if new_state else "Temp Mail OFF for users",
+                       alert=False)
         text = await _tm_panel_text()
         try:
             await e.edit(text, buttons=_tm_buttons())
@@ -267,19 +251,17 @@ def register_admin(bot):
     async def cb_adm_tm_key(e):
         if not is_admin(e.sender_id):
             return
-        from utils import tempmail as tm
-        prov = tm.provider_name()
-        example = ("gm_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" if prov == "grabmail"
-                   else "pub_xxxxxxxxxxxxxxxxxxxxxxxx")
         await _tm_wizard(
             e,
-            (f"<blockquote>\U0001F511 <b>Send the new {html.escape(prov)} API key</b>\n\n"
-             f"Example: <code>{example}</code>\n\n"
-             "Get it from your provider dashboard. The key is stored in the bot "
-             "database and shown masked from now on.</blockquote>"),
+            ("<blockquote>\U0001F511 <b>Send the new Grabmail API key</b>\n\n"
+             "Example: <code>gm_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</code>\n\n"
+             "Get it from grabmail.io \u2192 Dashboard \u2192 API. The key is stored "
+             "in the bot database and shown masked from now on.\n\n"
+             "<i>Optional \u2014 the free public domains work without a key.</i>"
+             "</blockquote>"),
             "tempmail_api_key",
             validator=lambda v: None if len(v) >= 8 else "That looks too short for an API key.",
-            success=f"{prov} API key updated.",
+            success="Grabmail API key updated.",
         )
 
     @bot.on(events.CallbackQuery(pattern=r"^adm_tm_base$"))
@@ -288,13 +270,26 @@ def register_admin(bot):
             return
         await _tm_wizard(
             e,
-            ("<blockquote>\U0001F310 <b>Send the API base URL</b>\n\n"
-             "grabmail: <code>https://grabmail.io/api/v1</code>\n"
-             "mtempmail: <code>https://mtempmail.com/api</code>\n\n"
+            ("<blockquote>\U0001F310 <b>Send the Grabmail API base URL</b>\n\n"
+             "Default: <code>https://grabmail.io/api/v1</code>\n\n"
              "<i>No trailing slash needed.</i></blockquote>"),
             "tempmail_base_url",
             validator=lambda v: None if v.startswith("http") else "The URL must start with http:// or https://",
             success="Base URL updated.",
+        )
+
+    @bot.on(events.CallbackQuery(pattern=r"^adm_tm_website$"))
+    async def cb_adm_tm_website(e):
+        if not is_admin(e.sender_id):
+            return
+        await _tm_wizard(
+            e,
+            ("<blockquote>\U0001F517 <b>Send the Temp Mail website link</b>\n\n"
+             "Default: <code>https://grabmail.io</code>\n\n"
+             "This is shown to users as the \"open website\" link.</blockquote>"),
+            "tempmail_website_url",
+            validator=lambda v: None if v.startswith("http") else "The URL must start with http:// or https://",
+            success="Website link updated.",
         )
 
     @bot.on(events.CallbackQuery(pattern=r"^adm_tm_domain$"))
@@ -318,7 +313,7 @@ def register_admin(bot):
         if not is_admin(e.sender_id):
             return
         from utils import runtime_config
-        for key in ("tempmail_provider", "tempmail_api_key", "tempmail_base_url",
+        for key in ("tempmail_api_key", "tempmail_base_url", "tempmail_website_url",
                     "tempmail_domain", "tempmail_account_email", "tempmail_account_password"):
             runtime_config.clear(key)
         await e.answer("Reset to environment values", alert=False)

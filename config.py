@@ -203,18 +203,18 @@ SMSMAN_API_KEY = os.getenv("SMSMAN_API_KEY", "").strip()            # https://sm
 # utils/runtime_config.py, so the owner can rotate the provider / key / base
 # URL / domain live, without a redeploy.
 #
-#   TEMPMAIL_PROVIDER   grabmail | mtempmail          (default: grabmail)
+#   TEMPMAIL_ENABLED    on | off  (master switch, default: on)
 #   GRABMAIL_API_KEY    gm_live_...                   (grabmail.io)
 #   GRABMAIL_BASE_URL   https://grabmail.io/api/v1
+#   GRABMAIL_WEBSITE_URL https://grabmail.io
 #   GRABMAIL_DOMAIN     grabmail.io | mixozia.com | linqmail.com
-#   TEMPMAIL_API_KEY    legacy mtempmail.com key
-#   TEMPMAIL_BASE_URL   https://mtempmail.com/api
-TEMPMAIL_PROVIDER = os.getenv("TEMPMAIL_PROVIDER", "grabmail").strip().lower()
+#
+# Only Grabmail is supported now — the old mtempmail provider was removed.
+TEMPMAIL_ENABLED = os.getenv("TEMPMAIL_ENABLED", "on").strip().lower() not in ("0", "off", "false", "no")
 GRABMAIL_API_KEY = os.getenv("GRABMAIL_API_KEY", "").strip()
 GRABMAIL_BASE_URL = os.getenv("GRABMAIL_BASE_URL", "https://grabmail.io/api/v1").strip().rstrip("/")
+GRABMAIL_WEBSITE_URL = os.getenv("GRABMAIL_WEBSITE_URL", "https://grabmail.io").strip().rstrip("/")
 GRABMAIL_DOMAIN = os.getenv("GRABMAIL_DOMAIN", "grabmail.io").strip()
-TEMPMAIL_API_KEY = os.getenv("TEMPMAIL_API_KEY", "").strip()
-TEMPMAIL_BASE_URL = os.getenv("TEMPMAIL_BASE_URL", "https://mtempmail.com/api").strip().rstrip("/")
 
 # --- TEMPORASMS: powers All Apps OTP + TG Number Change + WhatsApp Accounts ---
 # Same rule: env var (or admin panel) only, never committed to the repo.
@@ -235,9 +235,11 @@ def get_tempmail_settings() -> dict:
         return tempmail_settings()
     except Exception:
         return {
-            "provider": TEMPMAIL_PROVIDER,
-            "api_key": GRABMAIL_API_KEY if TEMPMAIL_PROVIDER == "grabmail" else TEMPMAIL_API_KEY,
-            "base_url": GRABMAIL_BASE_URL if TEMPMAIL_PROVIDER == "grabmail" else TEMPMAIL_BASE_URL,
+            "provider": "grabmail",
+            "enabled": TEMPMAIL_ENABLED,
+            "api_key": GRABMAIL_API_KEY,
+            "base_url": GRABMAIL_BASE_URL,
+            "website_url": GRABMAIL_WEBSITE_URL,
             "domain": GRABMAIL_DOMAIN,
             "account_email": "",
             "account_password": "",
@@ -263,8 +265,9 @@ def get_temporasms_settings() -> dict:
 
 def tempmail_configured() -> bool:
     s = get_tempmail_settings()
-    # Grabmail's public domains work keyless; every other provider needs a key.
-    return bool(s.get("api_key")) or s.get("provider") == "grabmail"
+    # Grabmail's public domains work keyless, so it is always "configured"
+    # unless the owner has switched the whole feature off.
+    return bool(s.get("enabled", True))
 
 
 def temporasms_configured() -> bool:
