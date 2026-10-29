@@ -19,6 +19,7 @@ from plugins.admin import register_admin
 from plugins.admin_actions import register_admin_actions
 from plugins.admin_cleanup import register_admin_cleanup
 from plugins.admin_catalogs import register_admin_catalogs
+from plugins.admin_hub import register_admin_hub
 from plugins.callbacks import register_callbacks
 from plugins.smm import register_smm
 from plugins.source_codes import register_source_codes
@@ -47,6 +48,7 @@ _PLUGIN_REGISTRARS = (
     ("admin_actions", register_admin_actions),
     ("admin_cleanup", register_admin_cleanup),
     ("admin_catalogs", register_admin_catalogs),
+    ("admin_hub", register_admin_hub),
     ("callbacks", register_callbacks),
     ("smm", register_smm),
     ("source_codes", register_source_codes),
