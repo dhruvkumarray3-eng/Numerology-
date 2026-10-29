@@ -109,6 +109,17 @@ check("send_main_menu calls install_persistent_menu()",
 check("install is skipped for callback re-renders",
       "if not isinstance(event, events.CallbackQuery.Event):" in start_src)
 
+# The install must be invisible: a carrier message is sent and then deleted,
+# and its text is the U+2063 invisible separator (no "menu ready" notice).
+check("install uses an invisible carrier text",
+      '_INVISIBLE_TEXT = "\\u2063"' in start_src)
+check("install deletes the carrier message",
+      "await carrier.delete()" in start_src)
+check("no visible 'menu ready' notice is sent",
+      "use the buttons below the message box" not in start_src)
+check("install does not leave a visible caption",
+      "\u2328\ufe0f <b>" not in start_src)
+
 # ---------------------------------------------------------------------------
 # 5. Dashboard buttons restored from the 28 Oct menu
 # ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+import asyncio
 import html
 from telethon import events, types, Button
 from telethon.errors import MessageNotModifiedError
@@ -14,27 +15,50 @@ from config import (PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL
                     ADMIN_ID, is_super_admin)
 from utils.states import session_buy_state, deposit_input
 
-async def install_persistent_menu(bot, event, uid):
-    """(Re)install the bottom reply keyboard (the persistent menu).
+# Telegram does not allow a single message to carry both an inline keyboard
+# and a reply keyboard.  The reply keyboard is therefore installed by a
+# throw-away "carrier" message that is deleted immediately afterwards: the
+# keyboard itself lives in the chat state, not in the message, so it stays
+# on screen after the carrier is gone.  The carrier text is an invisible
+# separator (U+2063) so even a failed delete leaves nothing readable behind.
+_INVISIBLE_TEXT = "\u2063"
 
-    Telegram keeps a reply keyboard until it is replaced or explicitly
-    cleared, so this only needs to run on a fresh render (/start, channel
-    verification).  A single Telegram message cannot carry a reply keyboard
-    *and* an inline keyboard, so the menu is sent as its own tiny message
-    right after the dashboard.
+
+async def install_persistent_menu(bot, event, uid):
+    """Silently (re)install the bottom reply keyboard.
+
+    No visible message is left in the chat: the carrier message is deleted
+    right after Telegram registers the keyboard.  Only called on fresh
+    renders (/start, channel-join verification) because a reply keyboard
+    persists until it is replaced or explicitly cleared.
     """
+    chat = getattr(event, "chat_id", None) if event is not None else None
+    if chat is None:
+        chat = uid
+
     try:
         menu = get_persistent_menu(uid)
-        text = ("\u2328\ufe0f <b>\U0001D426\U0001D41E\U0001D427\U0001D42E "
-                "\U0001D42B\U0001D41E\U0001D41A\U0001D41D\U0001D432</b> \u2014 "
-                "<i>use the buttons below the message box.</i>")
-        if isinstance(event, events.CallbackQuery.Event) or event is None:
-            chat = event.chat_id if event is not None else uid
-            return await bot.send_message(chat, text, buttons=menu, parse_mode="html")
-        return await event.respond(text, buttons=menu, parse_mode="html")
+    except Exception as ex:
+        logger.warning("Could not build persistent menu: %s", ex)
+        return None
+
+    carrier = None
+    try:
+        carrier = await bot.send_message(
+            chat, _INVISIBLE_TEXT, buttons=menu, link_preview=False
+        )
     except Exception as ex:
         logger.warning("Could not install persistent menu: %s", ex)
         return None
+
+    # Give Telegram a moment to persist the keyboard, then remove the carrier.
+    try:
+        await asyncio.sleep(0.3)
+        await carrier.delete()
+    except Exception as ex:
+        # The keyboard is already installed; an empty bubble is harmless.
+        logger.debug("Persistent-menu carrier not deleted: %s", ex)
+    return carrier
 
 
 async def send_main_menu(bot, event, uid):
