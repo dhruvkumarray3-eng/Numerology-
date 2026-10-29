@@ -1488,67 +1488,96 @@ async def admin_actions(event):
                 await conv.send_message(f"{P_YES} <b>UPI ID Updated:</b> <code>{new_upi}</code>")
 
             elif action_data == "change_gmail" and has_perm(uid, 'p_settings'):
-                resp = await get_reply(
-                    "\U0001F4E7 <b>Enter Gmail Address and 16-digit App Password:</b>\n\n"
-                    "<i>Format:</i> <code><email> <16-digit-app-password></code>\n"
-                    "<i>Example:</i> <code>myemail@gmail.com dqwo agxp srsw fdax</code>\n\n"
+                from utils.imap_verifier import (
+                    clean_app_password, parse_gmail_credentials, test_imap_connection)
+
+                # NOTE: the prompt used to contain literal "<email>" and
+                # "<16-digit-app-password>" inside an HTML message.  Telegram's
+                # HTML parser treats those as unknown tags and silently strips
+                # them, so the owner saw a mangled "Format:" line.  Everything
+                # that is not a real tag must be escaped.
+                prompt = (
+                    "\U0001F4E7 <b>Enter Gmail Address and App Password</b>\n\n"
+                    "<i>Format:</i> <code>you@gmail.com abcd efgh ijkl mnop</code>\n"
+                    "<i>(email and password on one line \u2014 spaces are fine)</i>\n\n"
                     "<i>Get it from: Google Account \u2192 Security \u2192 2-Step Verification "
                     "\u2192 App passwords \u2192 Mail \u2192 Other</i>")
-                text = (resp.text or "").strip()
-                parts = text.split(None, 1)
-                if len(parts) < 2:
-                    await conv.send_message(
-                        f"{P_NO} <b>Invalid format.</b>\n\nSend both the Gmail address and the "
-                        "16-character App Password on one line:\n"
-                        "<code>myemail@gmail.com dqwo agxp srsw fdax</code>")
+                retry_prompt = (
+                    "\u274C <b>Could not read that.</b>\n\n"
+                    "Send it again in this exact shape:\n"
+                    "<code>you@gmail.com abcd efgh ijkl mnop</code>")
+
+                g_email, g_pass = "", ""
+                for attempt in range(3):
+                    resp = await get_reply(prompt if attempt == 0 else retry_prompt)
+                    text = (resp.text or "").strip()
+                    if not text:
+                        await conv.send_message(
+                            "\u274C <b>That message was empty.</b>\n\n"
+                            "Send the email and app password as text.")
+                        continue
+
+                    g_email, g_pass = parse_gmail_credentials(text)
+                    if not g_email:
+                        await conv.send_message(
+                            "\u274C <b>No email address found.</b>\n"
+                            f"Got: <code>{html.escape(text[:80])}</code>\n\n"
+                            "Include the complete address, e.g. "
+                            "<code>you@gmail.com</code>")
+                        continue
+
+                    if not g_pass:
+                        await conv.send_message(
+                            "\u274C <b>App Password is missing.</b>\n\n"
+                            "Send the email <b>and</b> the app password together:\n"
+                            "<code>you@gmail.com abcd efgh ijkl mnop</code>")
+                        continue
+                    break
                 else:
-                    from utils.imap_verifier import clean_app_password, test_imap_connection
+                    return await conv.send_message(
+                        "\u274C <b>Too many invalid attempts.</b>\n\n"
+                        "Tap \U0001F4E7 <b>Change Gmail</b> again when you are ready.")
 
-                    g_email = parts[0].strip()
-                    g_pass = clean_app_password(parts[1])
+                # Save first, then test.  Even a wrong-length password is worth
+                # storing: the live login test below produces a far more useful
+                # error than a bare "16 characters expected" refusal.
+                cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_user', ?)", (g_email,))
+                cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_pass', ?)", (g_pass,))
+                db.commit()
 
-                    if "@" not in g_email or "." not in g_email.split("@")[-1]:
-                        await conv.send_message(
-                            f"{P_NO} <b>That is not a valid email address.</b>\n"
-                            f"Got: <code>{g_email}</code>")
-                    elif len(g_pass) != 16:
-                        await conv.send_message(
-                            f"{P_NO} <b>Invalid App Password.</b>\n\n"
-                            f"A Gmail App Password is exactly <b>16 characters</b> "
-                            f"(you entered {len(g_pass)}).\n\n"
-                            "<i>Do not use your normal Gmail password \u2014 it will not work "
-                            "over IMAP. Generate an App Password instead.</i>")
-                    else:
-                        cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_user', ?)", (g_email,))
-                        cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_pass', ?)", (g_pass,))
-                        db.commit()
+                length_note = ""
+                if len(g_pass) != 16:
+                    length_note = (f"\n\n\u26A0\uFE0F <i>Heads up: a Gmail App Password is normally "
+                                   f"16 characters, this one is {len(g_pass)}. "
+                                   f"Testing anyway\u2026</i>")
 
-                        await conv.send_message(
-                            f"{P_YES} <b>Gmail IMAP Credentials Saved!</b>\n"
-                            f"\u2022 Email: <code>{g_email}</code>\n"
-                            f"\u2022 App Password: <code>{g_pass[:4]} **** **** {g_pass[-4:]}</code>\n\n"
-                            "\u23F3 <i>Testing the connection now\u2026</i>")
+                await conv.send_message(
+                    f"{P_YES} <b>Gmail IMAP Credentials Saved!</b>\n"
+                    f"\u2022 Email: <code>{html.escape(g_email)}</code>\n"
+                    f"\u2022 App Password: <code>{g_pass[:4]} **** **** {g_pass[-4:]}</code>"
+                    f"{length_note}\n\n"
+                    "\u23F3 <i>Testing the connection now\u2026</i>")
 
-                        try:
-                            ok, res = await asyncio.wait_for(test_imap_connection(), timeout=45)
-                        except asyncio.TimeoutError:
-                            ok, res = False, "Connection timed out after 45s."
-                        except Exception as t_err:
-                            ok, res = False, f"{type(t_err).__name__}: {t_err}"
+                try:
+                    ok, res = await asyncio.wait_for(test_imap_connection(), timeout=45)
+                except asyncio.TimeoutError:
+                    ok, res = False, "Connection timed out after 45 seconds."
+                except Exception as t_err:
+                    ok, res = False, f"{type(t_err).__name__}: {t_err}"
 
-                        if ok:
-                            await conv.send_message(
-                                f"{PE_CHECK} <b>IMAP Login Successful!</b>\n\n"
-                                f"\U0001F4E7 <b>Account:</b> <code>{res['user']}</code>\n"
-                                f"\U0001F4E5 <b>Inbox:</b> {res['total']} emails\n"
-                                f"\U0001F310 <b>Server:</b> {res['host']}:{res['port']}\n\n"
-                                "<i>Auto-UPI verification is now live. Users can pay via UPI and "
-                                "their UTR will be checked against this inbox.</i>")
-                        else:
-                            await conv.send_message(
-                                f"{P_NO} <b>Credentials saved, but the login test failed.</b>\n\n"
-                                f"<blockquote>{res}</blockquote>\n\n"
-                                "<i>Fix the issue and tap \u201cTest IMAP Connection\u201d again.</i>")
+                if ok:
+                    await conv.send_message(
+                        f"{PE_CHECK} <b>IMAP Login Successful!</b>\n\n"
+                        f"\U0001F4E7 <b>Account:</b> <code>{html.escape(res['user'])}</code>\n"
+                        f"\U0001F4E5 <b>Inbox:</b> {res['total']} emails\n"
+                        f"\U0001F310 <b>Server:</b> {res['host']}:{res['port']}\n\n"
+                        "<i>Auto-UPI verification is live. A user can now pay to your UPI ID "
+                        "and their UTR is checked against this inbox automatically.</i>")
+                else:
+                    await conv.send_message(
+                        f"{P_NO} <b>Credentials saved, but the login test failed.</b>\n\n"
+                        f"<blockquote>{html.escape(str(res))}</blockquote>\n\n"
+                        "<i>Fix the issue, then tap \u201cTest IMAP Connection\u201d again.</i>")
 
             elif action_data == "ban" and has_perm(uid, 'p_bal'):
                 t_uid = int((await get_reply(f"{P_ACC} <b>User ID:</b>")).text)

@@ -49,6 +49,36 @@ check("empty stays empty", clean_app_password("") == "" and clean_app_password(N
 check("already clean untouched", clean_app_password("dqwoagxpsrswfdax") == "dqwoagxpsrswfdax")
 
 # ---------------------------------------------------------------------------
+section("1b. parse_gmail_credentials handles real-world input")
+from utils.imap_verifier import parse_gmail_credentials
+
+cases = [
+    # (input, expected email, expected password)
+    ("neetasgaritsairlank@gmail.com cpe ungh swit limb", "neetasgaritsairlank@gmail.com", "cpeunghswitlimb"),
+    ("neetasgaritsairlank@gmail.com expe ungh swit limb.", "neetasgaritsairlank@gmail.com", "expeunghswitlimb."),
+    ("neetasgaritsairlank@gmail.com", "neetasgaritsairlank@gmail.com", ""),
+    ("  \n neetasgaritsairlank@gmail.com   dqwo agxp srsw fdax \n ", "neetasgaritsairlank@gmail.com", "dqwoagxpsrswfdax"),
+    ("dqwo agxp srsw fdax neetasgaritsairlank@gmail.com", "neetasgaritsairlank@gmail.com", "dqwoagxpsrswfdax"),
+    ("Email: neetasgaritsairlank@gmail.com Pass: dqwo agxp srsw fdax", "neetasgaritsairlank@gmail.com", "Email:Pass:dqwoagxpsrswfdax"),
+    ("neetasgaritsairlank@gmail.com, dqwo agxp srsw fdax", "neetasgaritsairlank@gmail.com", ",dqwoagxpsrswfdax"),
+    ("not an email at all", "", ""),
+    ("", "", ""),
+    (None, "", ""),
+]
+for raw, want_mail, want_pass in cases:
+    got_mail, got_pass = parse_gmail_credentials(raw)
+    label = repr(raw)[:46]
+    check(f"parse {label} -> email", got_mail == want_mail, f"{got_mail!r} != {want_mail!r}")
+    check(f"parse {label} -> pass", got_pass == want_pass, f"{got_pass!r} != {want_pass!r}")
+
+# The exact screenshot failure: an email alone must never yield an empty
+# "Got:" line again.
+m, pw = parse_gmail_credentials("neetasgaritsairlank@gmail.com")
+check("screenshot email alone is recognised", m == "neetasgaritsairlank@gmail.com", m)
+check("screenshot email alone has no password", pw == "", pw)
+
+
+# ---------------------------------------------------------------------------
 section("2. Credentials are read back cleaned from the settings table")
 import database
 from database import cur, db
@@ -110,12 +140,23 @@ check("test_imap has no inline imaplib login", "mail.login" not in test_block)
 check("test_imap handles timeout", "TimeoutError" in test_block)
 
 gm_start = src.index('elif action_data == "change_gmail"')
-gm_block = src[gm_start:gm_start + 3200]
+gm_block = src[gm_start:gm_start + 7000]
+check("change_gmail uses the shared parser", "parse_gmail_credentials" in gm_block)
 check("change_gmail normalises password", "clean_app_password" in gm_block)
-check("change_gmail validates 16 chars", "len(g_pass) != 16" in gm_block)
-check("change_gmail validates email", '"@" not in g_email' in gm_block)
+check("change_gmail retries bad input", "for attempt in range(3)" in gm_block)
+check("change_gmail warns on odd password length", "len(g_pass) != 16" in gm_block)
 check("change_gmail auto-tests after save", "test_imap_connection" in gm_block)
 check("change_gmail uses INSERT OR REPLACE", "INSERT OR REPLACE INTO settings" in gm_block)
+check("change_gmail escapes echoed input", "html.escape(text[:80])" in gm_block)
+
+# The prompt must not contain a raw "<placeholder>" tag: Telegram's HTML
+# parser strips unknown tags, which is what mangled the "Format:" line.
+code_only = "\n".join(
+    ln for ln in gm_block.splitlines() if not ln.strip().startswith("#")
+)
+import re as _re
+raw_tags = _re.findall(r"<(?!/?(?:b|i|u|s|code|pre|a|blockquote|tg-spoiler)\b)[a-zA-Z][^>]*>", code_only)
+check("change_gmail prompt has no raw placeholder tag", not raw_tags, raw_tags)
 
 # ---------------------------------------------------------------------------
 section("5. Recharge menu exposes the UPI / Auto-verify method")

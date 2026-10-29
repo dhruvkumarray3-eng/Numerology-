@@ -50,6 +50,33 @@ def clean_app_password(pwd: str) -> str:
     return cleaned.strip("\"'`")
 
 
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+
+def parse_gmail_credentials(text):
+    """Pull ``(email, app_password)`` out of whatever the owner typed.
+
+    The admin panel used to do ``text.split(None, 1)`` and take ``parts[0]`` as
+    the email.  That silently produced an empty email (and therefore the
+    useless "Got: " error) whenever the message arrived with a leading
+    newline, a trailing period, the password first, or an extra word.
+
+    This is deliberately forgiving:
+      * the email is found anywhere in the text with a regex,
+      * everything left over after removing it is treated as the password,
+      * all whitespace / quotes are stripped from the password.
+
+    Returns ``("", "")`` when no email could be found.
+    """
+    raw = "" if text is None else str(text)
+    match = EMAIL_RE.search(raw)
+    if not match:
+        return "", ""
+    email = match.group(0).strip().strip(".,;:")
+    leftover = raw[: match.start()] + " " + raw[match.end():]
+    return email, clean_app_password(leftover)
+
+
 def get_imap_credentials():
     """Return the Gmail IMAP login the owner configured in the Admin Panel.
 
