@@ -58,10 +58,28 @@ async def main():
 
     # 4. Register all plugin handlers (start, buy, admin, callbacks, etc.)
     set_bot_instance(bot)  # lets background tasks (OTP poller) send messages
-    register_all_handlers(bot)
+    try:
+        summary = register_all_handlers(bot)
+        if isinstance(summary, dict) and summary.get("failed"):
+            logger.error(
+                "\u26a0\ufe0f Some plugins failed to load: %s. "
+                "The bot will still start with the remaining features.",
+                ", ".join(summary["failed"]),
+            )
+    except Exception as e:
+        # A loader bug must never take the whole bot down.
+        logger.exception(f"\u26a0\ufe0f Handler registration crashed: {e}. Continuing startup...")
 
     # 5. Bot Connect & Start
-    await bot.start(bot_token=BOT_TOKEN)
+    try:
+        await bot.start(bot_token=BOT_TOKEN)
+    except Exception as e:
+        logger.error(
+            "\u274c Telegram login failed: %s: %s. "
+            "Check BOT_TOKEN / API_ID / API_HASH in your host variables.",
+            type(e).__name__, e,
+        )
+        raise
     print("==================================================", flush=True)
     print("🚀 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!", flush=True)
     print("==================================================", flush=True)

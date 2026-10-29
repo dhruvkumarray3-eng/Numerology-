@@ -211,7 +211,9 @@ def main():
     # ------------------------------------------- plugin registration
     init_src = (ROOT / "plugins" / "__init__.py").read_text(encoding="utf-8")
     check("profit_admin imported", "register_profit_admin" in init_src)
-    check("profit_admin registered", "register_profit_admin(bot)" in init_src)
+    check("profit_admin registered",
+          '("profit_admin", register_profit_admin)' in init_src
+          or "register_profit_admin(bot)" in init_src)
 
     # ------------------------------------------- handlers wired
     registered = []
