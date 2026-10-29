@@ -12,11 +12,19 @@ emoji_ids = [
     6129888444245089008, 5796170975699544141, 6129812419028982717, 6129650743575060215
 ]
 
+# Paths are resolved relative to this file so the script works on any host
+# (it used to hard-code /home/ubuntu/Numbott_Telethon and crash everywhere).
+# Run with --apply to actually rewrite files; without it this is a dry run.
+import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+APPLY = "--apply" in sys.argv
+
 files = [
-    '/home/ubuntu/Numbott_Telethon/utils/keyboards.py',
-    '/home/ubuntu/Numbott_Telethon/plugins/admin.py',
-    '/home/ubuntu/Numbott_Telethon/plugins/buy.py',
-    '/home/ubuntu/Numbott_Telethon/plugins/deposit.py'
+    os.path.join(BASE_DIR, 'utils', 'keyboards.py'),
+    os.path.join(BASE_DIR, 'plugins', 'admin.py'),
+    os.path.join(BASE_DIR, 'plugins', 'buy.py'),
+    os.path.join(BASE_DIR, 'plugins', 'deposit.py'),
 ]
 
 # We want to replace `style_btn("...", "...", "type")` with `style_btn("...", "...", "type", icon=XXX)`
@@ -44,6 +52,10 @@ def _is_search_call(inner):
 
 
 for filepath in files:
+    if not os.path.exists(filepath):
+        print(f"skip (missing): {filepath}")
+        continue
+
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
 
@@ -70,7 +82,11 @@ for filepath in files:
     
     content = re.sub(r"style_btn\(([^)]+)\)", add_icon, content)
     
-    with open(filepath, 'w', encoding='utf-8') as f:
-        f.write(content)
+    if APPLY:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"updated: {filepath}")
+    else:
+        print(f"dry-run (use --apply to write): {filepath}")
 
-print("Icons randomized.")
+print("Icons randomized." if APPLY else "Dry run complete — nothing was written.")

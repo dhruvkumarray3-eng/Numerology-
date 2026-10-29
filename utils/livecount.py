@@ -42,11 +42,14 @@ def _ensure_worker() -> None:
     global _WORKER
     if _WORKER is None or _WORKER.done():
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                _WORKER = loop.create_task(_worker())
+            # get_running_loop() is the correct modern API.  get_event_loop()
+            # is deprecated and on Python 3.14 raises RuntimeError when no loop
+            # is running, which used to make live counters silently stop.
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            pass
+            # Called from a sync context (no running loop) — nothing to do.
+            return
+        _WORKER = loop.create_task(_worker())
 
 
 def register_live(
