@@ -193,23 +193,82 @@ FIVESIM_API_KEY = os.getenv("FIVESIM_API_KEY", "").strip()          # https://5s
 SMSACTIVATE_API_KEY = os.getenv("SMSACTIVATE_API_KEY", "").strip()  # https://sms-activate.org
 SMSPVA_API_KEY = os.getenv("SMSPVA_API_KEY", "").strip()            # https://smspva.com
 SMSMAN_API_KEY = os.getenv("SMSMAN_API_KEY", "").strip()            # https://sms-man.com
-# --- Temp Mail (mtempmail.com) — free disposable inboxes for users ---
-# Owner's working key is baked in as the default so the feature works out of
-# the box; host env vars still override it.
-TEMPMAIL_API_KEY = os.getenv(
-    "TEMPMAIL_API_KEY", "pub_nRn1hUwpdmZvxQNVWDfoXgKyF7dIm9nRIIIt1qDw"
-).strip()
+# --- Temp Mail — free disposable inboxes for users -------------------------
+# SECURITY: no key is ever hardcoded in this repository.  A committed key is a
+# leaked key (this file is public on GitHub).  Resolution order is:
+#
+#     Admin Panel value  ->  environment variable  ->  empty (feature off)
+#
+# The admin panel writes to the SQLite `settings` table through
+# utils/runtime_config.py, so the owner can rotate the provider / key / base
+# URL / domain live, without a redeploy.
+#
+#   TEMPMAIL_PROVIDER   grabmail | mtempmail          (default: grabmail)
+#   GRABMAIL_API_KEY    gm_live_...                   (grabmail.io)
+#   GRABMAIL_BASE_URL   https://grabmail.io/api/v1
+#   GRABMAIL_DOMAIN     grabmail.io | mixozia.com | linqmail.com
+#   TEMPMAIL_API_KEY    legacy mtempmail.com key
+#   TEMPMAIL_BASE_URL   https://mtempmail.com/api
+TEMPMAIL_PROVIDER = os.getenv("TEMPMAIL_PROVIDER", "grabmail").strip().lower()
+GRABMAIL_API_KEY = os.getenv("GRABMAIL_API_KEY", "").strip()
+GRABMAIL_BASE_URL = os.getenv("GRABMAIL_BASE_URL", "https://grabmail.io/api/v1").strip().rstrip("/")
+GRABMAIL_DOMAIN = os.getenv("GRABMAIL_DOMAIN", "grabmail.io").strip()
+TEMPMAIL_API_KEY = os.getenv("TEMPMAIL_API_KEY", "").strip()
 TEMPMAIL_BASE_URL = os.getenv("TEMPMAIL_BASE_URL", "https://mtempmail.com/api").strip().rstrip("/")
 
 # --- TEMPORASMS: powers All Apps OTP + TG Number Change + WhatsApp Accounts ---
-# The owner's working key is baked in as the default so the three OTP panels
-# work out of the box (Railway/host env vars still override it).
-# NOTE: this is a shared secret — rotate it in the TemporaSMS dashboard and set
-# TEMPORASMS_API_KEY in the host environment if the repo is ever made public.
-TEMPORASMS_API_KEY = os.getenv(
-    "TEMPORASMS_API_KEY", "961d06fbf5782a89bee0ff5a589de19c6f33"
-).strip()
-TEMPORASMS_BASE_URL = os.getenv("TEMPORASMS_BASE_URL", "https://api.temporasms.com").strip()
+# Same rule: env var (or admin panel) only, never committed to the repo.
+#   TEMPORASMS_API_KEY  -> the ONE key that powers all three panels
+#   TEMPORASMS_BASE_URL -> default https://api.temporasms.com
+TEMPORASMS_API_KEY = os.getenv("TEMPORASMS_API_KEY", "").strip()
+TEMPORASMS_BASE_URL = os.getenv("TEMPORASMS_BASE_URL", "https://api.temporasms.com").strip().rstrip("/")
+
+
+def get_tempmail_settings() -> dict:
+    """Live Temp Mail settings: admin-panel override -> env -> default.
+
+    Imported lazily so config.py stays importable without a database (tests,
+    tooling, one-off scripts).
+    """
+    try:
+        from utils.runtime_config import tempmail_settings
+        return tempmail_settings()
+    except Exception:
+        return {
+            "provider": TEMPMAIL_PROVIDER,
+            "api_key": GRABMAIL_API_KEY if TEMPMAIL_PROVIDER == "grabmail" else TEMPMAIL_API_KEY,
+            "base_url": GRABMAIL_BASE_URL if TEMPMAIL_PROVIDER == "grabmail" else TEMPMAIL_BASE_URL,
+            "domain": GRABMAIL_DOMAIN,
+            "account_email": "",
+            "account_password": "",
+            "source": "env",
+        }
+
+
+def get_temporasms_settings() -> dict:
+    """Live TemporaSMS settings: admin-panel override -> env -> default."""
+    try:
+        from utils.runtime_config import temporasms_settings
+        return temporasms_settings()
+    except Exception:
+        return {
+            "api_key": TEMPORASMS_API_KEY,
+            "base_url": TEMPORASMS_BASE_URL,
+            "service_whatsapp": TEMPORASMS_SERVICE_WHATSAPP,
+            "service_numchange": TEMPORASMS_SERVICE_NUMCHANGE,
+            "service_allotp": TEMPORASMS_SERVICE_ALLOTP,
+            "source": "env",
+        }
+
+
+def tempmail_configured() -> bool:
+    s = get_tempmail_settings()
+    # Grabmail's public domains work keyless; every other provider needs a key.
+    return bool(s.get("api_key")) or s.get("provider") == "grabmail"
+
+
+def temporasms_configured() -> bool:
+    return bool(get_temporasms_settings().get("api_key"))
 
 # --- Generic OTP mailbox (IMAP) used to auto-read Telegram codes ---
 IMAP_HOST = os.getenv("IMAP_HOST", "").strip()
@@ -275,8 +334,8 @@ def provider_status() -> dict:
         "smsactivate": bool(SMSACTIVATE_API_KEY),
         "smspva": bool(SMSPVA_API_KEY),
         "smsman": bool(SMSMAN_API_KEY),
-        "tempmail": bool(TEMPMAIL_API_KEY),
-        "temporasms": bool(TEMPORASMS_API_KEY),
+        "tempmail": tempmail_configured(),
+        "temporasms": temporasms_configured(),
         "imap": bool(IMAP_HOST and IMAP_USER and IMAP_PASSWORD),
     }
 

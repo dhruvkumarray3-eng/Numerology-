@@ -172,7 +172,7 @@ def _ensure_emoji(label):
 def _providers_line():
     provs = available_providers()
     if not provs:
-        return "⚠️ <b>No OTP provider configured.</b> Add <code>TEMPORASMS_API_KEY</code> (or <code>FIVESIM_API_KEY</code>) in your host variables."
+        return "⚠️ <b>No OTP provider configured.</b> Set it in <b>Admin → 🔐 OTP / SMS Key</b>, or add <code>TEMPORASMS_API_KEY</code> (or <code>FIVESIM_API_KEY</code>) in your host variables."
     return "✅ <b>Providers:</b> " + ", ".join(p.upper() for p in provs)
 
 
@@ -300,7 +300,7 @@ async def do_buy(event, app_slug, country_iso):
     uid = event.sender_id
     if not provider_configured():
         return await event.answer(
-            "⚠️ No OTP provider configured. Set TEMPORASMS_API_KEY in host variables.",
+            "⚠️ No OTP provider configured. Set it in Admin → 🔐 OTP / SMS Key (or TEMPORASMS_API_KEY env var).",
             alert=True,
         )
     await event.answer("⏳ Requesting number...")

@@ -243,7 +243,7 @@ async def buy_number(app_slug, country_iso="any"):
     # --- 5SIM (optional fallback) --------------------------------------------
     service = _service(app_slug, "5sim")
     if not FIVESIM_API_KEY:
-        return {"ok": False, "error": "No OTP provider configured. Set TEMPORASMS_API_KEY (or FIVESIM_API_KEY) in your host variables."}
+        return {"ok": False, "error": "No OTP provider configured. Set it in Admin → 🔐 OTP / SMS Key, or add TEMPORASMS_API_KEY (or FIVESIM_API_KEY) in your host variables."}
     url = f"https://5sim.net/v1/user/buy/activation/{country_iso if country_iso != 'any' else 'russia'}/any/{service}"
     headers = {"Authorization": f"Bearer {FIVESIM_API_KEY}", "Accept": "application/json"}
     try:

@@ -44,11 +44,8 @@ import time
 
 import aiohttp
 
-from config import (
-    TEMPORASMS_API_KEY,
-    TEMPORASMS_BASE_URL,
-    logger,
-)
+from config import logger
+from utils import runtime_config
 
 _TIMEOUT = aiohttp.ClientTimeout(total=30)
 _SWEEP_TIMEOUT = aiohttp.ClientTimeout(total=25)
@@ -96,12 +93,21 @@ _SERVICE_ALIASES = {
 }
 
 
+def _settings() -> dict:
+    """Live settings: admin-panel override -> env -> default."""
+    return runtime_config.temporasms_settings()
+
+
+def api_key() -> str:
+    return (_settings().get("api_key") or "").strip()
+
+
 def configured() -> bool:
-    return bool(TEMPORASMS_API_KEY)
+    return bool(api_key())
 
 
 def _base_url() -> str:
-    return (TEMPORASMS_BASE_URL or "https://api.temporasms.com").rstrip("/")
+    return (_settings().get("base_url") or "https://api.temporasms.com").rstrip("/")
 
 
 def _norm_service(service) -> str:
@@ -178,9 +184,9 @@ def friendly_error(text):
 async def _call(action, operator=None, **params):
     """GET ``handler_api.php?action=...``. Returns ``(text, error)``."""
     if not configured():
-        return None, "TEMPORASMS_API_KEY is not configured"
+        return None, "TEMPORASMS_API_KEY is not configured (set it in Admin → OTP Providers, or as an env var)"
     url = f"{_base_url()}/stubs/handler_api.php"
-    query = {"api_key": TEMPORASMS_API_KEY, "action": action}
+    query = {"api_key": api_key(), "action": action}
     if operator is not None:
         query["operator"] = str(operator)
     for k, v in params.items():
@@ -204,7 +210,7 @@ async def _call(action, operator=None, **params):
 async def _call_conn(session, action, operator=None, **params):
     """Same as :func:`_call` but reuses an open session (used by the sweep)."""
     url = f"{_base_url()}/stubs/handler_api.php"
-    query = {"api_key": TEMPORASMS_API_KEY, "action": action}
+    query = {"api_key": api_key(), "action": action}
     if operator is not None:
         query["operator"] = str(operator)
     for k, v in params.items():

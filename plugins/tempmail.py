@@ -240,6 +240,17 @@ def _start_live_inbox(event, sent_msg, email: str, expires: int, messages: List[
             try:
                 fresh = await tm.get_messages(email)
                 if fresh is not None:
+                    # Grabmail's list endpoint returns headers only (no body).
+                    # Pull the newest message once so the OTP badge appears
+                    # without the user tapping into it.  One read per poll is
+                    # inside the 1-read/second/address limit.
+                    if fresh and not any(m.get("body") for m in fresh):
+                        try:
+                            full = await tm.get_message(email, fresh[0].get("id"))
+                            if full and full.get("body"):
+                                fresh[0] = {**fresh[0], "body": full["body"]}
+                        except Exception:
+                            pass
                     cache["messages"] = fresh
             except Exception:
                 pass

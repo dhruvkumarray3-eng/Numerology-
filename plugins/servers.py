@@ -12,7 +12,6 @@ from telethon.errors import MessageNotModifiedError
 
 from config import (
     SERVERS_CONFIG,
-    TEMPORASMS_API_KEY,
     PE_LOCATION,
     PE_CHECK,
     PE_LIGHTNING,
@@ -118,15 +117,16 @@ async def show_servers(event):
 
 
 async def show_num_change(event):
-    configured = bool(TEMPORASMS_API_KEY)
-    status = "✅ Configured" if configured else "⚠️ Not configured (set TEMPORASMS_API_KEY)"
+    from utils import temporasms
+    configured = temporasms.configured()
+    status = "✅ Configured" if configured else "⚠️ Not configured (Admin → OTP / SMS Key)"
     msg = (
         f"<blockquote expandable>🔁 <b>TG Number Change (TemporaSMS)</b>\n\n"
         f"🔑 <b>API Status:</b> {status}\n\n"
         f"Send the <b>phone number</b> you want to migrate to, in international format "
         f"(e.g. <code>+919876543210</code>).\n\n"
         f"<i>We will request a temporary number from TemporaSMS and start the Telegram "
-        f"login-code flow. Add TEMPORASMS_API_KEY in your host's variables to enable this.</i></blockquote>"
+        f"login-code flow. Add it in Admin → 🔐 OTP / SMS Key, or set TEMPORASMS_API_KEY in your host variables.</i></blockquote>"
     )
     btns = [[style_btn("🔙 Back", b"servers_menu", "danger", icon=6129812419028982717)]]
     if isinstance(event, events.CallbackQuery.Event):
