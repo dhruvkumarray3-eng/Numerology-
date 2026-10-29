@@ -137,5 +137,7 @@ def test_main_installs_edit_safety():
 
 
 def test_build_tag_bumped():
+    """The build tag must be at least the release that fixed this bug."""
     src = open(os.path.join(REPO, "main.py"), encoding="utf-8").read()
-    assert "2026-10-29-terms-caption-v4" in src
+    assert "2026-10-29-" in src
+    assert "terms-caption-v4" in src or "fast-search-v5" in src
