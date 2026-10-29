@@ -181,13 +181,18 @@ async def show_home(event):
     await _edit_or_send(event, _home_text(), btns)
 
 
-def _inbox_text(email: str, expires: int, messages: List[dict]) -> str:
+def _inbox_text(email: str, expires: int, messages: List[dict], alias: str = "") -> str:
     left, expired = _countdown(expires)
     head = (
         f"<blockquote expandable>📧 <b>YOUR TEMP MAIL</b>\n\n"
         f"📮 <b>Email:</b>\n<code>{html.escape(email)}</code>\n\n"
-        f"⏳ <b>Time Remaining:</b> <b>{left}</b>\n\n"
     )
+    if alias:
+        head += (
+            f"🔁 <b>Alias</b> <i>(use this if the address is rejected)</i>:\n"
+            f"<code>{html.escape(alias)}</code>\n\n"
+        )
+    head += f"⏳ <b>Time Remaining:</b> <b>{left}</b>\n\n"
     if expired:
         head += "🔴 <b>This mailbox has expired.</b> Generate a new one.\n"
     elif messages:
@@ -203,6 +208,12 @@ def _inbox_text(email: str, expires: int, messages: List[dict]) -> str:
         "• The mailbox automatically expires.\n"
         "• After expiration you can generate a new mailbox.\n"
     )
+    if not messages:
+        head += (
+            "\n💡 <b>TIP:</b> Some signup forms block public disposable "
+            "domains. If the OTP never arrives, give the <b>Alias</b> above "
+            "instead — it delivers to this same inbox.\n"
+        )
     if messages:
         head += "\n──────────────\n"
         for m in messages[:6]:
@@ -215,8 +226,7 @@ def _inbox_text(email: str, expires: int, messages: List[dict]) -> str:
     head += "</blockquote>"
     return head
 
-
-def _inbox_buttons(email: str, messages: List[dict]) -> list:
+def _inbox_buttons(email: str, messages: List[dict], alias: str = "") -> list:
     btns = []
     for m in messages[:5]:
         mid = m.get("id")
@@ -226,6 +236,11 @@ def _inbox_buttons(email: str, messages: List[dict]) -> list:
         style_btn("📋 Copy Email", f"tm_copy|{email}", "success", icon=5409098988156629257),
         style_btn("🔄 Refresh Inbox", f"tm_inbox|{email}", "success", icon=5409320020058584473),
     ])
+    if alias:
+        btns.append([
+            style_btn("🔁 Copy Alias", f"tm_alias|{alias}", "primary",
+                      icon=5373130604147654226),
+        ])
     btns.append([
         style_btn("❌ Cancel Mail", f"tm_cancel|{email}", "danger", icon=6129888444245089008),
         style_btn("➕ New Mail", b"tm_new", "primary", icon=5796209712009581332),
@@ -233,11 +248,10 @@ def _inbox_buttons(email: str, messages: List[dict]) -> list:
     btns.append([style_btn("🔙 Back", b"tm_home", "danger", icon=6129812419028982717)])
     return btns
 
-
 # ---------------------------------------------------------------------------
 # Live countdown + auto inbox refresh
 # ---------------------------------------------------------------------------
-def _start_live_inbox(event, sent_msg, email: str, expires: int, messages: List[dict]) -> None:
+def _start_live_inbox(event, sent_msg, email: str, expires: int, messages: List[dict], alias: str = "") -> None:
     """Keep the inbox card ticking every 5s and auto-poll for new mail.
 
     The countdown is recomputed from `expires` on every tick, so it always shows
@@ -276,8 +290,8 @@ def _start_live_inbox(event, sent_msg, email: str, expires: int, messages: List[
             except Exception:
                 pass
         left, expired = _countdown(expires)
-        text = _inbox_text(email, expires, cache["messages"])
-        return text, _inbox_buttons(email, cache["messages"]), expired
+        text = _inbox_text(email, expires, cache["messages"], alias)
+        return text, _inbox_buttons(email, cache["messages"], alias), expired
 
     register_live(key, event.client, chat_id, msg_id, _render, interval=5.0)
 
@@ -312,15 +326,17 @@ async def create_inbox(event):
 
     email = str(data.get("email") or "").strip()
     domain = str(data.get("domain") or "").strip()
+    alias = str(data.get("alias") or "").strip()
     if not email:
         await show_home(event)
         return
     expires = int(time.time() + MAIL_TTL)
     _tm_state[uid] = {"email": email, "domain": domain, "expires": expires}
     _save_inbox(uid, email, domain, expires)
-    sent = await _edit_or_send(event, _inbox_text(email, expires, []), _inbox_buttons(email, []))
+    sent = await _edit_or_send(event, _inbox_text(email, expires, [], alias),
+                               _inbox_buttons(email, [], alias))
     if sent is not None:
-        _start_live_inbox(event, sent, email, expires, [])
+        _start_live_inbox(event, sent, email, expires, [], alias)
 
 
 async def show_list(event):
@@ -370,9 +386,23 @@ async def show_inbox(event, email: str):
         logger.exception(f"tempmail inbox failed: {exc}")
         messages = []
 
-    sent = await _edit_or_send(event, _inbox_text(email, expires, messages), _inbox_buttons(email, messages))
+    alias = ""
+    try:
+        alias = await tm.get_alias(email)
+    except Exception:
+        alias = ""
+    if messages and not any(m.get("body") for m in messages):
+        try:
+            full = await tm.get_message(email, messages[0].get("id"))
+            if full and full.get("body"):
+                messages[0] = {**messages[0], "body": full["body"]}
+        except Exception:
+            pass
+
+    sent = await _edit_or_send(event, _inbox_text(email, expires, messages, alias),
+                               _inbox_buttons(email, messages, alias))
     if sent is not None:
-        _start_live_inbox(event, sent, email, expires, messages)
+        _start_live_inbox(event, sent, email, expires, messages, alias)
 
 
 async def copy_email(event, email: str):
@@ -396,6 +426,24 @@ async def copy_email(event, email: str):
         )
     except Exception as exc:
         logger.debug(f"tempmail copy failed: {exc}")
+
+
+async def copy_alias(event, alias: str):
+    if not _tm_on():
+        return await _disabled_notice(event)
+    """Hand out the forwarding alias as a tappable <code> block."""
+    try:
+        await event.answer("📋 Tap the alias below to copy it!", alert=False)
+    except Exception:
+        pass
+    try:
+        await event.respond(
+            f"<blockquote>🔁 <b>Alias — delivers to the same inbox</b>\n\n"
+            f"<code>{html.escape(alias)}</code>\n\n"
+            f"<i>✨ Use this if a signup form rejects the main address.</i></blockquote>"
+        )
+    except Exception as exc:
+        logger.debug(f"tempmail alias copy failed: {exc}")
 
 
 async def cancel_mail(event, email: str):
@@ -480,6 +528,11 @@ def register_tempmail(bot):
     async def cb_tm_copy(e):
         email = e.data.decode(errors="ignore").split("|", 1)[1]
         await copy_email(e, email)
+
+    @bot.on(events.CallbackQuery(pattern=r"^tm_alias\|"))
+    async def cb_tm_alias(e):
+        alias = e.data.decode(errors="ignore").split("|", 1)[1]
+        await copy_alias(e, alias)
 
     @bot.on(events.CallbackQuery(pattern=r"^tm_cancel\|"))
     async def cb_tm_cancel(e):

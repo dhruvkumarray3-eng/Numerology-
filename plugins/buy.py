@@ -217,7 +217,7 @@ def get_active_order_card(order, phone, is_admin_user=False):
             style_btn("🔄 𝐆𝐞𝐭 𝐎𝐓𝐏 𝐀𝐠𝐚𝐢𝐧", f"get_otp_again|{phone}", "primary", icon=5408995930416362034),
             style_btn("✅ 𝐅𝐢𝐧𝐢𝐬𝐡 𝐎𝐫𝐝𝐞𝐫", f"finish_order|{phone}", "primary", icon=5409320020058584473)
         ],
-        [style_btn("\ud83d\udeab \ud835\udc13\ud835\udc1e\ud835\udc2b\ud835\udc26\ud835\udc22\ud835\udc27\ud835\udc1a\ud835\udc2d\ud835\udc1e \ud835\udc0e\ud835\udc2d\ud835\udc21\ud835\udc1e\ud835\udc2b \ud835\udc12\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc22\ud835\udc28\ud835\udc27\ud835\udc2c", f"reset_sessions|{phone}", "danger", icon=6129888444245089008)]
+        [style_btn("\U0001F6AB \U0001D413\U0001D41E\U0001D42B\U0001D426\U0001D422\U0001D427\U0001D41A\U0001D42D\U0001D41E \U0001D40E\U0001D42D\U0001D421\U0001D41E\U0001D42B \U0001D412\U0001D41E\U0001D42C\U0001D42C\U0001D422\U0001D428\U0001D427\U0001D42C", f"reset_sessions|{phone}", "danger", icon=6129888444245089008)]
     ]
     if is_admin_user:
         btns.append([style_btn("❌ [Admin] Cancel & Refund", f"cancel_order|{phone}", "danger", icon=6129888444245089008)])
