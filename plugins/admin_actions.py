@@ -439,7 +439,7 @@ async def admin_actions(event):
 
     if action_data == "togglebot" and has_perm(uid, 'p_settings'):
         new_status = 'off' if is_bot_online() else 'on'
-        cur.execute("UPDATE settings SET value=? WHERE key='bot_status'", (new_status,))
+        cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('bot_status', ?)", (new_status,))
         db.commit()
         await event.answer(f"Bot turned {new_status.upper()}", alert=True)
         class FakeEvent: chat_id = chat; sender_id = uid
@@ -1264,7 +1264,7 @@ async def admin_actions(event):
             elif action_data == "supporturl" and has_perm(uid, 'p_settings'):
                 url = (await get_reply("🔗 Enter new Support URL (must start with http:// or https://):")).text
                 if not url.startswith("http"): url = "https://" + url.replace("@", "t.me/")
-                cur.execute("UPDATE settings SET value=? WHERE key='support_url'", (url,))
+                cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('support_url', ?)", (url,))
                 db.commit()
                 await conv.send_message(f"{P_YES} Support URL updated.")
 
@@ -1313,13 +1313,13 @@ async def admin_actions(event):
                 
             elif action_data == "refpct" and has_perm(uid, 'p_settings'):
                 pct = int((await get_reply(f"{P_USERS} <b>New Referral %:</b>")).text)
-                cur.execute("UPDATE settings SET value=? WHERE key='ref_percent'", (str(pct),))
+                cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ref_percent', ?)", (str(pct),))
                 db.commit()
                 await conv.send_message(f"{P_YES} Ref revenue set to {pct}%.")
 
             elif action_data == "usdtrate" and has_perm(uid, 'p_settings'):
                 r = float((await get_reply(f"{P_USDT} <b>New USDT Rate (INR):</b>")).text)
-                cur.execute("UPDATE settings SET value=? WHERE key='usdt_rate'", (str(r),))
+                cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('usdt_rate', ?)", (str(r),))
                 db.commit()
                 await conv.send_message(f"{P_YES} Rate set to {r}.")
 

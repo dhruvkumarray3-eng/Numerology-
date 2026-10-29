@@ -130,4 +130,50 @@ check("admin_actions.cur is not a dead cursor",
       aa.cur.execute("SELECT 1").fetchone() == (1,))
 check("admin_actions.db is database.db", aa.db is database.db)
 
+# ---------------------------------------------------------------------------
+# 5. settings the admin panel *updates* must actually persist
+# ---------------------------------------------------------------------------
+print("\n[5] admin 'set value' buttons persist on a fresh database")
+import sqlite3 as _sq  # noqa: E402
+
+# Simulate a brand-new DB where the row does not exist yet, then run the exact
+# statements the panel uses.  UPDATE-only used to match zero rows and silently
+# discard the value.
+for key, value in (("usdt_rate", "101.5"), ("ref_percent", "15"),
+                   ("support_url", "https://t.me/support"),
+                   ("bot_status", "off")):
+    database.cur.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value)
+    )
+database.db.commit()
+
+check("usdt_rate persisted", database.get_usdt_rate() == 101.5)
+check("bot_status persisted", database.is_bot_online() is False)
+check("support_url persisted",
+      database.get_support_url() == "https://t.me/support")
+check("ref_percent persisted",
+      database.cur.execute(
+          "SELECT value FROM settings WHERE key='ref_percent'").fetchone()[0] == "15")
+
+# The panel source must not contain an UPDATE-only settings write anymore.
+import pathlib  # noqa: E402
+
+panel = pathlib.Path("plugins/admin_actions.py").read_text(encoding="utf-8")
+check("no 'UPDATE settings SET value' left in the panel",
+      "UPDATE settings SET value" not in panel)
+
+# Defaults must exist on a fresh DB.
+check("seed defaults present",
+      database.cur.execute(
+          "SELECT COUNT(*) FROM settings WHERE key IN "
+          "('bot_status','usdt_rate','ref_percent','deposit_mode')"
+      ).fetchone()[0] == 4)
+
+# restore a sane state for other tests
+database.cur.execute(
+    "INSERT OR REPLACE INTO settings (key, value) VALUES ('bot_status','on')")
+database.cur.execute(
+    "INSERT OR REPLACE INTO settings (key, value) VALUES ('usdt_rate','94')")
+database.db.commit()
+
 print(f"\n=== ALL {checks} CHECKS PASSED ===")

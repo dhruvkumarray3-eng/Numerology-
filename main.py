@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # the hosting console immediately shows whether the container is running the
 # latest code.  If the console still prints an older tag, the container has
 # not pulled the new files yet.
-BUILD_TAG = "2026-10-29-db-selfheal-upi-imap-v9"
+BUILD_TAG = "2026-10-29-admin-panel-full-fix-v10"
 
 os.makedirs("sessions", exist_ok=True)
 
@@ -193,6 +193,20 @@ async def main():
     print("\U0001F680 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!", flush=True)
     print(f"\U0001F4E6 BUILD: {BUILD_TAG}", flush=True)
     print("==================================================", flush=True)
+
+    # 5b. Database self-check.  The "Cannot operate on a closed database"
+    # class of bug is invisible until an admin taps a button, so prove the
+    # connection is alive (and say which file it is) at every boot.
+    try:
+        from database import db_health, db_path as _dbp
+
+        health = db_health()
+        if health.get("ok"):
+            logger.info("\u2705 Database OK: %s", _dbp)
+        else:
+            logger.error("\u274c Database UNHEALTHY: %s", health.get("error"))
+    except Exception as _db_exc:  # pragma: no cover - defensive
+        logger.error("Database self-check failed: %s", _db_exc)
 
     # 6. LZT self-check (non-fatal).
     # A rejected/expired market token used to surface only as

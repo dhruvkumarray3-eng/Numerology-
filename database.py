@@ -277,7 +277,53 @@ def setup_db():
             """, (sa_id,))
     db.commit()
 
+# ---------------------------------------------------------------------------
+# Seed the settings rows the admin panel *updates*.
+# ---------------------------------------------------------------------------
+# The panel used to write these with ``UPDATE ... WHERE key='x'``; when the row
+# did not exist yet the UPDATE matched zero rows and the value was silently
+# thrown away -- "Set USDT Rate", "Support URL", "Ref %" and the bot on/off
+# switch all looked broken.  The writes are now upserts, and these defaults
+# guarantee a readable value on a brand-new database too.
+_DEFAULT_SETTINGS = {
+    "bot_status": "on",
+    "usdt_rate": "94",
+    "ref_percent": "10",
+    "support_url": "",
+    "deposit_mode": "auto",
+    "upi_id": "",
+    "gmail_user": "",
+    "gmail_pass": "",
+}
+
+
+def seed_default_settings():
+    """Insert any missing default setting without overwriting a real value."""
+    for key, value in _DEFAULT_SETTINGS.items():
+        try:
+            cur.execute(
+                "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+                (key, value),
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("could not seed setting %s: %s", key, exc)
+    try:
+        db.commit()
+    except Exception:
+        pass
+
+
+def db_health():
+    """Return a small dict describing the live connection (used at boot)."""
+    try:
+        cur.execute("SELECT 1").fetchone()
+        return {"ok": True, "path": db_path}
+    except Exception as exc:  # pragma: no cover - defensive
+        return {"ok": False, "path": db_path, "error": str(exc)}
+
+
 setup_db()
+seed_default_settings()
 
 
 def _migrate_catalog_stock():
