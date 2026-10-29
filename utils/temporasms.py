@@ -47,15 +47,18 @@ import aiohttp
 from config import logger
 from utils import runtime_config
 
-_TIMEOUT = aiohttp.ClientTimeout(total=30)
-_SWEEP_TIMEOUT = aiohttp.ClientTimeout(total=25)
+_TIMEOUT = aiohttp.ClientTimeout(total=12, connect=5)
+_SWEEP_TIMEOUT = aiohttp.ClientTimeout(total=12, connect=5)
+# Hard ceiling for one get_countries() call.  The panel is often slow; a panel
+# that cannot answer inside this window must not freeze the whole bot.
+_COUNTRIES_BUDGET = 15.0
 
 # Public routes advertised by ``action=getOperators``.
 _OPERATORS = [1, 2, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 16]
 # Operator 13 is the only route that sells Telegram (tvm) and WhatsApp (wqp).
 _PREFERRED_OPERATOR = 13
 # How many price lookups to run in parallel during a country sweep.
-_SWEEP_CONCURRENCY = 20
+_SWEEP_CONCURRENCY = 40
 
 # Cache the country catalogue for an hour (it rarely changes) and the price
 # table for three minutes (stock moves quickly).
@@ -411,10 +414,22 @@ async def _prices_for(service):
         return cached["data"]
 
     code, operator = await resolve_service(service)
-    merged = await _sweep_prices(code, operator)
+    try:
+        merged = await _sweep_prices(code, operator)
+    except Exception as exc:  # noqa: BLE001 - a slow panel is not fatal
+        logger.warning(f"TemporaSMS price sweep failed for {service}: {exc}")
+        merged = {}
+
     if merged:
         _PRICES_CACHE[key] = {"ts": now, "data": merged}
-    return merged
+        return merged
+
+    # Serve stale data rather than an empty list: a country with yesterday's
+    # price is far more useful than "no stock" caused by one slow request.
+    if cached and cached.get("data"):
+        logger.warning(f"TemporaSMS using stale prices for {service}")
+        return cached["data"]
+    return {}
 
 
 # --------------------------------------------------------------------------- #
@@ -464,7 +479,32 @@ async def get_countries(service: str):
                 "countries": []}
 
     code, operator = await resolve_service(service)
-    prices = await _prices_for(service)
+
+    # Prices and the country-name table are independent requests.  Running
+    # them sequentially used to blow past the caller's timeout (a ~150-request
+    # price sweep plus a getCountries call), which is why the WhatsApp panel
+    # kept logging "get_countries(whatsapp) timed out".  Run them together and
+    # cap the whole thing with a hard budget.
+    async def _gather():
+        return await asyncio.gather(
+            _prices_for(service), _countries_for(operator),
+            return_exceptions=True,
+        )
+
+    try:
+        prices, names = await asyncio.wait_for(_gather(), timeout=_COUNTRIES_BUDGET)
+    except asyncio.TimeoutError:
+        logger.warning(f"TemporaSMS get_countries({service}) exceeded budget")
+        cached_prices = (_PRICES_CACHE.get(_norm_service(service)) or {}).get("data")
+        prices = cached_prices or {}
+        names = (_COUNTRIES_CACHE.get(operator) or {}).get("data") or {}
+    else:
+        if isinstance(prices, Exception):
+            logger.warning(f"TemporaSMS prices failed for {service}: {prices}")
+            prices = (_PRICES_CACHE.get(_norm_service(service)) or {}).get("data") or {}
+        if isinstance(names, Exception) or not names:
+            names = (_COUNTRIES_CACHE.get(operator) or {}).get("data") or {}
+
     if not prices:
         return {
             "ok": False,

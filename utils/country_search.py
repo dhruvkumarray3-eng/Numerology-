@@ -161,18 +161,40 @@ def _value_iso2(value):
     return resolved["iso2"] if resolved else None
 
 
-def country_matches(query, *values):
-    """True when ``query`` refers to any of the supplied country values.
+# Scoring tiers.  Higher is a better match; 0 means "no match".
+_SCORE_EXACT = 100      # query == name / code / iso2 / iso3
+_SCORE_PREFIX = 80      # name starts with the query ("jap" -> Japan)
+_SCORE_WORD = 60        # a word inside the name starts with the query
+_SCORE_SUBSTR = 40      # query appears anywhere in the name
+_SCORE_FUZZY = 25       # typo tolerance ("jpan" -> Japan)
+_SCORE_ISO = 90         # query resolves to the same country as the value
+
+
+def _fuzzy_ratio(a, b):
+    """Similarity in 0..1 without importing difflib at module import time."""
+    try:
+        from difflib import SequenceMatcher
+        return SequenceMatcher(None, a, b).ratio()
+    except Exception:
+        return 0.0
+
+
+def country_score(query, *values):
+    """How well ``query`` matches any of ``values`` (0 = no match).
 
     ``values`` may be provider codes ("india", "91", "IN"), display names
-    ("Japan") or ISO-3 codes ("JPN").
+    ("Japan") or ISO-3 codes ("JPN").  The score lets callers *rank* results
+    instead of just filtering them, so typing "in" shows India first and does
+    not bury it under "Indonesia"/"Finland".
     """
     raw = str(query or "").strip()
     if not raw:
-        return False
+        return 0
 
     resolved = resolve_country(raw)
     q_key = _normalise(raw)
+    q_digits = re.sub(r"\D", "", raw)
+    best = 0
 
     for value in values:
         if value is None:
@@ -181,42 +203,93 @@ def country_matches(query, *values):
         if not v_raw:
             continue
         v_key = _normalise(v_raw)
+        if not v_key:
+            continue
 
-        # Direct substring either way (covers "india" vs "India")
-        if q_key and v_key and (q_key in v_key or v_key in q_key):
-            return True
+        # 1. Exact hit on any representation.
+        if q_key == v_key:
+            best = max(best, _SCORE_EXACT)
 
-        # Same country via ISO resolution
+        # 2. Same country via ISO resolution (covers "UK" -> "United Kingdom").
         if resolved:
             v_iso = _value_iso2(v_raw)
             if v_iso and v_iso == resolved["iso2"]:
-                return True
+                best = max(best, _SCORE_ISO)
 
-        # Dial-code comparison
-        q_digits = re.sub(r"\D", "", raw)
-        v_digits = re.sub(r"\D", "", v_raw)
-        if q_digits and v_digits and q_digits == v_digits:
-            return True
+        # 3. Prefix of the whole name ("jap" -> "Japan").
+        if v_key.startswith(q_key):
+            best = max(best, _SCORE_PREFIX)
 
-    return False
+        # 4. Any word inside the name starts with the query
+        #    ("korea" -> "South Korea", "guinea" -> "Papua New Guinea").
+        if any(word.startswith(q_key) for word in v_key.split()):
+            best = max(best, _SCORE_WORD)
+
+        # 5. Plain substring either way ("india" vs "India").  Skipped for
+        #    1-2 character queries: "in" is inside "k-i-n-gdom" and "us" is
+        #    inside "a-u-s-tralia", which used to bury the real answer under
+        #    noise.  Short queries must match a prefix or a word start instead.
+        if len(q_key) >= 3 and len(v_key) >= 3 and (
+                q_key in v_key or v_key in q_key):
+            best = max(best, _SCORE_SUBSTR)
+
+        # 6. Dial-code comparison ("+91" / "91").
+        if q_digits and len(q_digits) <= 4:
+            v_digits = re.sub(r"\D", "", v_raw)
+            if v_digits and q_digits == v_digits:
+                best = max(best, _SCORE_EXACT)
+
+        # 7. Typo tolerance, only for reasonably long queries so that "us"
+        #    does not fuzzy-match "AU".
+        if (len(q_key) >= 4 and len(v_key) >= 4
+                and q_key[0] == v_key[0]):
+            ratio = _fuzzy_ratio(q_key, v_key)
+            if ratio >= 0.8:
+                best = max(best, _SCORE_FUZZY)
+
+    return best
+
+
+def country_matches(query, *values):
+    """True when ``query`` refers to any of the supplied country values."""
+    return country_score(query, *values) > 0
 
 
 def search_country_dicts(countries, query):
-    """Filter a list of ``{"code", "name", ...}`` dicts by a free-text query."""
+    """Filter **and rank** a list of ``{"code", "name", ...}`` dicts.
+
+    Results are ordered best-match-first so "in" puts India above Indonesia and
+    "us" puts the United States above Australia.  Ties keep the original order.
+    """
     if not query:
         return list(countries or [])
-    out = []
-    for c in countries or []:
-        if country_matches(query, c.get("code"), c.get("name"), c.get("iso3")):
-            out.append(c)
-    return out
+
+    scored = []
+    for idx, c in enumerate(countries or []):
+        score = country_score(
+            query, c.get("code"), c.get("name"), c.get("iso3"),
+            c.get("iso2"), c.get("dial"),
+        )
+        if score > 0:
+            scored.append((score, idx, c))
+
+    if not scored:
+        return []
+    scored.sort(key=lambda t: (-t[0], t[1]))
+    return [c for _, _, c in scored]
 
 
 def search_country_names(names, query):
-    """Filter an iterable of country-name strings by a free-text query."""
+    """Filter and rank an iterable of country-name strings."""
     if not query:
         return list(names or [])
-    return [n for n in (names or []) if country_matches(query, n)]
+    scored = []
+    for idx, n in enumerate(names or []):
+        score = country_score(query, n)
+        if score > 0:
+            scored.append((score, idx, n))
+    scored.sort(key=lambda t: (-t[0], t[1]))
+    return [n for _, _, n in scored]
 
 
 def all_countries():

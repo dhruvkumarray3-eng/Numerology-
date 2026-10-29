@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # the hosting console immediately shows whether the container is running the
 # latest code.  If the console still prints an older tag, the container has
 # not pulled the new files yet.
-BUILD_TAG = "2026-10-29-terms-caption-v4"
+BUILD_TAG = "2026-10-29-fast-search-v5"
 
 os.makedirs("sessions", exist_ok=True)
 
@@ -147,9 +147,14 @@ async def main():
     #     "'KeyboardButtonCallback' object is not iterable" and silently kill
     #     the main menu after terms acceptance.  This makes that impossible.
     try:
-        from utils.button_safety import install_button_safety, install_edit_safety
+        from utils.button_safety import (
+            install_button_safety,
+            install_edit_safety,
+            install_callback_safety,
+        )
         install_button_safety(bot)
         install_edit_safety(bot)
+        install_callback_safety(bot)
     except asyncio.CancelledError:
         raise
     except BaseException as e:  # noqa: BLE001

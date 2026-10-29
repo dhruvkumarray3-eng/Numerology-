@@ -181,3 +181,51 @@ def install_edit_safety(bot, event_cls=None):
         "\u2705 Edit safety net installed (media-caption overflow auto-recovers)."
     )
     return bot
+
+
+def install_callback_safety(bot):
+    """Wrap ``CallbackQuery.Event.answer`` so a stale query can never log an error.
+
+    Telethon's ``CallbackQuery.Event.edit()`` internally does::
+
+        self._client.loop.create_task(self.answer())
+
+    If a handler *also* calls ``await event.answer(...)`` (very common: show an
+    alert, then edit the message), the second answer hits Telegram with an
+    already-consumed query id and raises::
+
+        telethon.errors.rpcerrorlist.QueryIdInvalidError:
+            The query ID is invalid (caused by SetBotCallbackAnswerRequest)
+
+    Because the auto-created task is fire-and-forget, that exception surfaced as
+    ``asyncio - ERROR - Task exception was never retrieved`` in the console even
+    though the bot kept working.  Wrapping ``answer`` makes the duplicate a
+    silent no-op, which is exactly the intended behaviour.
+
+    Idempotent: calling it twice will not double-wrap.
+    """
+    from telethon import events
+
+    Event = events.CallbackQuery.Event
+    if getattr(Event, "_answer_safety_installed", False):
+        return bot
+
+    original = Event.answer
+
+    async def safe_answer(self, *args, **kwargs):
+        try:
+            return await original(self, *args, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - answering is best-effort
+            name = type(exc).__name__
+            if name in ("QueryIdInvalidError", "MessageNotModifiedError"):
+                logger.debug("\u2139\ufe0f callback answer skipped (%s)", name)
+            else:
+                logger.debug("\u2139\ufe0f callback answer failed (%s: %s)", name, exc)
+            return None
+
+    Event.answer = safe_answer
+    Event._answer_safety_installed = True
+    logger.info(
+        "\u2705 Callback safety net installed (duplicate/stale answers ignored)."
+    )
+    return bot
