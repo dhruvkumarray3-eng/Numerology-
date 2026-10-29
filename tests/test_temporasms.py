@@ -12,6 +12,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+os.environ.setdefault("API_ID", "12345")
+os.environ.setdefault("API_HASH", "test-hash")
+os.environ.setdefault("BOT_TOKEN", "123:test")
+os.environ.setdefault("ADMIN_ID", "1")
+
 from utils import temporasms as T
 
 CHECKS = []
