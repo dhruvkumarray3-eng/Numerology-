@@ -283,8 +283,41 @@ def to_small_caps(text):
     if not text: return ""
     return "".join(SMALL_CAPS_MAP.get(c, c) for c in str(text))
 
+def normalise_buttons(buttons):
+    """Coerce any button structure into the list-of-rows shape Telethon needs.
+
+    Telethon's ``build_reply_markup`` iterates ``for button in row``, so every
+    element of ``buttons`` MUST itself be an iterable (a row).  Passing a flat
+    list such as ``[btn_a, btn_b]`` raises
+    ``TypeError: 'KeyboardButtonCallback' object is not iterable`` and kills
+    the whole handler.  This helper makes that impossible:
+
+        None                  -> None
+        []                    -> None
+        [btn, btn]            -> [[btn], [btn]]
+        [[btn, btn], [btn]]   -> unchanged
+        [btn, [btn, btn]]     -> [[btn], [btn, btn]]
+    """
+    if not buttons:
+        return None
+
+    rows = []
+    for item in buttons:
+        if item is None:
+            continue
+        if isinstance(item, (list, tuple)):
+            row = [b for b in item if b is not None]
+            if row:
+                rows.append(row)
+        else:
+            rows.append([item])
+    return rows or None
+
+
 async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id=None):
     """Sends or edits a message with WebPage link preview inverted ON TOP."""
+    # Never let a malformed button list reach Telethon.
+    buttons = normalise_buttons(buttons)
     try:
         text, entities = await bot._parse_message_text(message, 'html')
         markup = bot.build_reply_markup(buttons) if buttons else None
@@ -317,9 +350,17 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
     except Exception as ex:
         logger.error(f"send_preview_on_top fallback: {ex}")
         if edit_msg_id:
-            try: return await bot.edit_message(peer, edit_msg_id, message, buttons=buttons, parse_mode='html', link_preview=True)
-            except: pass
-        return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=True)
+            try:
+                return await bot.edit_message(peer, edit_msg_id, message, buttons=buttons, parse_mode='html', link_preview=True)
+            except Exception as e2:
+                logger.warning(f"send_preview_on_top edit fallback failed: {e2}")
+        try:
+            return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=True)
+        except Exception as e3:
+            # Last resort: the menu text itself must always reach the user,
+            # even if the keyboard is somehow rejected.
+            logger.error(f"send_preview_on_top send with buttons failed ({e3}); retrying without buttons")
+            return await bot.send_message(peer, message, parse_mode='html', link_preview=True)
 
 
 # ---------------------------------------------------------

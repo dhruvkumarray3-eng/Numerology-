@@ -151,7 +151,10 @@ async def send_main_menu(bot, event, uid):
         [style_btn("\U0001F4E6 \U0001D40C\U0001D428\U0001D42B\U0001D41E \U0001D402\U0001D428\U0001D427\U0001D42D\U0001D41E\U0001D427\U0001D42D", b"more_content", "danger", icon=5289947142142577318)],
         # Free Temp Mail is shown only while the owner keeps it ON in the
         # admin panel (Admin -> Temp Mail (API) -> Turn ON/OFF).
-        *([style_btn("\U0001F4E7 \U0001D405\U0001D42B\U0001D41E\U0001D41E \U0001D413\U0001D41E\U0001D426\U0001D429 \U0001D40C\U0001D41A\U0001D422\U0001D425", b"tm_home", "primary", icon=5796209712009581332)]
+        # NOTE: must be a *row* (a list containing the button), otherwise the
+        # splat below injects a bare KeyboardButtonCallback into `buttons` and
+        # Telethon's build_reply_markup dies with "object is not iterable".
+        *([[style_btn("\U0001F4E7 \U0001D405\U0001D42B\U0001D41E\U0001D41E \U0001D413\U0001D41E\U0001D426\U0001D429 \U0001D40C\U0001D41A\U0001D422\U0001D425", b"tm_home", "primary", icon=5796209712009581332)]]
           if _temp_mail_visible() else []),
         [style_btn("\U0001F4B3 \U0001D411\U0001D41E\U0001D41C\U0001D421\U0001D41A\U0001D42B\U0001D420\U0001D41E", b"open_deposit_menu", "success", icon=5409271925014801629), style_btn("\U0001F9D9 \U0001D40F\U0001D42B\U0001D428\U0001D41F\U0001D422\U0001D425\U0001D41E", b"profile_stats", "primary", icon=6203982793379154737)],
         [style_btn("\u2699\ufe0f \U0001D412\U0001D41E\U0001D42D\U0001D42D\U0001D422\U0001D427\U0001D420\U0001D42C", b"settings_menu", "primary", icon=5408995930416362034), style_url("\U0001F4D1 \U0001D405\U0001D41E\U0001D41E\U0001D41D\U0001D41B\U0001D41A\U0001D41C\U0001D424 \u2197\ufe0f", feedback_link, "danger", icon=6129732880529628243)],
