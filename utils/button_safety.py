@@ -89,3 +89,95 @@ def install_button_safety(bot):
     bot._button_safety_installed = True
     logger.info("\u2705 Button safety net installed (flat button lists auto-repaired).")
     return bot
+
+
+# Telegram hard limits
+MEDIA_CAPTION_LIMIT = 1024
+TEXT_MESSAGE_LIMIT = 4096
+
+
+def install_edit_safety(bot, event_cls=None):
+    """Wrap ``CallbackQuery.Event.edit`` so caption-length errors cannot crash.
+
+    The "join our channels" screen is a **photo**.  Telegram caps media
+    captions at 1024 characters, but the Terms & Conditions text is ~2.5k
+    characters.  ``await event.edit(terms_message, ...)`` therefore raised::
+
+        telethon.errors.rpcerrorlist.MediaCaptionTooLongError
+
+    which escaped the handler (only ``MessageNotModifiedError`` was caught),
+    leaving the user stuck on the join screen forever.
+
+    This process-wide guard turns that failure into a graceful recovery:
+    delete the un-editable media message and send the text as a fresh
+    plain-text message (4096-char budget), truncating only if it is still too
+    long.  Individual call sites can no longer reintroduce this bug.
+
+    Idempotent: calling it twice will not double-wrap.
+    """
+    from telethon import events
+    from telethon.errors import (
+        MessageNotModifiedError,
+        MediaCaptionTooLongError,
+        MessageTooLongError,
+    )
+
+    Event = event_cls or events.CallbackQuery.Event
+    if getattr(Event, "_edit_safety_installed", False):
+        return bot
+
+    original = Event.edit
+
+    async def safe_edit(self, *args, **kwargs):
+        try:
+            return await original(self, *args, **kwargs)
+        except MessageNotModifiedError:
+            # Preserve the original contract: callers may catch this.
+            raise
+        except (MediaCaptionTooLongError, MessageTooLongError) as exc:
+            text = kwargs.get("text", kwargs.get("message"))
+            if text is None and args:
+                text = args[0]
+            if text is None:
+                logger.error(f"\u26a0\ufe0f edit failed with no text to resend: {exc}")
+                return None
+
+            logger.warning(
+                "\u26a0\ufe0f %s on a media message; resending as plain text "
+                "(the photo caption limit is %d chars).",
+                type(exc).__name__, MEDIA_CAPTION_LIMIT,
+            )
+
+            buttons = kwargs.get("buttons")
+            parse_mode = kwargs.get("parse_mode", "html")
+            if isinstance(text, str) and len(text) > TEXT_MESSAGE_LIMIT:
+                text = text[: TEXT_MESSAGE_LIMIT - 20] + "\n\n\u2026 (truncated)"
+
+            try:
+                await self.delete()
+            except Exception:
+                pass
+
+            try:
+                return await self.client.send_message(
+                    self.chat_id, text, buttons=buttons, parse_mode=parse_mode
+                )
+            except Exception as send_exc:  # noqa: BLE001
+                logger.error(
+                    "\u26a0\ufe0f resend after caption error failed (%s); "
+                    "retrying without buttons.", send_exc,
+                )
+                try:
+                    return await self.client.send_message(
+                        self.chat_id, text, parse_mode=parse_mode
+                    )
+                except Exception as final_exc:  # noqa: BLE001
+                    logger.error(f"\u26a0\ufe0f resend failed entirely: {final_exc}")
+                    return None
+
+    Event.edit = safe_edit
+    Event._edit_safety_installed = True
+    logger.info(
+        "\u2705 Edit safety net installed (media-caption overflow auto-recovers)."
+    )
+    return bot

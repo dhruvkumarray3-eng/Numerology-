@@ -186,13 +186,24 @@ def register_callbacks(bot):
             terms_acc = row[0] if row else 0
             if not terms_acc:
                 from utils.keyboards import get_terms_buttons
+                from utils.helpers import safe_edit_or_resend
                 terms_message = get_terms_message()
                 if terms_message is None:
-                    try: await e.edit("⚠️ Terms & Conditions are temporarily unavailable. Please try /start again later.")
-                    except MessageNotModifiedError: pass
+                    await safe_edit_or_resend(
+                        e,
+                        "⚠️ Terms & Conditions are temporarily unavailable. "
+                        "Please try /start again later.",
+                    )
                 else:
-                    try: await e.edit(terms_message, buttons=get_terms_buttons())
-                    except MessageNotModifiedError: pass
+                    # The join screen is a PHOTO, and Telegram caps media
+                    # captions at 1024 chars while the Terms text is longer.
+                    # Editing it raised MediaCaptionTooLongError and the user
+                    # never reached the Terms buttons.  safe_edit_or_resend
+                    # falls back to delete + resend as a plain text message
+                    # (4096 chars) so this can never get stuck again.
+                    await safe_edit_or_resend(
+                        e, terms_message, buttons=get_terms_buttons()
+                    )
             else:
                 try: await e.delete()
                 except: pass
@@ -207,8 +218,8 @@ def register_callbacks(bot):
                 buttons.append([Button.url(btn_label, url)])
             buttons.append([style_btn("𝐕ᴇʀɪғʏ 𝐉ᴏɪɴᴇᴅ", b"verify_join", "success", icon=6129627894349045589)])
             msg = f"<blockquote>{PE_FLOWER} <b>𝐘ᴏᴜ ᴍᴜsᴛ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟs & ɢʀᴏᴜᴘ ғɪʀsᴛ!</b></blockquote>\n<blockquote>{PE_LOCATION} {remaining} ᴄʜᴀɴɴᴇʟ(s)/ɢʀᴏᴜᴘ(s) ʀᴇᴍᴀɪɴɪɴɢ. 𝐉ᴏɪɴ ᴀɴᴅ ᴛᴀᴘ <b>𝐕ᴇʀɪғʏ 𝐉ᴏɪɴᴇᴅ</b>.</blockquote>"
-            try: await e.edit(msg, buttons=buttons)
-            except MessageNotModifiedError: pass
+            from utils.helpers import safe_edit_or_resend
+            await safe_edit_or_resend(e, msg, buttons=buttons)
 
     # ── Keyboard Button Handlers ──
 
