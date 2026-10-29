@@ -197,8 +197,10 @@ check("admin button no longer adm_userinfo",
 # 8. module wired into the bot
 # ---------------------------------------------------------------------------
 init_src = (ROOT / "plugins" / "__init__.py").read_text(encoding="utf-8")
-check("module imported", "register_user_history" in init_src)
-check("module registered", "register_user_history(bot)" in init_src)
+check("module imported", "from plugins.user_history import register_user_history" in init_src)
+check("module registered",
+      '("user_history", register_user_history)' in init_src
+      or "register_user_history(bot)" in init_src)
 
 # legacy adm_userinfo delegates to the console
 actions_src = (ROOT / "plugins" / "admin_actions.py").read_text(encoding="utf-8")

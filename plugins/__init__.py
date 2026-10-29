@@ -1,3 +1,17 @@
+"""Plugin loader.
+
+Every feature module exposes a ``register_*`` function that attaches its
+Telethon handlers to the bot.  Registration used to be a flat list of calls,
+which meant a single missing import or a typo in one plugin took the whole bot
+down at boot (Railway showed the deployment as *Crashed*).
+
+``register_all_handlers`` now runs each plugin through :func:`_safe_register`,
+so a broken plugin is logged and skipped while every other feature keeps
+working.  The loader also verifies that each imported callable really exists,
+which turns a silent ``NameError`` into an explicit, readable log line.
+"""
+import logging
+
 from plugins.start import register_start
 from plugins.profile import register_profile
 from plugins.deposit import register_deposit
@@ -22,39 +36,90 @@ from plugins.stickers import register_stickers
 from plugins.tempmail import register_tempmail
 from plugins.user_history import register_user_history
 
-def register_all_handlers(bot):
-    # Standard Handler Registrations
-    register_start(bot)
-    register_profile(bot)
-    register_deposit(bot)
-    register_admin(bot)
-    register_admin_actions(bot)
-    register_admin_cleanup(bot)
-    register_admin_catalogs(bot)
-    register_callbacks(bot)
-    register_smm(bot)
-    register_source_codes(bot)
-    register_panels(bot)
-    register_settings(bot)
-    register_servers(bot)
-    register_all_apps(bot)
-    register_more_content(bot)
-    register_product_panels(bot)
-    register_admin_extras(bot)
-    register_profit_admin(bot)
-    register_user_history(bot)
-    register_help(bot)
-    register_manual_accounts(bot)
-    register_stickers(bot)
-    register_tempmail(bot)
+logger = logging.getLogger(__name__)
 
-    # Buy Plugin safely load karne ke liye
+# (label, callable) pairs in the order they are registered.
+_PLUGIN_REGISTRARS = (
+    ("start", register_start),
+    ("profile", register_profile),
+    ("deposit", register_deposit),
+    ("admin", register_admin),
+    ("admin_actions", register_admin_actions),
+    ("admin_cleanup", register_admin_cleanup),
+    ("admin_catalogs", register_admin_catalogs),
+    ("callbacks", register_callbacks),
+    ("smm", register_smm),
+    ("source_codes", register_source_codes),
+    ("panels", register_panels),
+    ("settings", register_settings),
+    ("servers", register_servers),
+    ("all_apps", register_all_apps),
+    ("more_content", register_more_content),
+    ("product_panels", register_product_panels),
+    ("admin_extras", register_admin_extras),
+    ("profit_admin", register_profit_admin),
+    ("user_history", register_user_history),
+    ("help", register_help),
+    ("manual_accounts", register_manual_accounts),
+    ("stickers", register_stickers),
+    ("tempmail", register_tempmail),
+)
+
+
+def _safe_register(label, registrar, bot):
+    """Run one plugin's registration without ever aborting the boot."""
+    if not callable(registrar):
+        logger.error(
+            "\u274c Plugin '%s' has no callable register function (got %r) - skipped.",
+            label, registrar,
+        )
+        return False
+    try:
+        registrar(bot)
+        return True
+    except Exception as exc:  # noqa: BLE001 - boot must survive any plugin bug
+        logger.exception(
+            "\u26a0\ufe0f Plugin '%s' failed to register: %s: %s - continuing without it.",
+            label, type(exc).__name__, exc,
+        )
+        return False
+
+
+def _register_buy(bot):
+    """Buy panel: supports both a ``register_buy`` function and decorator mode."""
     try:
         from plugins.buy import register_buy
-        register_buy(bot)
     except ImportError:
-        # Agar buy.py me register_buy function nahi hai, toh direct module import ho jayega
-        import plugins.buy
-        print("✅ Buy Plugin Loaded Successfully (Direct Decorator Mode)")
-    except Exception as e:
-        print(f"⚠️ Buy Plugin Loading Warning: {e}")
+        # Module registers its handlers via decorators on import.
+        import plugins.buy  # noqa: F401
+        logger.info("\u2705 Buy plugin loaded (direct decorator mode).")
+        return True
+    return _safe_register("buy", register_buy, bot)
+
+
+def register_all_handlers(bot):
+    """Register every plugin handler, isolating failures per plugin."""
+    ok = 0
+    failed = []
+
+    for label, registrar in _PLUGIN_REGISTRARS:
+        if _safe_register(label, registrar, bot):
+            ok += 1
+        else:
+            failed.append(label)
+
+    if _register_buy(bot):
+        ok += 1
+    else:
+        failed.append("buy")
+
+    total = len(_PLUGIN_REGISTRARS) + 1
+    if failed:
+        logger.error(
+            "\u26a0\ufe0f Handler registration finished with problems: %d/%d loaded, failed: %s",
+            ok, total, ", ".join(failed),
+        )
+    else:
+        logger.info("\u2705 All %d plugin handler groups registered successfully.", ok)
+
+    return {"loaded": ok, "failed": failed, "total": total}
