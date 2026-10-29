@@ -20,7 +20,7 @@ from database import (
     set_change_number_fee
 )
 from config import *
-from utils.keyboards import style_btn, SEARCH_EMOJI_ID
+from utils.keyboards import style_btn, style_url, SEARCH_EMOJI_ID
 from utils.states import admin_state
 from utils.lzt import lzt_client, validate_token_format, token_fingerprint
 from plugins.admin import admin_panel_handler
@@ -185,7 +185,11 @@ async def run_stock_check(event):
         except Exception:
             pass
 
-    stock_items = cur.execute("SELECT phone, session_file FROM stock WHERE available=1").fetchall()
+    try:
+        stock_items = cur.execute("SELECT phone, session_file FROM stock WHERE available=1").fetchall()
+    except Exception as exc:
+        logger.warning("stock check: database unavailable: %s", exc)
+        return await _say("⚠️ <b>Database unavailable, try again later.</b>")
     total = len(stock_items)
     if total == 0:
         return await _say("\u26a0\ufe0f <b>No stock to check.</b>")
@@ -1268,7 +1272,7 @@ async def admin_actions(event):
                 txt = (await get_reply(f"{P_DOC} <b>Message (Supports HTML & tg-emoji tags):</b>")).text
                 btn_name = (await get_reply(f"🔘 <b>Button Name (or 'skip'):</b>")).text
                 url = (await get_reply("🔗 <b>URL:</b>")).text if btn_name.lower() != 'skip' else None
-                btns = [[Button.url(btn_name, url)]] if url else None
+                btns = [[style_url(btn_name, url, "primary", icon=5409119256107297715)]] if url else None
                 users = cur.execute("SELECT user_id FROM users").fetchall()
                 s, f = 0, 0
                 total = len(users)

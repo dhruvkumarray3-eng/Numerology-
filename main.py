@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # the hosting console immediately shows whether the container is running the
 # latest code.  If the console still prints an older tag, the container has
 # not pulled the new files yet.
-BUILD_TAG = "2026-10-29-surrogate-tempmail-v6"
+BUILD_TAG = "2026-10-29-settings-levels-colors-v7"
 
 os.makedirs("sessions", exist_ok=True)
 

@@ -19,11 +19,22 @@ PUBLIC_REGEX = re.compile(r'(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/([a-z
 # HELPER: STYLE BUTTON (FIX FOR MISSING style_btn)
 # ---------------------------------------------------------
 def style_btn(text, data, color_type="primary", icon=None, **kwargs):
+    """Create a coloured, premium-emoji inline button.
+
+    This used to silently drop ``style``/``icon`` (returning a plain button),
+    which is why some screens had no colour.  It now delegates to the single
+    canonical implementation in :mod:`utils.keyboards` so every caller gets
+    consistent styling.  ``color_type`` is kept for backwards compatibility.
     """
-    Safely creates a Telethon inline button while supporting 
-    custom color, icon parameters, and extra keyword arguments.
-    """
-    return Button.inline(text, data)
+    try:
+        from utils.keyboards import style_btn as _canonical
+        return _canonical(text, data, style_type=color_type, icon=icon)
+    except Exception:
+        # Last-resort fallback: never let a styling import break a handler.
+        try:
+            return Button.inline(text, data, style=color_type, icon=icon)
+        except Exception:
+            return Button.inline(text, data)
 
 def format_join_url(url: str) -> str:
     """Normalizes any Telegram link or username into a valid https://t.me/... URL."""

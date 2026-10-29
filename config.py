@@ -311,12 +311,14 @@ DEFAULT_LANGUAGE = os.getenv("DEFAULT_LANGUAGE", "en").strip().lower()
 
 CURRENCY_RATES = {
     "INR": 1.0,
+    "USDT": 1.0 / float(os.getenv("USDT_TO_INR", "88.0")),
     "USD": 1.0 / float(os.getenv("USDT_TO_INR", "88.0")),
     "EUR": 1.0 / (float(os.getenv("USDT_TO_INR", "88.0")) * 1.08),
     "GBP": 1.0 / (float(os.getenv("USDT_TO_INR", "88.0")) * 1.27),
 }
 
-CURRENCY_SYMBOLS = {"INR": "₹", "USD": "$", "EUR": "€", "GBP": "£"}
+# ``BOTH`` is a display mode (INR + USDT side by side), not a real currency.
+CURRENCY_SYMBOLS = {"INR": "₹", "USDT": "₮", "USD": "$", "EUR": "€", "GBP": "£", "BOTH": "₹"}
 
 def convert_from_inr(amount_inr: float, currency: str = None) -> float:
     """Converts an INR amount into the user's chosen currency."""

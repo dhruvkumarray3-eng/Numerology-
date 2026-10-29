@@ -4,7 +4,7 @@ from telethon.errors import MessageNotModifiedError
 from database import cur, db, get_panels
 from utils.states import get_user_lock
 from config import P_INR, PE_CHECK, logger
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, style_url
 
 async def show_panels_menu(event):
     pnls = get_panels()
@@ -119,7 +119,7 @@ def register_panels(bot):
                f"<i>𝐕ɪsɪᴛ ᴛʜᴇ ᴘᴀɴᴇʟ ᴜʀʟ ᴛᴏ ʀᴇɢɪsᴛᴇʀ ᴀɴᴅ ᴜsᴇ ʏᴏᴜʀ ᴘᴀɴᴇʟ!</i></blockquote>")
                
         btns = [
-            [Button.url("🌐 𝐎ᴘᴇɴ 𝐏ᴀɴᴇʟ 𝐖ᴇʙsɪᴛᴇ ↗️", panel_link)],
+            [style_url("🌐 𝕆𝕡𝕖𝕟 ℙ𝕒𝕟𝕖𝕝 𝕎𝕖𝕓𝕤𝕚𝕥𝕖 ↗️", panel_link, "success", icon=5409119256107297715)],
             [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐒ᴛᴏʀᴇ", b"panels_menu", "primary")]
         ]
         try: await e.edit(msg, buttons=btns)

@@ -23,6 +23,9 @@ from config import (
     DEFAULT_MARKUP_PERCENT,
     DEFAULT_MARKUP_FIXED,
     DEFAULT_MARKUP_CURRENCY,
+    DEFAULT_CURRENCY,
+    CURRENCY_SYMBOLS,
+    convert_from_inr,
     USDT_TO_INR,
     logger,
 )
@@ -237,11 +240,15 @@ def price_breakdown(real_price_inr, config=None):
     }
 
 
-def format_dual_price(real_price_inr, config=None):
-    """The user-facing label: '₹1,299 · 14.76 USDT'.
+def format_dual_price(real_price_inr, config=None, uid=None, currency=None):
+    """The user-facing price label, honouring the user's currency setting.
+
+    * ``INR``  -> ``₹1,299 · 14.76 USDT`` (both, as the owner asked)
+    * ``USDT`` -> ``14.76 USDT`` (USDT only)
+    * ``USD`` / ``EUR`` / ``GBP`` -> converted amount in that currency
 
     Returns an em-dash when the price is unknown/invalid so callers never show
-    a misleading '₹1' for a country that simply has no live price.
+    a misleading ``₹1`` for a country that simply has no live price.
     """
     if real_price_inr is None:
         return "—"
@@ -250,16 +257,71 @@ def format_dual_price(real_price_inr, config=None):
     except (TypeError, ValueError):
         return "—"
     b = price_breakdown(real_price_inr, config)
-    return f"{format_inr(b['inr'])} · {format_usdt(b['usdt'])}"
+    return format_user_amount(b["inr"], uid=uid, currency=currency)
 
 
-def format_dual_from_inr(amount_inr):
-    """Dual label when the INR amount is already the final selling price."""
+def format_dual_from_inr(amount_inr, uid=None, currency=None):
+    """User-facing label when the INR amount is already the final price."""
     try:
         inr = max(0.0, float(amount_inr))
     except (TypeError, ValueError):
         inr = 0.0
-    return f"{format_inr(inr)} · {format_usdt(usdt_from_inr(inr))}"
+    return format_user_amount(inr, uid=uid, currency=currency)
+
+
+def _resolve_currency(uid=None, currency=None):
+    """Resolve the display currency for a user (never raises)."""
+    if currency:
+        return str(currency).strip().upper()
+    if uid is not None:
+        try:
+            from database import get_user_currency
+            return str(get_user_currency(uid) or DEFAULT_CURRENCY).strip().upper()
+        except Exception:
+            pass
+    return str(DEFAULT_CURRENCY or "INR").strip().upper()
+
+
+def format_user_amount(amount_inr, uid=None, currency=None):
+    """Format an INR amount according to the user's currency preference.
+
+    This is the single source of truth for every user-facing balance, price,
+    deposit and spend label in the bot.
+    """
+    code = _resolve_currency(uid, currency)
+    try:
+        inr = float(amount_inr)
+    except (TypeError, ValueError):
+        inr = 0.0
+
+    if code == "USDT":
+        return format_usdt(usdt_from_inr(inr))
+    if code in ("INR", "BOTH"):
+        return f"{format_inr(inr)} · {format_usdt(usdt_from_inr(inr))}"
+    symbol = CURRENCY_SYMBOLS.get(code)
+    if not symbol:
+        return f"{format_inr(inr)} · {format_usdt(usdt_from_inr(inr))}"
+    value = convert_from_inr(inr, code)
+    return f"{symbol}{value:,.2f}"
+
+
+def format_user_amount_plain(amount_inr, uid=None, currency=None):
+    """Same as :func:`format_user_amount` but without the USDT suffix.
+
+    Used where space is tight (button labels) and the currency mode is a
+    single-currency one.
+    """
+    code = _resolve_currency(uid, currency)
+    try:
+        inr = float(amount_inr)
+    except (TypeError, ValueError):
+        inr = 0.0
+    if code == "USDT":
+        return format_usdt(usdt_from_inr(inr))
+    if code in ("INR", "BOTH"):
+        return format_inr(inr)
+    symbol = CURRENCY_SYMBOLS.get(code, "₹")
+    return f"{symbol}{convert_from_inr(inr, code):,.2f}"
 
 
 # ---------------------------------------------------------------------------
@@ -473,8 +535,8 @@ def service_price_breakdown(real_price_inr, service):
     return price_breakdown(real_price_inr, get_service_config(service))
 
 
-def format_service_dual_price(real_price_inr, service):
-    """Customer-facing '₹X · Y USDT' label for a service."""
+def format_service_dual_price(real_price_inr, service, uid=None, currency=None):
+    """Customer-facing price label for a service, in the user's currency."""
     if real_price_inr is None:
         return "—"
     try:
@@ -482,7 +544,7 @@ def format_service_dual_price(real_price_inr, service):
     except (TypeError, ValueError):
         return "—"
     b = service_price_breakdown(real_price_inr, service)
-    return f"{format_inr(b['inr'])} · {format_usdt(b['usdt'])}"
+    return format_user_amount(b["inr"], uid=uid, currency=currency)
 
 
 def describe_service_markup(service):

@@ -22,7 +22,8 @@ from database import (
 from utils.keyboards import style_btn, pe
 
 CURRENCY_OPTIONS = [
-    ("INR", "🇮🇳 INR ₹"),
+    ("INR", "🇮🇳 INR ₹ + USDT"),
+    ("USDT", "💎 USDT only"),
     ("USD", "🇺🇸 USD $"),
     ("EUR", "🇪🇺 EUR €"),
     ("GBP", "🇬🇧 GBP £"),
@@ -60,7 +61,7 @@ async def show_settings(event, uid=None):
     cur_row = []
     for code, label in CURRENCY_OPTIONS:
         mark = "✅ " if code == cur_code else ""
-        cur_row.append(style_btn(f"{mark}{label}", f"set_cur|{code}", "success" if code == cur_code else "primary"))
+        cur_row.append(style_btn(f"{mark}{label}", f"set_cur|{code}", "success" if code == cur_code else "primary", icon="money"))
         if len(cur_row) == 2:
             btns.append(cur_row)
             cur_row = []
@@ -70,7 +71,7 @@ async def show_settings(event, uid=None):
     lang_row = []
     for code, label in LANGUAGE_OPTIONS:
         mark = "✅ " if code == lang_code else ""
-        lang_row.append(style_btn(f"{mark}{label}", f"set_lang|{code}", "success" if code == lang_code else "primary"))
+        lang_row.append(style_btn(f"{mark}{label}", f"set_lang|{code}", "success" if code == lang_code else "primary", icon="globe"))
         if len(lang_row) == 2:
             btns.append(lang_row)
             lang_row = []

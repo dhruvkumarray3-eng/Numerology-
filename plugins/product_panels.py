@@ -395,8 +395,8 @@ def _price_label(real_price, uid, cfg=None, service=None):
     if real_price is None:
         return "—"
     if service:
-        return format_service_dual_price(real_price, service)
-    return format_dual_price(real_price, cfg)
+        return format_service_dual_price(real_price, service, uid=uid)
+    return format_dual_price(real_price, cfg, uid=uid)
 
 
 def _display_inr(real_price, cfg=None, service=None):
@@ -978,7 +978,7 @@ async def show_stock_details(event, key, code):
         rate_text=rate_text,
         kind=stock_card.KIND_OTP,
         extra_block=extra_block,
-        balance_text=format_dual_from_inr(_balance(uid)),
+        balance_text=format_dual_from_inr(_balance(uid), uid=uid),
         rate_label="Your total price",
     )
     btns = [
@@ -1033,8 +1033,8 @@ async def buy(event, key, code):
     if bal < display_inr:
         return await event.answer(
             f"❌ Insufficient balance.\n"
-            f"Need {format_dual_from_inr(display_inr)}\n"
-            f"You have {format_dual_from_inr(bal)}",
+            f"Need {format_dual_from_inr(display_inr, uid=uid)}\n"
+            f"You have {format_dual_from_inr(bal, uid=uid)}",
             alert=True,
         )
 
@@ -1066,7 +1066,7 @@ async def buy(event, key, code):
         f"<blockquote expandable>{pe('check', chr(0x2705))} <b>Number reserved \u2014 {PANELS[key]['title']}</b>\n\n"
         f"{pe('phone', chr(0x1F4DE))} <b>Number:</b> <code>{html.escape(phone)}</code>\n"
         f"{_flag(code)} <b>Country:</b> {html.escape(_clean_name(match['name']))}\n"
-        f"{pe('money', chr(0x1F4B3))} <b>Paid:</b> {format_dual_from_inr(display_inr)}\n"
+        f"{pe('money', chr(0x1F4B3))} <b>Paid:</b> {format_dual_from_inr(display_inr, uid=uid)}\n"
         f"{pe('orders', chr(0x1F194))} <b>Order:</b> <code>{html.escape(order_id)}</code>\n\n"
         "Use this number on the platform, then tap <b>Get OTP</b>.</blockquote>"
     )
@@ -1244,7 +1244,7 @@ async def refund(event):
     msg = (
         f"<blockquote expandable>{pe('money', chr(0x1F4B8))} <b>Order cancelled &amp; refunded</b>\n\n"
         f"{pe('orders', chr(0x1F194))} <b>Order:</b> <code>{html.escape(order_id)}</code>\n"
-        f"{pe('balance', chr(0x1F4B0))} <b>Refunded:</b> {format_dual_from_inr(price)}\n\n"
+        f"{pe('balance', chr(0x1F4B0))} <b>Refunded:</b> {format_dual_from_inr(price, uid=uid)}\n\n"
         "<i>The amount is back in your balance instantly.</i></blockquote>"
     )
     btns = [

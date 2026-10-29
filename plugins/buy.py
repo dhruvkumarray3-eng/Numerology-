@@ -590,7 +590,7 @@ async def show_countries_for_year(event, year, page):
     for c_name, count in countries:
         flag = get_flag_by_country_name(c_name)
         price = get_panel_price(c_name, year)
-        btns.append(style_btn(f"{flag} {c_name} — {format_dual_from_inr(price)}", f"by|bulk|{c_name}|{year}|{price}", "primary", icon=6154249597532248059))
+        btns.append(style_btn(f"{flag} {c_name} — {format_dual_from_inr(price, uid=event.sender_id)}", f"by|bulk|{c_name}|{year}|{price}", "primary", icon=6154249597532248059))
         
     f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
     
@@ -734,7 +734,7 @@ async def show_years(event, mode, country):
         y, count, price = opt['year'], opt['count'], opt['price']
         badge = YEAR_BADGES.get(int(y) if str(y).isdigit() else y, f"📅 {y}")
         cnt_text = f"({count} left)" if isinstance(count, int) else f"({count})"
-        btns.append([style_btn(f"{badge} — {format_dual_from_inr(price)} {cnt_text}", f"by|{mode}|{country}|{y}|{price}", "primary", icon=5408995930416362034)])
+        btns.append([style_btn(f"{badge} — {format_dual_from_inr(price, uid=event.sender_id)} {cnt_text}", f"by|{mode}|{country}|{y}|{price}", "primary", icon=5408995930416362034)])
     
     if mode != 'bulk':
         btns.append([style_btn("🔙 𝐁𝐚𝐜𝐤 𝐭𝐨 𝐂𝐨𝐮𝐧𝐭𝐫𝐢𝐞𝐬", f"pg_c|{mode}|1", "danger", icon=6129812419028982717)])
@@ -796,7 +796,7 @@ async def confirm_purchase(event, mode, country, year, price):
         country_label=f"{flag} <b>{html.escape(str(country))}</b>",
         stock_text=(stock_card.stock_text(stock_count, "accounts")
                     if stock_count else "\U0001F7E2 In stock (live count not reported)"),
-        rate_text=format_dual_from_inr(price),
+        rate_text=format_dual_from_inr(price, uid=event.sender_id),
         kind=stock_card.KIND_TG,
         extra_block=(f"{cat_badge}\n\U0001F4C6 <b>Year:</b> {badge}"),
     )
@@ -901,7 +901,7 @@ async def process_purchase(event, mode, country, year, price_str):
                 async with get_user_lock(uid):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
-                return await event.edit(f"<blockquote expandable>❌ <b>𝐎𝐮𝐭 𝐨𝐟 𝐒𝐭𝐨𝐜𝐤!</b>\n\n𝐍𝐨 𝐚𝐜𝐜𝐨𝐮𝐧𝐭s 𝐚𝐫𝐞 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 <b>{c_icon} {country}</b>.\n𝐘𝐨𝐮𝐫 𝐦𝐨𝐧𝐞𝐲 (<b>{format_dual_from_inr(final_price)}</b>) 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 <b>𝐢𝐧𝐬𝐭𝐚𝐧𝐭𝐥𝐲 𝐫𝐞𝐟𝐮𝐧𝐝𝐞𝐝</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁𝐮𝐲 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "buy_menu_main", "primary", icon=5408995930416362034)]])
+                return await event.edit(f"<blockquote expandable>❌ <b>𝐎𝐮𝐭 𝐨𝐟 𝐒𝐭𝐨𝐜𝐤!</b>\n\n𝐍𝐨 𝐚𝐜𝐜𝐨𝐮𝐧𝐭s 𝐚𝐫𝐞 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐚𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐟𝐨𝐫 <b>{c_icon} {country}</b>.\n𝐘𝐨𝐮𝐫 𝐦𝐨𝐧𝐞𝐲 (<b>{format_dual_from_inr(final_price, uid=uid)}</b>) 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 <b>𝐢𝐧𝐬𝐭𝐚𝐧𝐭𝐥𝐲 𝐫𝐞𝐟𝐮𝐧𝐝𝐞𝐝</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁𝐮𝐲 𝐀𝐧𝐨𝐭𝐡𝐞𝐫 𝐂𝐨𝐮𝐧𝐭𝐫𝐲", "buy_menu_main", "primary", icon=5408995930416362034)]])
 
             buy_success = False
             bought_info = None
@@ -1078,7 +1078,7 @@ async def auto_otp_task(phone):
                         
                         for log_ch in get_log_channels_db():
                             try:
-                                await bot.send_message(log_ch, f"✅ <b>ACCOUNT SOLD</b>\n\n👤 <b>User:</b> <code>{uid}</code>\n📱 <b>Phone:</b> <code>+{phone}</code>\n💰 <b>Price:</b> {format_dual_from_inr(order['price'])}\n🌍 <b>Country:</b> {order['country']}")
+                                await bot.send_message(log_ch, f"✅ <b>ACCOUNT SOLD</b>\n\n👤 <b>User:</b> <code>{uid}</code>\n📱 <b>Phone:</b> <code>+{phone}</code>\n💰 <b>Price:</b> {format_dual_from_inr(order['price'], uid=uid)}\n🌍 <b>Country:</b> {order['country']}")
                             except Exception as log_ex:
                                 logger.error(f"Failed to log sale: {log_ex}")
                 
@@ -1134,7 +1134,7 @@ async def auto_otp_task(phone):
         unregister_live(f"order:{phone}")
         del active_orders[phone]
         
-        msg_text = f"<blockquote expandable>❌ <b>𝐎𝐫𝐝𝐞𝐫 𝐓𝐢𝐦𝐞𝐨𝐮𝐭 / 𝐂𝐚𝐧𝐜𝐞𝐥𝐥𝐞𝐝</b>\n\nNo OTP was received in time. <b>{format_dual_from_inr(ord_info['price'])}</b> has been refunded to your wallet!</blockquote>"
+        msg_text = f"<blockquote expandable>❌ <b>𝐎𝐫𝐝𝐞𝐫 𝐓𝐢𝐦𝐞𝐨𝐮𝐭 / 𝐂𝐚𝐧𝐜𝐞𝐥𝐥𝐞𝐝</b>\n\nNo OTP was received in time. <b>{format_dual_from_inr(ord_info['price'], uid=uid)}</b> has been refunded to your wallet!</blockquote>"
         try: await bot.edit_message(uid, msg_id, msg_text)
         except Exception as e: logger.error(f"Error sending timeout msg: {e}")
 
@@ -1425,7 +1425,7 @@ async def cb_cancel_order(event):
         await event.edit(
             f"❌ <b>Order cancelled by admin.</b>\n\n"
             f"📱 <b>Phone:</b> <code>+{phone}</code>\n"
-            f"💰 <b>Refunded:</b> {format_dual_from_inr(refunded) if refunded else '—'}"
+            f"💰 <b>Refunded:</b> {format_dual_from_inr(refunded, uid=uid) if refunded else '—'}"
         )
     except Exception:
         pass
@@ -1436,7 +1436,7 @@ async def cb_cancel_order(event):
                 f"❌ <b>Your order was cancelled by support.</b>\n\n"
                 f"📱 <b>Phone:</b> <code>+{phone}</code>\n"
                 f"💰 <b>Refunded to balance:</b> "
-                f"{format_dual_from_inr(refunded) if refunded else '—'}",
+                f"{format_dual_from_inr(refunded, uid=uid) if refunded else '—'}",
             )
         except Exception:
             pass

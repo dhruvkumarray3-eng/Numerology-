@@ -88,9 +88,9 @@ async def show_more_menu(event):
     btns = [
         [style_btn("🎁 Refer & Earn", b"view_referrals", "success", icon=5354889508674360491)],
         [style_btn("📊 Live Stock", b"stk_pg|1", "primary", icon=6129627894349045589)],
-        [Button.url("📜 Terms & Conditions", TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else get_support_url())],
-        [Button.url("\U0001F465 Support Group", get_support_url())],
-        [Button.url("\U0001F451 Owner", OWNER_URL)],
+        [style_url("📜 Terms & Conditions", TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else get_support_url(), "primary", icon=6129732880529628243)],
+        [style_url("\U0001F465 Support Group", get_support_url(), "success", icon=6129732880529628243)],
+        [style_url("\U0001F451 Owner", OWNER_URL, "danger", icon=5409166771330494453)],
         [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)]
     ]
     try: await event.edit(msg, buttons=btns)
@@ -215,7 +215,7 @@ def register_callbacks(bot):
             buttons = []
             for url, idx in unjoined:
                 btn_label = "💬 𝐉ᴏɪɴ 𝐆ʀᴏᴜᴘ" if ("+" in url or "joinchat" in url or idx == 2) else "📢 𝐉ᴏɪɴ 𝐂ʜᴀɴɴᴇʟ"
-                buttons.append([Button.url(btn_label, url)])
+                buttons.append([style_url(btn_label, url, "primary", icon=5409119256107297715)])
             buttons.append([style_btn("𝐕ᴇʀɪғʏ 𝐉ᴏɪɴᴇᴅ", b"verify_join", "success", icon=6129627894349045589)])
             msg = f"<blockquote>{PE_FLOWER} <b>𝐘ᴏᴜ ᴍᴜsᴛ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟs & ɢʀᴏᴜᴘ ғɪʀsᴛ!</b></blockquote>\n<blockquote>{PE_LOCATION} {remaining} ᴄʜᴀɴɴᴇʟ(s)/ɢʀᴏᴜᴘ(s) ʀᴇᴍᴀɪɴɪɴɢ. 𝐉ᴏɪɴ ᴀɴᴅ ᴛᴀᴘ <b>𝐕ᴇʀɪғʏ 𝐉ᴏɪɴᴇᴅ</b>.</blockquote>"
             from utils.helpers import safe_edit_or_resend
@@ -254,7 +254,7 @@ def register_callbacks(bot):
                f"\U0001F465 <b>Support Group:</b> {SUPPORT_USERNAME}\n"
                f"\U0001F451 <b>Owner:</b> {OWNER_USERNAME}</blockquote>")
         btns = [
-            [Button.url("\U0001F465 𝐒\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b 𝐆\u0280\u1d0f\u1d1c\u1d18", url)],
-            [Button.url("\U0001F451 𝐎\u1d21\u0274\u1d07\u0280", OWNER_URL)],
+            [style_url("\U0001F465 Support Group", url, "success", icon=6129732880529628243)],
+            [style_url("\U0001F451 Owner", OWNER_URL, "danger", icon=5409166771330494453)],
         ]
         await e.respond(msg, buttons=btns)

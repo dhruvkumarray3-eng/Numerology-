@@ -10,6 +10,7 @@ from database import (cur, db, get_usdt_rate, update_balance, to_usd, get_log_ch
                       get_upi_id)
 from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_YES, P_WARN, P_INR, P_USDT, P_KEY, PE_CHECK, P_ACC, P_ID, LOG_CHANNEL_ID, LOG_CHANNELS, ADMIN_ID, SUPER_ADMINS, CWALLET_QR, CWALLET_ID, UPI_ID, bot, logger, BEP20_ADDRESS, TRUST_WALLET_ADDRESS, TRUST_WALLET_QR
 from utils.keyboards import style_btn
+from utils.markup import format_user_amount
 from utils.states import deposit_input, waiting_proof, admin_dep_state, custom_dep_amt, get_user_lock
 
 async def deposit_menu(event):
@@ -58,7 +59,7 @@ async def send_bep20_invoice(uid, amt, rate_text=None):
             "<blockquote>\u26A0\uFE0F <b>Payment not configured</b>\n\n"
             "Owner has not set the USDT (BEP-20) wallet address yet.\n"
             "Please contact support.</blockquote>",
-            buttons=[[Button.inline("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action")]],
+            buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]],
         )
 
     if rate_text is None:
@@ -80,7 +81,7 @@ async def send_bep20_invoice(uid, amt, rate_text=None):
            f"<blockquote>{PE_GIFT} <b>\U0001D400\U0001D405\U0001D413\U0001D404\U0001D411 \U0001D40F\U0001D400\U0001D418\U0001D408\U0001D40D\U0001D406:</b> "
            f"\U0001D412\U0001D41E\U0001D427\U0001D41D \U0001D41A \U0001D41C\U0001D425\U0001D41E\U0001D41A\U0001D42B \U0001D42C\U0001D41C\U0001D42B\U0001D41E\U0001D41E\U0001D427\U0001D42C\U0001D421\U0001D428\U0001D42D \U0001D428\U0001D42B \U0001D413\U0001D40D\U0001D413 \U0001D421\U0001D41A\U0001D42C\U0001D421 \U0001D421\U0001D41E\U0001D42B\U0001D41E.</blockquote>")
 
-    btns = [[Button.inline("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action")]]
+    btns = [[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]]
 
     # 1) custom QR (URL or Telegram file_id) if owner provided one
     _qr = get_trust_wallet_qr()
@@ -106,7 +107,7 @@ async def send_bep20_invoice(uid, amt, rate_text=None):
 async def manual_deposit_init(event, method):
     uid = event.sender_id
     deposit_input[uid] = {'step': 'wait_amt', 'method': method}
-    await event.edit(f"{P_MONEY} <b>𝐄ɴᴛᴇʀ 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴍᴏᴜɴᴛ (ɪɴ {P_INR}):</b>\n\n<i>𝐌ɪɴɪᴍᴜᴍ ᴅᴇᴘᴏsɪᴛ ɪs {P_INR}10.</i>", buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+    await event.edit(f"{P_MONEY} <b>𝐄ɴᴛᴇʀ 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴍᴏᴜɴᴛ (ɪɴ {P_INR}):</b>\n\n<i>𝐌ɪɴɪᴍᴜᴍ ᴅᴇᴘᴏsɪᴛ ɪs {P_INR}10.</i>", buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
 
 async def process_referral_bonus(user_id, amt):
     try:
@@ -161,15 +162,15 @@ def register_deposit(bot):
             return await e.reply(f"<blockquote>{P_NO} <b>❌ 𝐈ɴᴠᴀʟɪᴅ 𝐀ᴍᴏᴜɴᴛ!</b>\n\n"
                                  f"𝐏ʟᴇᴀsᴇ ᴇɴᴛᴇʀ a valid <b>numeric amount</b> (digits only, e.g. <code>50</code>, <code>100</code>, <code>500</code>).\n"
                                  f"<i>𝐋ɪɴᴋs, sᴄʀᴇᴇɴsʜᴏᴛs, ʟᴇᴛᴛᴇʀs ᴏʀ sᴘᴇᴄɪᴀʟ ᴄʜᴀʀᴀᴄᴛᴇʀs ᴀʀᴇ ɴᴏᴛ ᴀʟʟᴏᴡᴇᴅ.</i></blockquote>",
-                                 buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                                 buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
         try:
             amt = int(text)
             if amt < 10: 
                 return await e.reply(f"<blockquote>{P_WARN} <b>Minimum Deposit is {P_INR}10.</b>\n𝐏ʟᴇᴀsᴇ ᴇɴᴛᴇʀ {P_INR}10 ᴏʀ ᴍᴏʀᴇ:</blockquote>",
-                                     buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                                     buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
             if amt > 50000:
                 return await e.reply(f"<blockquote>{P_WARN} <b>Maximum Deposit is {P_INR}50,000.</b>\n𝐏ʟᴇᴀsᴇ ᴇɴᴛᴇʀ a smaller amount:</blockquote>",
-                                     buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                                     buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
                 
             method = deposit_input[uid]['method']
             waiting_proof[uid] = {'amount': amt, 'method': method}
@@ -185,8 +186,8 @@ def register_deposit(bot):
                 msg = (f"<blockquote>{P_CARD} <b>𝐌ᴇᴛʜᴏᴅ:</b> {method}\n\n🚀 <b>𝐀ᴅᴅʀᴇss / 𝐈𝐃:</b>\n<code>{CWALLET_ID}</code></blockquote>\n"
                        f"{rate_text}\n"
                        f"<blockquote>👉 <b>𝐒ᴇɴᴅ 𝐏ʀᴏᴏғ:</b>\n𝐏ʟᴇᴀsᴇ sᴇɴᴅ ᴛʜᴇ 𝐓ʀᴀɴsᴀᴄᴛɪᴏɴ 𝐇ᴀsʜ (𝐋ɪɴᴋ) ᴏʀ ᴀ 𝐒ᴄʀᴇᴇɴsʜᴏᴛ ᴏғ ᴛʜᴇ ᴘᴀʏᴍᴇɴᴛ ɴᴏᴡ.</blockquote>")
-                try: await bot.send_file(uid, CWALLET_QR, caption=msg, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
-                except Exception: await bot.send_message(uid, msg + f"\n\n🔗 QR Link: {CWALLET_QR}", buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                try: await bot.send_file(uid, CWALLET_QR, caption=msg, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
+                except Exception: await bot.send_message(uid, msg + f"\n\n🔗 QR Link: {CWALLET_QR}", buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
             elif method in ("AutoUPI", "UPI"):
                 upi_res = cur.execute("SELECT value FROM settings WHERE key='upi_id'").fetchone()
                 active_upi = upi_res[0] if upi_res and upi_res[0] else get_upi_id()
@@ -209,10 +210,10 @@ def register_deposit(bot):
                     img.save(qr_file, "PNG")
                     qr_file.seek(0)
                     
-                    await bot.send_file(uid, qr_file, caption=msg, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                    await bot.send_file(uid, qr_file, caption=msg, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
                 except Exception as e: 
                     logger.error(f"Failed to send UPI QR: {e}")
-                    await bot.send_message(uid, msg, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                    await bot.send_message(uid, msg, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
             elif method == "ManualUPI":
                 upi_res = cur.execute("SELECT value FROM settings WHERE key='upi_id'").fetchone()
                 active_upi = upi_res[0] if upi_res and upi_res[0] else get_upi_id()
@@ -235,20 +236,20 @@ def register_deposit(bot):
                     img.save(qr_file, "PNG")
                     qr_file.seek(0)
                     
-                    await bot.send_file(uid, qr_file, caption=msg, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                    await bot.send_file(uid, qr_file, caption=msg, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
                 except Exception as e: 
                     logger.error(f"Failed to send UPI QR: {e}")
-                    await bot.send_message(uid, msg, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                    await bot.send_message(uid, msg, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
             else:
                 row = cur.execute("SELECT caption, qr_file_id FROM custom_payments WHERE name=?", (method,)).fetchone()
                 if row:
                     cap = f"<blockquote>{row[0]}</blockquote>\n{rate_text}\n<blockquote>👇 <b>𝐀ғᴛᴇʀ ᴘᴀʏɪɴɢ, sᴇɴᴅ ᴀ ᴄʟᴇᴀʀ 𝐒ᴄʀᴇᴇɴsʜᴏᴛ ʜᴇʀᴇ:</b></blockquote>"
-                    btns = [[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]]
+                    btns = [[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]]
                     if row[1] and os.path.exists(row[1]): 
                         try: await bot.send_file(e.chat_id, row[1], caption=cap, buttons=btns)
                         except: await e.reply(cap, buttons=btns)
                     else: await e.reply(cap, buttons=btns)
-                else: await e.reply(f"{P_CARD} <b>{method} Deposit</b>{rate_text}\n\n👇 Send Screenshot here:", buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                else: await e.reply(f"{P_CARD} <b>{method} Deposit</b>{rate_text}\n\n👇 Send Screenshot here:", buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
             raise events.StopPropagation
         except ValueError: 
             await e.respond(f"{P_NO} Please enter a valid number in {P_INR} (INR).")
@@ -298,8 +299,8 @@ def register_deposit(bot):
                         fail_text = (f"<blockquote>{P_NO} <b>❌ 𝐏ᴀʏᴍᴇɴᴛ 𝐀ʟʀᴇᴀᴅʏ 𝐑ᴇᴅᴇᴇᴍᴇᴅ!</b>\n\n"
                                      f"𝐓ʜɪs ᴘᴀʏᴍᴇɴᴛ ʜᴀs ᴀʟʀᴇᴀᴅʏ ʙᴇᴇɴ ᴄʀᴇᴅɪᴛᴇᴅ ᴘʀᴇᴠɪᴏᴜsʟʏ (ᴜsɪɴɢ 𝐔𝐓𝐑/𝐓ʀᴀɴsᴀᴄᴛɪᴏɴ 𝐈𝐃).\n"
                                      f"<i>𝐄ᴀᴄʜ ᴘᴀʏᴍᴇɴᴛ ᴄᴀɴ ᴏɴʟʏ ʙᴇ ʀᴇᴅᴇᴇᴍᴇᴅ ᴏɴᴄᴇ.</i></blockquote>")
-                        try: await status_msg.edit(fail_text, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
-                        except: await e.reply(fail_text, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                        try: await status_msg.edit(fail_text, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
+                        except: await e.reply(fail_text, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
                         return
 
                     credited_amt = v_res.get('amount') or final_amt
@@ -343,8 +344,8 @@ def register_deposit(bot):
                                  f"𝐍ᴏ ʀᴇᴄᴇɴᴛ ᴘᴀʏᴍᴇɴᴛ ᴡᴀs ғᴏᴜɴᴅ ғᴏʀ ᴛʜɪs 𝐔𝐓𝐑.\n"
                                  f"• 𝐈ғ ʏᴏᴜ ᴊᴜsᴛ ᴘᴀɪᴅ, ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ <b>1-2 ᴍɪɴᴜᴛᴇs</b> ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ.\n"
                                  f"• 𝐎ʀ ᴜsᴇ <b>✍️ 𝐌ᴀɴᴜᴀʟ 𝐔𝐏𝐈</b> ᴛᴏ ᴜᴘʟᴏᴀᴅ ʏᴏᴜʀ ᴘᴀʏᴍᴇɴᴛ sᴄʀᴇᴇɴsʜᴏᴛ.</blockquote>")
-                    try: await status_msg.edit(fail_text, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
-                    except: await e.reply(fail_text, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                    try: await status_msg.edit(fail_text, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
+                    except: await e.reply(fail_text, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
                     return
 
         # 2. MANUAL SCREENSHOT / PROOF FLOW

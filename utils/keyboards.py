@@ -154,7 +154,7 @@ def get_terms_buttons():
     ]
 def get_join_buttons():
     urls = get_fsub_urls()
-    buttons = [[Button.url(f"📢 Join Channel {i+1}", link)] for i, link in enumerate(urls) if link]
+    buttons = [[style_url(f"📢 Join Channel {i+1}", link, "primary", icon=5409119256107297715)] for i, link in enumerate(urls) if link]
     buttons.append([style_btn("𝐕ᴇʀɪғʏ 𝐉ᴏɪɴᴇᴅ", b"verify_join", style_type='success', icon=6129627894349045589)])
     return buttons
 
@@ -186,13 +186,13 @@ def get_support_buttons():
     t_url = TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else sup_url
     p_url = PRIVACY_URL if (PRIVACY_URL and str(PRIVACY_URL).strip().startswith("http")) else None
     buttons = [
-        [Button.url("📩 Support", sup_url)],
-        [Button.url("📜 Terms & Conditions", t_url)]
+        [style_url("📩 Support", sup_url, "success", icon=6129732880529628243)],
+        [style_url("📜 Terms & Conditions", t_url, "primary", icon=6129732880529628243)]
     ]
     if p_url:
-        buttons.append([Button.url("🔒 Privacy Policy", p_url)])
+        buttons.append([style_url("🔒 Privacy Policy", p_url, "danger", icon=5409166771330494453)])
     if urls:
-        buttons.append([Button.url("📢 Channel", urls[0])])
+        buttons.append([style_url("📢 Channel", urls[0], "primary", icon=5409119256107297715)])
     return buttons
 
 # ---------------------------------------------------------------------------

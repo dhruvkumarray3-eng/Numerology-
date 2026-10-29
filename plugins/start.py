@@ -13,6 +13,9 @@ from config import (PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL
                     PE_ID, PE_USER, PE_TARGET, PE_TAG, PE_TROPHY, PE_CARD, PE_STAR,
                     ADMIN_ID, is_super_admin)
 from utils.states import session_buy_state, deposit_input
+from utils.markup import format_user_amount
+from utils.levels import compute_level, tier_label
+from utils.i18n import t
 
 # Telegram does not allow a single message to carry both an inline keyboard
 # and a reply keyboard, so the bottom menu needs a small "carrier" message of
@@ -94,36 +97,29 @@ async def send_main_menu(bot, event, uid):
     # RDX ID is derived from this bot's own id, so it always matches the bot.
     rdx_id = f"{QC_ID_PREFIX}-{str(me.id)[-8:]}"
 
-    # VIP tier is computed LIVE from the user's current balance every time the
-    # dashboard renders, so it rises and falls with real balance changes
-    # (deposits, purchases, refunds) instead of being frozen at signup.
-    if bal >= 5000:
-        vip = "💎 Diamond"
-        next_tier, next_at = None, None
-    elif bal >= 2000:
-        vip = "🥇 Gold"
-        next_tier, next_at = "💎 Diamond", 5000
-    elif bal >= 500:
-        vip = "🥈 Silver"
-        next_tier, next_at = "🥇 Gold", 2000
+    # VIP tier is computed LIVE from the user's lifetime deposits AND spending
+    # (see utils.levels), so it reflects real activity instead of a balance that
+    # can be spent back down to zero.
+    lvl = compute_level(uid)
+    vip = tier_label(lvl["tier"])
+    if lvl["next_tier"] is not None:
+        need_txt = format_user_amount(lvl["need"], uid=uid)
+        vip_progress = (f"\n{PE_TROPHY} <b>{t(uid, 'next_tier')}:</b> "
+                        f"{tier_label(lvl['next_tier'])} "
+                        f"<i>({t(uid, 'more_needed', amount=need_txt)})</i>")
     else:
-        vip = "🏆 Bronze"
-        next_tier, next_at = "🥈 Silver", 500
+        vip_progress = f"\n{PE_TROPHY} <i>{t(uid, 'max_level')}</i>"
 
-    vip_progress = ""
-    if next_tier and next_at:
-        need = max(0.0, next_at - bal)
-        vip_progress = (f"\n{PE_TROPHY} <b>Next Tier:</b> {next_tier} "
-                        f"<i>(₹{need:,.0f} more)</i>")
+    bal_txt = format_user_amount(bal, uid=uid)
 
-    msg = (f"<a href='{start_img}'>&#8203;</a>💬 <b>{html.escape(styled_name)}</b>\n\n"
+    msg = (f"<a href='{start_img}'>&#8203;</a>\U0001F4AC <b>{html.escape(styled_name)}</b>\n\n"
            f"<blockquote expandable>"
            f"{PE_USER} <b>\U0001D40D\U0001D41A\U0001D426\U0001D41E:</b> {html.escape(first_name)}\n"
            f"{PE_ID} <b>\U0001D414\U0001D412\U0001D404\U0001D411 \U0001D408\U0001D403:</b> <code>{uid}</code>\n"
            f"{PE_TARGET} <b>\U0001D414\U0001D412\U0001D404\U0001D411\U0001D40D\U0001D400\U0001D40C\U0001D404:</b> {username}\n"
            f"{PE_TAG} <b>\U0001D411\U0001D403\U0001D417 \U0001D408\U0001D403:</b> <code>{rdx_id}</code>\n"
-           f"{PE_CARD} <b>\U0001D401\U0001D41A\U0001D425\U0001D41A\U0001D427\U0001D41C\U0001D41E:</b> <code>\u20b9{bal:.2f}</code>\n"
-           f"{PE_TROPHY} <b>\U0001D415\U0001D408\U0001D40F:</b> {vip}{vip_progress}"
+           f"{PE_CARD} <b>{t(uid, 'dashboard_balance')}:</b> <code>{bal_txt}</code>\n"
+           f"{PE_TROPHY} <b>{t(uid, 'dashboard_level')}:</b> {vip}{vip_progress}"
            f"</blockquote>\n"
            f"<blockquote>{PE_LIGHTNING} <b>\U0001D412\U0001D42E\U0001D429\U0001D429\U0001D428\U0001D42B\U0001D42D:</b> <a href='{support_url}'>{support_handle}</a></blockquote>\n"
            f"<blockquote>{PE_CROWN} <b>\U0001D40E\U0001D416\U0001D40D\U0001D404\U0001D411:</b> <a href='{OWNER_URL}'>{owner_handle}</a></blockquote>")
@@ -226,7 +222,7 @@ def register_start(bot):
                 buttons = []
                 for url, idx in unjoined:
                     btn_label = "💬 𝐉ᴏɪɴ 𝐆ʀᴏᴜᴘ" if ("+" in url or "joinchat" in url or idx == 2) else "📢 𝐉ᴏɪɴ 𝐂ʜᴀɴɴᴇʟ"
-                    buttons.append([Button.url(btn_label, url)])
+                    buttons.append([style_url(btn_label, url, "primary", icon=5409119256107297715)])
                 buttons.append([style_btn("𝐕ᴇʀɪғʏ 𝐉ᴏɪɴᴇᴅ", b"verify_join", "success", icon=6129627894349045589)])
                 
                 try:

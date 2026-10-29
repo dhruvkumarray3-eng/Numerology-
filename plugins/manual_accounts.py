@@ -67,7 +67,7 @@ def _currency(uid):
 
 def _price(value, uid):
     """Manual-stock price is already the final selling price -> show INR + USDT."""
-    return format_dual_from_inr(float(value or 0))
+    return format_dual_from_inr(float(value or 0), uid=uid)
 
 
 def _balance(uid):
