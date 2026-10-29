@@ -52,3 +52,8 @@ logs/
 *.swp
 *.swo
 *.bak
+
+# Telegraph publish token / page path (local only)
+.telegraph_token
+.telegraph_token.path
+.telegraph.path

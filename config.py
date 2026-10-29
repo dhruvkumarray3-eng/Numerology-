@@ -121,6 +121,8 @@ JOIN_URLS = env_list("JOIN_URLS", "") or ["https://t.me/RDXnetworkinghub"]
 
 # LINKS & MEDIA
 TERMS_URL = os.getenv("TERMS_URL", "").strip() or "https://github.com/dhruvkumarray3-eng/Numerology-/blob/main/TERMS_AND_CONDITIONS.md"
+# Privacy Policy (Telegraph). Override with the PRIVACY_URL env var.
+PRIVACY_URL = os.getenv("PRIVACY_URL", "").strip() or "https://telegra.ph/Privacy-Policy--Vendor-Sellings-10-29"
 
 # ---------------------------------------------------------
 # PAYMENT  ->  ONLY USDT (BEP-20 / BNB Smart Chain)
