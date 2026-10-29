@@ -36,6 +36,7 @@ from plugins.manual_accounts import register_manual_accounts
 from plugins.stickers import register_stickers
 from plugins.tempmail import register_tempmail
 from plugins.user_history import register_user_history
+from plugins.self_update import register_self_update
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ _PLUGIN_REGISTRARS = (
     ("manual_accounts", register_manual_accounts),
     ("stickers", register_stickers),
     ("tempmail", register_tempmail),
+    ("self_update", register_self_update),
 )
 
 

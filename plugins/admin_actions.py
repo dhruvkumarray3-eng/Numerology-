@@ -697,6 +697,36 @@ async def admin_actions(event):
         ]
         return await event.edit(msg, buttons=btns)
 
+    elif action_data == "adm_updatebot" and has_perm(uid, 'p_settings'):
+        # The hosting panel never runs "git pull", so the container can be
+        # stuck on an old build even after a fix is pushed.  This pulls the
+        # latest code straight from GitHub and asks the owner to restart.
+        await event.answer("\U0001F504 Fetching latest build from GitHub\u2026", alert=False)
+        try:
+            from plugins.self_update import _run_update
+            changed, skipped = await asyncio.wait_for(_run_update(os.getcwd()), timeout=180)
+        except asyncio.TimeoutError:
+            return await event.answer(
+                "\u274C Update timed out after 3 minutes.\n"
+                "The container could not reach GitHub.", alert=True)
+        except Exception as up_err:
+            return await event.answer(
+                f"\u274C Update failed: {type(up_err).__name__}: {up_err}", alert=True)
+
+        if not changed:
+            return await event.answer(
+                "\u2705 Already running the latest code from GitHub.\n"
+                "If something still looks old, press Restart in the panel.",
+                alert=True)
+
+        preview = "\n".join(f"\u2022 {f}" for f in changed[:10])
+        if len(changed) > 10:
+            preview += f"\n\u2026 and {len(changed) - 10} more"
+        return await event.answer(
+            f"\u2705 {len(changed)} file(s) updated!\n\n{preview}\n\n"
+            "\u26A0\uFE0F Press Restart in the panel now.",
+            alert=True)
+
     elif action_data == "test_imap" and has_perm(uid, 'p_settings'):
         # NOTE: an IMAP login is a *blocking* network call.  It used to run
         # inline on the event loop, so a slow Gmail handshake froze the bot and

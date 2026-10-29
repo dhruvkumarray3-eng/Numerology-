@@ -39,6 +39,7 @@ async def admin_panel_handler(event):
         ])
         btns.append([style_btn("\U0001F5A5 Manage Servers (Basic TG / Num / etc.)", "adm_servers", "primary", icon=5409098988156629257)])
         btns.append([style_btn("\U0001F6E0 Advanced Tools & Analytics (Panels \u00b7 DB \u00b7 SMM \u00b7 Grant \u00b7 Packs)", "hub_open", "success", icon="settings")])
+        btns.append([style_btn("\U0001F504 Update Bot from GitHub", "adm_updatebot", "primary", icon=5409271925014801629)])
         
     r1 = []
     if is_super_admin(uid) or has_perm(uid, 'p_add_stock'):

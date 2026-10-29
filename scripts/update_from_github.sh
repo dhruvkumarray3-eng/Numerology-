@@ -10,6 +10,10 @@
 # when it was created.  That is why the bot kept booting with an old BUILD tag
 # even though main had newer commits.
 #
+# This script downloads the WHOLE branch tarball and copies every .py file.
+# (The old version used a hand-written FILES list, so any file that was not on
+# the list - e.g. plugins/__init__.py - silently stayed stale.  That is gone.)
+#
 # HOW TO USE
 # ----------
 # Open the panel's "Console" / "Shell" tab and run:
@@ -23,22 +27,7 @@ set -uo pipefail
 REPO="${REPO:-dhruvkumarray3-eng/Numerology-}"
 BRANCH="${BRANCH:-main}"
 DEST="${DEST:-/home/container}"
-
-FILES=(
-  "main.py"
-  "config.py"
-  "database.py"
-  "requirements.txt"
-  "plugins/admin_actions.py"
-  "plugins/deposit.py"
-  "utils/imap_verifier.py"
-  "utils/runtime_config.py"
-  "utils/keyboards.py"
-  "utils/markup.py"
-  "utils/i18n.py"
-  "utils/levels.py"
-  "utils/smm_client.py"
-)
+TARBALL="https://codeload.github.com/$REPO/tar.gz/refs/heads/$BRANCH"
 
 cd "$DEST" || { echo "!! cannot cd to $DEST"; exit 1; }
 
@@ -51,21 +40,31 @@ if [ -d .git ] && command -v git >/dev/null 2>&1; then
   git fetch --all --prune || true
   git reset --hard "origin/$BRANCH" || git pull --ff-only || true
 else
-  echo "-> no git repo, downloading files from raw.githubusercontent.com"
+  echo "-> no git repo, downloading the full branch tarball"
+  TMP="$(mktemp -d)" || exit 1
+  if ! curl -fsSL "$TARBALL" -o "$TMP/repo.tar.gz"; then
+    echo "!! download failed - check the container's internet access"
+    rm -rf "$TMP"; exit 1
+  fi
+  tar -xzf "$TMP/repo.tar.gz" -C "$TMP" || { echo "!! extract failed"; rm -rf "$TMP"; exit 1; }
+  SRC="$(find "$TMP" -maxdepth 1 -mindepth 1 -type d | head -n1)"
+  echo "-> source: $SRC"
+
   ok=0
-  for f in "${FILES[@]}"; do
-    mkdir -p "$(dirname "$f")"
-    url="https://raw.githubusercontent.com/$REPO/$BRANCH/$f"
-    if curl -fsSL "$url" -o "$f.tmp"; then
-      mv "$f.tmp" "$f"
-      echo "   ok  $f"
+  while IFS= read -r -d '' f; do
+    rel="${f#"$SRC"/}"
+    case "$rel" in
+      *.py|*.sh|*.txt|*.json) ;;
+      *) continue ;;
+    esac
+    mkdir -p "$(dirname "$rel")"
+    if cp -f "$f" "$rel"; then
       ok=$((ok + 1))
-    else
-      rm -f "$f.tmp"
-      echo "   !!  $f (download failed)"
     fi
-  done
-  echo "-> $ok/${#FILES[@]} files updated"
+  done < <(find "$SRC" -type f -print0)
+
+  rm -rf "$TMP"
+  echo "-> $ok code files copied (database, session and .env untouched)"
 fi
 
 echo
