@@ -41,6 +41,9 @@ async def start_health_server():
     """
     Starts lightweight aiohttp web server on PORT (default 8080 or env PORT).
     Designed specifically for Render, Railway, Heroku and UptimeRobot pings.
+
+    Never raises: if the preferred port is taken the next one is tried, and a
+    total failure is only logged.  A health-check problem must not stop the bot.
     """
     port_str = os.environ.get(
         "BOT_HEALTH_PORT",
@@ -48,19 +51,40 @@ async def start_health_server():
     )
     try:
         port = int(port_str)
-    except ValueError:
+    except (TypeError, ValueError):
         port = 8080
 
     host = "0.0.0.0"
     app = create_health_app()
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, host, port)
+    runner = web.AppRunner(app, handle_signals=False)
 
     try:
-        await site.start()
-        logger.info(f"🌐 Health server started on http://{host}:{port} (Supports GET & HEAD)")
-    except Exception as e:
-        logger.error(f"⚠️ Could not bind health server on port {port}: {e}")
+        await runner.setup()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error(f"\u26a0\ufe0f Health server setup failed: {e}")
+        return None
 
-    return runner
+    # Try the requested port, then a few nearby ones.  A busy port (common on
+    # shared hosts that already run a proxy) used to leave the app with no
+    # health endpoint at all, so the platform marked it unhealthy.
+    candidates = [port] + [p for p in (8080, 8000, 8888, 5000, 3000) if p != port]
+    for candidate in candidates:
+        try:
+            site = web.TCPSite(runner, host, candidate)
+            await site.start()
+            logger.info(
+                f"\U0001F310 Health server started on http://{host}:{candidate} "
+                "(Supports GET & HEAD)"
+            )
+            return runner
+        except OSError as e:
+            logger.warning(f"Port {candidate} unavailable ({e}); trying next...")
+        except Exception as e:  # pragma: no cover - defensive
+            logger.error(f"\u26a0\ufe0f Could not bind health server on port {candidate}: {e}")
+
+    logger.error("\u26a0\ufe0f Health server could not bind any port \u2014 bot continues without it.")
+    try:
+        await runner.cleanup()
+    except Exception:
+        pass
+    return None

@@ -1,10 +1,35 @@
-import os
+"""Numbott entrypoint — crash-proof supervisor.
+
+The bot must NEVER take the whole container down.  Historically a single
+transient failure (a dropped MTProto connection, a `CancelledError` raised by
+asyncio, a stale/corrupt session file, a locked SQLite database) escaped
+`main()` and killed the process, which the host showed as
+"The app crashed on an unhandled error".
+
+Three layers of protection now exist:
+
+1. ``bot.start()`` retries with exponential backoff instead of re-raising.
+2. The reconnect loop catches ``BaseException`` (``asyncio.CancelledError``
+   inherits from ``BaseException``, not ``Exception`` — that was the original
+   crash), so a cancelled task can no longer kill the process.
+3. ``_supervise()`` wraps ``asyncio.run(main())`` in a forever loop, so even
+   an unforeseen error only causes a short pause and a restart.
+
+Only a real ``SIGINT``/``SIGTERM`` (or Ctrl+C) stops the bot.
+"""
 import asyncio
 import logging
+import os
+import sys
+import time
+
 from config import BOT_TOKEN, API_ID, API_HASH, ADMIN_ID, bot
 
 # Logging Configuration
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
 logger = logging.getLogger(__name__)
 
 os.makedirs("sessions", exist_ok=True)
@@ -15,46 +40,109 @@ from utils.health import start_health_server
 from utils.helpers import set_bot_instance
 from database import apply_official_links_migration
 
+# How long to wait between restart attempts (seconds, capped).
+_RESTART_DELAY = 5
+_MAX_RESTART_DELAY = 60
 
-def validate_runtime_config():
-    """Ensure all required environment variables are present before booting."""
+
+def validate_runtime_config() -> bool:
+    """Check required environment variables before booting.
+
+    Returns ``True`` when everything needed is present.  A missing variable is
+    reported as one clear, readable line instead of a raw traceback.
+    """
     missing = []
     if API_ID <= 0:
         missing.append("API_ID")
-    if not API_HASH.strip():
+    if not str(API_HASH or "").strip():
         missing.append("API_HASH")
-    if not BOT_TOKEN.strip():
+    if not str(BOT_TOKEN or "").strip():
         missing.append("BOT_TOKEN")
     if ADMIN_ID <= 0:
         missing.append("ADMIN_ID")
 
     if missing:
-        names = ", ".join(missing)
-        raise RuntimeError(
-            f"Missing required environment variable(s): {names}. "
-            "Copy .env.sample to .env locally or configure them in your deployment service."
+        logger.critical(
+            "\u274c Missing required environment variable(s): %s. "
+            "Add them in your host's Variables/Environment tab "
+            "(copy .env.sample for the full list).",
+            ", ".join(missing),
         )
+        return False
+    return True
 
 
-# ---------------------------------------------------------
-# MAIN BOT ASYNC LOOP
-# ---------------------------------------------------------
+def _reset_broken_session() -> None:
+    """Delete a corrupt/unreadable Telethon session file.
+
+    A half-written or permission-broken ``*.session`` SQLite file makes
+    Telethon raise ``sqlite3.DatabaseError`` on every connect attempt.  Since
+    the bot logs in with ``bot_token`` every time, throwing the file away is
+    always safe.
+    """
+    for name in ("bot_session.session", "bot_session.session-journal"):
+        try:
+            if os.path.exists(name):
+                os.remove(name)
+                logger.warning("\u267b\ufe0f Removed unusable session file: %s", name)
+        except OSError as exc:
+            logger.warning("Could not remove %s: %s", name, exc)
+
+
+async def _connect_with_retry() -> bool:
+    """Log in to Telegram, retrying forever instead of crashing.
+
+    A wrong token / blocked network is retried with a capped backoff so the
+    container stays alive (and the health endpoint keeps answering) while the
+    owner fixes the variable, rather than dying with a traceback.
+    """
+    delay = _RESTART_DELAY
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            await bot.start(bot_token=BOT_TOKEN)
+            logger.info("\u2705 Telegram login successful (attempt %d).", attempt)
+            return True
+        except asyncio.CancelledError:
+            raise
+        except BaseException as exc:  # noqa: BLE001 - never let login crash us
+            name = type(exc).__name__
+            hint = ""
+            if "IncompleteRead" in name or "Connection" in name or "Timeout" in name:
+                hint = " (network/MTProto issue — will retry)"
+            elif "AuthKey" in name or "Unauthorized" in name or "ApiId" in name:
+                hint = " (check BOT_TOKEN / API_ID / API_HASH)"
+            logger.error(
+                "\u26a0\ufe0f Telegram login failed [%s]: %s%s. Retrying in %ds...",
+                name, exc, hint, delay,
+            )
+            if "Database" in name or "sqlite" in str(exc).lower():
+                _reset_broken_session()
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, _MAX_RESTART_DELAY)
+
+
 async def main():
     # 1. Health server start (used by Railway/Render health checks)
     try:
         await start_health_server()
-        logger.info("✅ Health server started successfully.")
-    except Exception as e:
-        logger.error(f"⚠️ Health server startup failed: {e}")
+        logger.info("\u2705 Health server started successfully.")
+    except asyncio.CancelledError:
+        raise
+    except BaseException as e:  # noqa: BLE001
+        logger.error("\u26a0\ufe0f Health server startup failed: %s", e)
 
     # 2. Enable HTML parse mode for Custom/Premium Emojis & Formatting
-    bot.parse_mode = 'html'
+    bot.parse_mode = "html"
 
     # 3. Align support / owner / logger / force-join links with config.py
     try:
         apply_official_links_migration()
-    except Exception as e:
-        logger.warning(f"\u26a0\ufe0f Link migration failed: {e}")
+    except asyncio.CancelledError:
+        raise
+    except BaseException as e:  # noqa: BLE001
+        logger.warning("\u26a0\ufe0f Link migration failed: %s", e)
 
     # 4. Register all plugin handlers (start, buy, admin, callbacks, etc.)
     set_bot_instance(bot)  # lets background tasks (OTP poller) send messages
@@ -66,22 +154,17 @@ async def main():
                 "The bot will still start with the remaining features.",
                 ", ".join(summary["failed"]),
             )
-    except Exception as e:
-        # A loader bug must never take the whole bot down.
-        logger.exception(f"\u26a0\ufe0f Handler registration crashed: {e}. Continuing startup...")
-
-    # 5. Bot Connect & Start
-    try:
-        await bot.start(bot_token=BOT_TOKEN)
-    except Exception as e:
-        logger.error(
-            "\u274c Telegram login failed: %s: %s. "
-            "Check BOT_TOKEN / API_ID / API_HASH in your host variables.",
-            type(e).__name__, e,
-        )
+    except asyncio.CancelledError:
         raise
+    except BaseException as e:  # noqa: BLE001
+        # A loader bug must never take the whole bot down.
+        logger.exception("\u26a0\ufe0f Handler registration crashed: %s. Continuing startup...", e)
+
+    # 5. Bot Connect & Start (retries forever — never raises)
+    await _connect_with_retry()
+
     print("==================================================", flush=True)
-    print("🚀 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!", flush=True)
+    print("\U0001F680 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!", flush=True)
     print("==================================================", flush=True)
 
     # 6. LZT self-check (non-fatal).
@@ -102,23 +185,61 @@ async def main():
             plain = msg.replace("<b>", "").replace("</b>", "").replace(
                 "<i>", "").replace("</i>", "").replace("<code>", "").replace("</code>", "")
             if ok:
-                logger.info(f"LZT self-check OK: {plain}")
+                logger.info("LZT self-check OK: %s", plain)
             else:
-                logger.error(f"LZT self-check FAILED: {plain}")
-    except Exception as e:
-        logger.warning(f"LZT self-check skipped: {e}")
+                logger.error("LZT self-check FAILED: %s", plain)
+    except asyncio.CancelledError:
+        raise
+    except BaseException as e:  # noqa: BLE001
+        logger.warning("LZT self-check skipped: %s", e)
 
     # 7. Reconnection Loop
+    #    `except Exception` was NOT enough: asyncio.CancelledError derives from
+    #    BaseException, escaped this loop and killed the process.
     while True:
         try:
             if not bot.is_connected():
                 await bot.connect()
             await bot.run_until_disconnected()
-        except Exception as err:
-            logger.error(f"⚠️ Numbott disconnected: {err}. Reconnecting in 5s...")
-            await asyncio.sleep(5)
+            logger.warning("\u26a0\ufe0f Disconnected cleanly. Reconnecting in 5s...")
+        except asyncio.CancelledError:
+            # Raised during shutdown (SIGTERM / Ctrl+C) — let it propagate.
+            raise
+        except BaseException as err:  # noqa: BLE001 - the crash fix
+            logger.error(
+                "\u26a0\ufe0f Numbott disconnected [%s]: %s. Reconnecting in 5s...",
+                type(err).__name__, err,
+            )
+        await asyncio.sleep(5)
 
 
-if __name__ == '__main__':
-    validate_runtime_config()
-    asyncio.run(main())
+def _supervise() -> None:
+    """Run ``main()`` forever, restarting after any unexpected failure."""
+    delay = _RESTART_DELAY
+    while True:
+        try:
+            asyncio.run(main())
+            # main() only returns if the loop somehow exits.
+            logger.warning("\u26a0\ufe0f main() exited unexpectedly. Restarting in %ds...", delay)
+        except KeyboardInterrupt:
+            logger.info("\U0001F44B Shutdown requested (Ctrl+C). Bye.")
+            return
+        except SystemExit:
+            raise
+        except BaseException as exc:  # noqa: BLE001 - last line of defence
+            logger.exception(
+                "\u274c Unhandled error in main loop [%s]: %s. Restarting in %ds...",
+                type(exc).__name__, exc, delay,
+            )
+        time.sleep(delay)
+        delay = min(delay * 2, _MAX_RESTART_DELAY)
+
+
+if __name__ == "__main__":
+    if not validate_runtime_config():
+        # Exit cleanly with a readable reason (no traceback in the host logs).
+        sys.exit(1)
+    try:
+        _supervise()
+    except KeyboardInterrupt:
+        pass

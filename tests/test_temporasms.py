@@ -16,6 +16,8 @@ os.environ.setdefault("API_ID", "12345")
 os.environ.setdefault("API_HASH", "test-hash")
 os.environ.setdefault("BOT_TOKEN", "123:test")
 os.environ.setdefault("ADMIN_ID", "1")
+os.environ.setdefault("TEMPORASMS_API_KEY", "test-key")
+os.environ.setdefault("TEMPORASMS_BASE_URL", "https://api.temporasms.com")
 
 from utils import temporasms as T
 

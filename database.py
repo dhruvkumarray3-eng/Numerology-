@@ -4,9 +4,47 @@ import math
 from config import ADMIN_ID, SUPER_ADMINS, SUPPORT_URL, is_super_admin, logger
 
 # Initialize DB
+# ---------------------------------------------------------------------------
+# The database must never be able to crash the boot.  A read-only volume, a
+# corrupt file or a filesystem that rejects WAL (some container overlays do)
+# used to raise straight out of this import and kill the process before any
+# logging existed.  We now fall back gracefully instead.
+# ---------------------------------------------------------------------------
 db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "otp_bot_final.db")
-db = sqlite3.connect(db_path, check_same_thread=False, timeout=20)
-db.execute("PRAGMA journal_mode=WAL;")
+
+
+def _open_db(path: str) -> sqlite3.Connection:
+    """Open ``path``, falling back to a writable temp file if needed."""
+    conn = sqlite3.connect(path, check_same_thread=False, timeout=20)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+    except sqlite3.Error:
+        # WAL is an optimisation, not a requirement.
+        try:
+            conn.execute("PRAGMA journal_mode=DELETE;")
+        except sqlite3.Error:
+            pass
+    try:
+        conn.execute("PRAGMA busy_timeout=20000;")
+    except sqlite3.Error:
+        pass
+    return conn
+
+
+try:
+    db = _open_db(db_path)
+except (sqlite3.Error, OSError) as exc:
+    import tempfile
+
+    fallback = os.path.join(tempfile.gettempdir(), "otp_bot_final.db")
+    logger.error(
+        "\u26a0\ufe0f Could not open %s (%s). Falling back to %s \u2014 data will "
+        "not survive a restart; check the volume permissions.",
+        db_path, exc, fallback,
+    )
+    db_path = fallback
+    db = _open_db(fallback)
+
 cur = db.cursor()
 
 def setup_db():

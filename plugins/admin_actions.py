@@ -1511,8 +1511,30 @@ async def admin_actions(event):
         except Exception as e: await conv.send_message(f"{P_NO} Error: {e}")
 
 def register_admin_actions(bot):
+    # ------------------------------------------------------------------
+    # Collision guard.
+    #
+    # This module listens on a broad ``^adm_`` pattern so that every admin
+    # button in the panel has a home.  Telethon dispatches an update to
+    # *every* matching handler, so the catch-all also ran for buttons that
+    # another plugin already owns (``adm_tempmail``, ``adm_catalogs``,
+    # ``adm_catalog_*``).  The owner's panel opened, then this module's
+    # safety net immediately overwrote it with
+    # "Unknown action. This button belongs to an older version of the panel."
+    #
+    # Those payloads are now skipped here and left to their real handler.
+    # ------------------------------------------------------------------
+    from utils.admin_routing import is_owned_elsewhere
+
     @bot.on(events.CallbackQuery(pattern=r"^adm_"))
     async def cb_admin_actions(e):
+        # Telethon dispatches to EVERY matching handler, so this catch-all
+        # must not touch payloads owned by plugins/admin.py or
+        # plugins/admin_catalogs.py -- otherwise their panel is overwritten
+        # by the "older version of the panel" fallback.  See
+        # utils/admin_routing.py for the list and the full explanation.
+        if is_owned_elsewhere(e.data):
+            return
         if is_admin(e.sender_id):
             await admin_actions(e)
 

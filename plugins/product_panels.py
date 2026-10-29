@@ -564,7 +564,7 @@ async def show_panel_hub(event):
         [style_btn("🆘 Help", b"pp_help", "primary", icon="help")],
         [style_btn("🔙 Back", b"dashboard_main", "danger", icon="back")],
     ]
-    status = (pe("check", chr(0x2705)) + " Live") if temporasms.configured() else (pe("warning", chr(0x26A0) + chr(0xFE0F)) + " TEMPORASMS_API_KEY missing")
+    status = (pe("check", chr(0x2705)) + " Live") if temporasms.configured() else (pe("warning", chr(0x26A0) + chr(0xFE0F)) + " OTP key missing (Admin → 🔐 OTP / SMS Key)")
     brand = pe("crown", "💚")
     i_apps = pe("apps", "📱")
     i_globe = pe("globe", "🌍")
@@ -678,7 +678,7 @@ async def show_allotp_hub(event, page=1, query=None):
     ])
     btns.append([style_btn("\U0001F519 Back", b"pp_hub", "danger", icon=6129812419028982717)])
 
-    status = (pe("check", chr(0x2705)) + " Live") if temporasms.configured() else (pe("warning", chr(0x26A0) + chr(0xFE0F)) + " TEMPORASMS_API_KEY missing")
+    status = (pe("check", chr(0x2705)) + " Live") if temporasms.configured() else (pe("warning", chr(0x26A0) + chr(0xFE0F)) + " OTP key missing (Admin → 🔐 OTP / SMS Key)")
     search_line = f"\n{pe('find', chr(0x1F50E))} Filter: <b>{html.escape(query)}</b>" if query else ""
     i_apps = pe("apps", chr(0x1F4F1))
     i_globe = pe("globe", chr(0x1F30D))
