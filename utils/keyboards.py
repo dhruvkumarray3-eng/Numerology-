@@ -162,7 +162,7 @@ def get_persistent_menu(uid):
     from database import is_admin
     from telethon import Button
     buttons = [
-        [Button.text("🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ", resize=True, style="success", icon=5841670626577748398), Button.text("💳 𝐃ᴇᴘᴏsɪᴛ", style="primary", icon=5409271925014801629)],
+        [Button.text("🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ", resize=True, persistent=True, style="success", icon=5841670626577748398), Button.text("💳 𝐃ᴇᴘᴏsɪᴛ", style="primary", icon=5409271925014801629)],
         [Button.text("👤 𝐏ʀᴏғɪʟᴇ", style="primary", icon=6203982793379154737), Button.text("📦 𝐌ʏ 𝐎ʀᴅᴇʀs", style="primary", icon=5409098988156629257)],
         [Button.text("💰 𝐁ᴀʟᴀɴᴄᴇ", style="success", icon=5409320020058584473), Button.text("📊 𝐒ᴛᴏᴄᴋ", style="primary", icon=6129627894349045589)],
         [Button.text("🎁 𝐑ᴇғᴇʀ", style="success", icon=5354889508674360491), Button.text("📩 𝐒ᴜᴘᴘᴏʀᴛ", style="primary", icon=6129732880529628243)],
@@ -187,16 +187,6 @@ def get_support_buttons():
     if urls:
         buttons.append([Button.url("📢 Channel", urls[0])])
     return buttons
-
-def get_keypad():
-    return [
-        [style_btn("1", b"kp_1", style_type="primary", icon=6064275556008989746), style_btn("2", b"kp_2", style_type="primary", icon=5409337058193847247), style_btn("3", b"kp_3", style_type="primary", icon=5355292788923593967)],
-        [style_btn("4", b"kp_4", style_type="primary", icon=5409320020058584473), style_btn("5", b"kp_5", style_type="primary", icon=6064310143380625195), style_btn("6", b"kp_6", style_type="primary", icon=6129399728506412489)],
-        [style_btn("7", b"kp_7", style_type="primary", icon=6129779562529168023), style_btn("8", b"kp_8", style_type="primary", icon=6154249597532248059), style_btn("9", b"kp_9", style_type="primary", icon=6129812419028982717)],
-        [style_btn("Del", b"kp_del", style_type="danger", icon=6129731974291527294), style_btn("0", b"kp_0", style_type="primary", icon=6203982793379154737), style_btn("Confirm", b"kp_done", style_type="success", icon=6129399728506412489)],
-        [style_btn("𝐂ᴀɴᴄᴇʟ", b"cancel_action", style_type="danger", icon=6064310143380625195)]
-    ]
-
 
 # ---------------------------------------------------------------------------
 # Stylised-text matching
