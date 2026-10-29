@@ -1,6 +1,6 @@
 from telethon import Button
 from telethon.tl.types import ReplyKeyboardMarkup, KeyboardButtonRow, KeyboardButton, KeyboardButtonStyle
-from config import TERMS_URL, JOIN_URLS, USE_PREMIUM_EMOJIS
+from config import TERMS_URL, PRIVACY_URL, JOIN_URLS, USE_PREMIUM_EMOJIS
 from database import is_admin, get_support_url, get_fsub_urls
 
 # Owner-supplied premium emoji id used on EVERY Search button in the bot.
@@ -177,10 +177,13 @@ def get_support_buttons():
     urls = get_fsub_urls()
     sup_url = get_support_url()
     t_url = TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else sup_url
+    p_url = PRIVACY_URL if (PRIVACY_URL and str(PRIVACY_URL).strip().startswith("http")) else None
     buttons = [
         [Button.url("📩 Support", sup_url)],
         [Button.url("📜 Terms & Conditions", t_url)]
     ]
+    if p_url:
+        buttons.append([Button.url("🔒 Privacy Policy", p_url)])
     if urls:
         buttons.append([Button.url("📢 Channel", urls[0])])
     return buttons
