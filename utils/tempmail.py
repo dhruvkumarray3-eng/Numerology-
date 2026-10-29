@@ -231,6 +231,25 @@ async def create_email(domain: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
+async def get_alias(email: str) -> str:
+    """Return the forwarding alias for ``email`` ('' when unavailable).
+
+    Grabmail gives every mailbox a second address on a different domain that
+    delivers to the same inbox.  Handy when a signup form rejects the public
+    domain but accepts the alias domain.
+    """
+    if not email:
+        return ""
+    try:
+        data = await _request(
+            "GET", "/mailbox", params={"address": email, "limit": 1}
+        )
+        return str(data.get("alias") or "")
+    except Exception as exc:  # noqa: BLE001 - alias is best-effort
+        logger.debug(f"grabmail alias lookup failed: {exc}")
+        return ""
+
+
 def _normalise_message(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Map Grabmail's field names into one stable shape."""
     if not isinstance(raw, dict):

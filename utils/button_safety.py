@@ -51,6 +51,44 @@ def normalise_buttons(buttons):
     return rows or None
 
 
+def sanitize_text(text):
+    """Remove lone UTF-16 surrogates that crash ``.encode('utf-8')``.
+
+    A literal ``"\\ud83d\\udcac"`` in source is *two* lone surrogates, not the
+    emoji U+1F4AC.  Telethon then dies with::
+
+        UnicodeEncodeError: 'utf-8' codec can't encode characters in
+        position 2-3: surrogates not allowed
+
+    ``encode('utf-8', 'ignore')`` drops the unpaired code units while leaving
+    every valid character (including real astral emoji) untouched.
+    """
+    if not isinstance(text, str):
+        return text
+    try:
+        text.encode("utf-8")
+        return text
+    except UnicodeEncodeError:
+        return text.encode("utf-8", "ignore").decode("utf-8", "ignore")
+
+
+def sanitize_buttons(buttons):
+    """Sanitize the visible text of every button in a normalised structure."""
+    if not buttons:
+        return buttons
+    for row in buttons:
+        if not isinstance(row, (list, tuple)):
+            row = [row]
+        for btn in row:
+            label = getattr(btn, "text", None)
+            if isinstance(label, str):
+                try:
+                    btn.text = sanitize_text(label)
+                except Exception:
+                    pass
+    return buttons
+
+
 def install_button_safety(bot):
     """Wrap ``bot.build_reply_markup`` so bad button shapes can never raise.
 
@@ -134,6 +172,22 @@ def install_edit_safety(bot, event_cls=None):
         except MessageNotModifiedError:
             # Preserve the original contract: callers may catch this.
             raise
+        except UnicodeEncodeError:
+            # Lone surrogates in the text or in a button label.  Strip them
+            # and retry once so the panel still renders instead of dying.
+            new_args = tuple(sanitize_text(a) for a in args)
+            for key in ("text", "message", "caption"):
+                if key in kwargs:
+                    kwargs[key] = sanitize_text(kwargs[key])
+            if kwargs.get("buttons"):
+                kwargs["buttons"] = sanitize_buttons(
+                    normalise_buttons(kwargs["buttons"])
+                )
+            try:
+                return await original(self, *new_args, **kwargs)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(f"\u26a0\ufe0f retry after unicode error failed: {exc}")
+                return None
         except (MediaCaptionTooLongError, MessageTooLongError) as exc:
             text = kwargs.get("text", kwargs.get("message"))
             if text is None and args:
@@ -228,4 +282,47 @@ def install_callback_safety(bot):
     logger.info(
         "\u2705 Callback safety net installed (duplicate/stale answers ignored)."
     )
+    return bot
+
+
+def install_text_safety(bot):
+    """Sanitize every outgoing message/caption/button label at the client edge.
+
+    ``safe_edit`` covers callback edits, but plain ``respond``/``send_message``
+    and ``send_file`` captions bypass it.  Wrapping the three client methods
+    guarantees a lone surrogate can never reach Telegram from *any* code path.
+
+    Idempotent: calling it twice will not double-wrap.
+    """
+    if getattr(bot, "_text_safety_installed", False):
+        return bot
+
+    def _clean_args(args):
+        return tuple(sanitize_text(a) for a in args)
+
+    def _clean_kwargs(kwargs):
+        for key in ("text", "message", "caption"):
+            if key in kwargs:
+                kwargs[key] = sanitize_text(kwargs[key])
+        if kwargs.get("buttons"):
+            kwargs["buttons"] = sanitize_buttons(
+                normalise_buttons(kwargs["buttons"])
+            )
+        return kwargs
+
+    for name in ("send_message", "edit_message", "send_file"):
+        original = getattr(bot, name, None)
+        if original is None or getattr(original, "_text_safe", False):
+            continue
+
+        def _make(orig):
+            async def _wrapped(*args, **kwargs):
+                return await orig(*_clean_args(args), **_clean_kwargs(kwargs))
+            _wrapped._text_safe = True
+            return _wrapped
+
+        setattr(bot, name, _make(original))
+
+    bot._text_safety_installed = True
+    logger.info("\u2705 Text safety net installed (lone surrogates stripped).")
     return bot

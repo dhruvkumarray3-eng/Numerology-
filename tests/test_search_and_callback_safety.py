@@ -149,4 +149,58 @@ def test_country_score_ordering():
 
 def test_build_tag_bumped_for_search():
     src = open(os.path.join(REPO, "main.py"), encoding="utf-8").read()
-    assert "2026-10-29-fast-search-v5" in src
+    assert "BUILD_TAG" in src and "2026-10-29" in src
+
+
+def test_sanitize_text_strips_lone_surrogates():
+    from utils.button_safety import sanitize_text
+    # Two lone surrogates, exactly the shape that crashed cb_all_apps.
+    broken = chr(0xD83D) + chr(0xDCAC) + " hello"
+    fixed = sanitize_text(broken)
+    assert "hello" in fixed
+    fixed.encode("utf-8")  # must not raise
+    # Valid emoji and text must pass through untouched.
+    assert sanitize_text("\U0001F4AC hi") == "\U0001F4AC hi"
+
+
+def test_sanitize_buttons_cleans_labels():
+    from utils.button_safety import sanitize_buttons
+
+    class Btn:
+        def __init__(self, text):
+            self.text = text
+
+    btns = [[Btn(chr(0xD83D) + chr(0xDCAC) + " WhatsApp")], [Btn("plain")]]
+    sanitize_buttons(btns)
+    for row in btns:
+        for b in row:
+            b.text.encode("utf-8")  # must not raise
+
+
+def test_install_text_safety_wraps_client():
+    import asyncio
+    from utils.button_safety import install_text_safety
+
+    class FakeClient:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, entity, message=None, **kw):
+            self.sent.append(message)
+            return message
+
+        async def edit_message(self, entity, message=None, text=None, **kw):
+            self.sent.append(text)
+            return text
+
+        async def send_file(self, entity, file=None, caption=None, **kw):
+            self.sent.append(caption)
+            return caption
+
+    c = FakeClient()
+    install_text_safety(c)
+    asyncio.run(c.send_message(1, chr(0xD83D) + chr(0xDCAC) + " broken"))
+    assert c.sent[-1].encode("utf-8") is not None
+    # idempotent
+    install_text_safety(c)
+    assert c._text_safety_installed is True

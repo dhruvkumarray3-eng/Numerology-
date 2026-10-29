@@ -46,17 +46,17 @@ APP_SERVICE_MAP = {
 
 APP_CATALOG = [
     ("telegram", "\u2708\ufe0f Telegram"),
-    ("whatsapp", "\ud83d\udcac WhatsApp"),
-    ("instagram", "\ud83d\udcf8 Instagram"),
-    ("facebook", "\ud83d\udcd8 Facebook"),
-    ("twitter", "\ud83d\udc26 Twitter / X"),
-    ("tiktok", "\ud83c\udfb5 TikTok"),
-    ("google", "\ud83d\udd0d Google"),
-    ("discord", "\ud83c\udfae Discord"),
-    ("uber", "\ud83d\ude97 Uber"),
-    ("amazon", "\ud83d\uded2 Amazon"),
-    ("netflix", "\ud83c\udfac Netflix"),
-    ("paypal", "\ud83d\udcb3 PayPal"),
+    ("whatsapp", "\U0001F4AC WhatsApp"),
+    ("instagram", "\U0001F4F8 Instagram"),
+    ("facebook", "\U0001F4D8 Facebook"),
+    ("twitter", "\U0001F426 Twitter / X"),
+    ("tiktok", "\U0001F3B5 TikTok"),
+    ("google", "\U0001F50D Google"),
+    ("discord", "\U0001F3AE Discord"),
+    ("uber", "\U0001F697 Uber"),
+    ("amazon", "\U0001F6D2 Amazon"),
+    ("netflix", "\U0001F3AC Netflix"),
+    ("paypal", "\U0001F4B3 PayPal"),
 ]
 
 # Hard ceiling for any single provider round-trip.  Telegram handlers must
