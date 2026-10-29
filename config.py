@@ -71,13 +71,26 @@ API_ID = env_int("API_ID", 0)
 API_HASH = os.getenv("API_HASH", "").strip()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 
+# NOTE: this module is imported by every plugin, so it must never raise at
+# import time — a RuntimeError here produced a raw traceback in the host logs
+# ("The app crashed on an unhandled error") before main.py could print a
+# readable message.  main.py's validate_runtime_config() performs the real
+# check and exits cleanly with a friendly explanation.
 if API_ID <= 0 or not API_HASH.strip():
-    raise RuntimeError(
-        "Missing required Telegram configuration: set API_ID and API_HASH "
-        "before starting the bot."
+    logging.getLogger(__name__).critical(
+        "\u274c API_ID / API_HASH are missing. Set them in your host's "
+        "Variables tab before the bot can connect to Telegram."
     )
+    # Telethon needs a positive int + non-empty hash to build the client, so
+    # use inert placeholders.  The bot will simply never log in, and main.py
+    # stops with a clear message instead of a traceback.
+    _API_ID_FALLBACK = API_ID if API_ID > 0 else 1
+    _API_HASH_FALLBACK = API_HASH or "0" * 32
+else:
+    _API_ID_FALLBACK = API_ID
+    _API_HASH_FALLBACK = API_HASH
 
-bot = TelegramClient('bot_session', API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
+bot = TelegramClient('bot_session', _API_ID_FALLBACK, _API_HASH_FALLBACK, connection_retries=None, retry_delay=3, auto_reconnect=True)
 bot.parse_mode = 'html'
 
 ADMIN_ID = env_int("ADMIN_ID", env_int("SUPER_ADMIN_ID", env_int("OWNER_ID", 0)))
