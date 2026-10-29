@@ -888,7 +888,11 @@ def redeem_code_for_user(code, user_id):
         try:
             import datetime as _dt
             exp = _dt.datetime.fromisoformat(str(expires_at))
-            if _dt.datetime.utcnow() > exp:
+            # datetime.utcnow() is deprecated (3.12+) and warns on Python 3.14.
+            # Compare with an explicit UTC-aware value; treat naive as UTC.
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=_dt.timezone.utc)
+            if _dt.datetime.now(_dt.timezone.utc) > exp:
                 return False, "❌ This code has expired.", 0.0
         except Exception:
             pass

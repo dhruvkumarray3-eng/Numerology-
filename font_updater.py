@@ -23,19 +23,31 @@ def translate_str(text):
             res.append(char)
     return "".join(res)
 
+# Paths are resolved relative to this file so the script works on any host
+# (it used to hard-code /home/ubuntu/Numbott_Telethon and crash everywhere).
+# Run with --apply to actually rewrite files; without it this is a dry run.
+import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+APPLY = "--apply" in sys.argv
+
 files = [
-    '/home/ubuntu/Numbott_Telethon/utils/keyboards.py',
-    '/home/ubuntu/Numbott_Telethon/plugins/start.py',
-    '/home/ubuntu/Numbott_Telethon/plugins/profile.py',
-    '/home/ubuntu/Numbott_Telethon/plugins/deposit.py',
-    '/home/ubuntu/Numbott_Telethon/plugins/buy.py',
-    '/home/ubuntu/Numbott_Telethon/plugins/admin.py'
+    os.path.join(BASE_DIR, 'utils', 'keyboards.py'),
+    os.path.join(BASE_DIR, 'plugins', 'start.py'),
+    os.path.join(BASE_DIR, 'plugins', 'profile.py'),
+    os.path.join(BASE_DIR, 'plugins', 'deposit.py'),
+    os.path.join(BASE_DIR, 'plugins', 'buy.py'),
+    os.path.join(BASE_DIR, 'plugins', 'admin.py'),
 ]
 
 # We will apply translation to visible texts. We know they are inside f"..." or "..." and usually contain bold <b> tags or emojis.
 # A simpler regex approach to replace literal text in strings without breaking python code:
 
 for filepath in files:
+    if not os.path.exists(filepath):
+        print(f"skip (missing): {filepath}")
+        continue
+
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
 
@@ -76,7 +88,11 @@ for filepath in files:
     for p in phrases:
         content = content.replace(p, translate_str(p))
         
-    with open(filepath, 'w', encoding='utf-8') as f:
-        f.write(content)
+    if APPLY:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"updated: {filepath}")
+    else:
+        print(f"dry-run (use --apply to write): {filepath}")
 
-print("Font update complete.")
+print("Font update complete." if APPLY else "Dry run complete — nothing was written.")
