@@ -2,7 +2,11 @@ import random
 import asyncio
 import re
 from telethon import Button
-from telethon.errors import UserNotParticipantError, ChatAdminRequiredError
+from telethon.errors import (
+    UserNotParticipantError,
+    ChatAdminRequiredError,
+    MessageNotModifiedError,
+)
 from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl import types, functions
 from database import get_fsub_channels, get_fsub_urls, get_fsub_status
@@ -361,6 +365,82 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
             # even if the keyboard is somehow rejected.
             logger.error(f"send_preview_on_top send with buttons failed ({e3}); retrying without buttons")
             return await bot.send_message(peer, message, parse_mode='html', link_preview=True)
+
+
+async def safe_edit_or_resend(event, text, buttons=None, parse_mode="html", resend=True):
+    """Edit the callback message, but never die on Telegram's hard limits.
+
+    Why this exists
+    ---------------
+    The "join our channels" screen is sent as a **photo** message.  Telegram
+    caps *media captions* at **1024 characters**, while a normal text message
+    allows **4096**.  The Terms & Conditions text is longer than 1024 chars, so
+
+        await event.edit(terms_message, buttons=...)
+
+    raises ``telethon.errors.rpcerrorlist.MediaCaptionTooLongError`` on a photo
+    message.  The old code only caught ``MessageNotModifiedError``, so the
+    exception escaped the handler, the user stayed stuck on the join screen and
+    never reached the Terms buttons or the main menu.
+
+    Behaviour
+    ---------
+    1. Try a normal ``event.edit(...)``.
+    2. ``MessageNotModifiedError`` -> nothing to do, that's success.
+    3. Any other error (caption too long, media can't be edited, message too
+       old, ...) -> delete the old message and send the text as a **fresh
+       plain-text message**, which has the 4096-char budget.
+    4. If even that fails with the keyboard attached, retry without buttons so
+       the text itself always reaches the user.
+
+    Returns ``True`` when the text was delivered, ``False`` otherwise.  It never
+    raises, so a single bad edit can no longer kill a callback handler.
+    """
+    buttons = normalise_buttons(buttons)
+
+    try:
+        await event.edit(text, buttons=buttons, parse_mode=parse_mode)
+        return True
+    except MessageNotModifiedError:
+        # The message already shows exactly this text — that is success.
+        return True
+    except Exception as ex:
+        logger.warning(
+            f"safe_edit_or_resend: edit failed ({type(ex).__name__}: {ex}); "
+            f"falling back to delete + resend"
+        )
+
+    if not resend:
+        return False
+
+    # Remove the media message that cannot hold the long caption.
+    try:
+        await event.delete()
+    except Exception:
+        pass
+
+    client = getattr(event, "client", None)
+    chat_id = getattr(event, "chat_id", None) or getattr(event, "sender_id", None)
+    if client is None or chat_id is None:
+        logger.error("safe_edit_or_resend: no client/chat_id available for resend")
+        return False
+
+    try:
+        await client.send_message(
+            chat_id, text, buttons=buttons, parse_mode=parse_mode
+        )
+        return True
+    except Exception as e2:
+        logger.error(
+            f"safe_edit_or_resend: resend with buttons failed ({e2}); "
+            f"retrying without buttons"
+        )
+        try:
+            await client.send_message(chat_id, text, parse_mode=parse_mode)
+            return True
+        except Exception as e3:
+            logger.error(f"safe_edit_or_resend: resend failed entirely: {e3}")
+            return False
 
 
 # ---------------------------------------------------------
