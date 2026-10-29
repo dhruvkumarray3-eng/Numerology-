@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import math
+import threading
 from config import ADMIN_ID, SUPER_ADMINS, SUPPORT_URL, is_super_admin, logger
 
 # Initialize DB
@@ -32,7 +33,7 @@ def _open_db(path: str) -> sqlite3.Connection:
 
 
 try:
-    db = _open_db(db_path)
+    _raw_db = _open_db(db_path)
 except (sqlite3.Error, OSError) as exc:
     import tempfile
 
@@ -43,9 +44,92 @@ except (sqlite3.Error, OSError) as exc:
         db_path, exc, fallback,
     )
     db_path = fallback
-    db = _open_db(fallback)
+    _raw_db = _open_db(fallback)
 
-cur = db.cursor()
+
+# ---------------------------------------------------------------------------
+# Self-healing connection layer
+# ---------------------------------------------------------------------------
+# WHY: every plugin does ``from database import cur, db`` once at import time,
+# so it keeps a hard reference to whatever object existed then.  If anything
+# closes the underlying sqlite connection (a stray ``db.close()``, a module
+# reload, a volume remount, or a plugin that shadows ``cur`` via
+# ``from config import *``) every later query dies with
+# ``sqlite3.ProgrammingError: Cannot operate on a closed database`` -- which is
+# exactly what broke the UPI / Auto-UPI / IMAP admin screens.
+#
+# ``cur`` and ``db`` are therefore *proxies*: they always resolve to a live
+# connection, reopening the file transparently when needed.  Existing code
+# keeps working unchanged (``cur.execute(...).fetchone()``, ``cur.lastrowid``,
+# ``db.commit()`` ...) because every attribute is forwarded to the real object.
+# ---------------------------------------------------------------------------
+_db_lock = threading.RLock()
+_raw_cur = None
+_db_gen = 0          # bumped every time the connection is (re)opened
+_cur_gen = -1        # generation the cached cursor belongs to
+
+
+def _live_conn():
+    """Return a usable sqlite connection, reopening the file if it was closed."""
+    global _raw_db, _db_gen
+    with _db_lock:
+        if _raw_db is not None:
+            try:
+                _raw_db.execute("SELECT 1")
+                return _raw_db
+            except Exception:
+                pass  # closed / broken -> fall through and reopen
+        try:
+            _raw_db = _open_db(db_path)
+            _db_gen += 1
+            logger.warning("\u267b\ufe0f Database connection reopened (%s).", db_path)
+        except Exception as exc:  # pragma: no cover - disk level failure
+            logger.error("Database reopen failed: %s", exc)
+        return _raw_db
+
+
+def _live_cursor():
+    """Return a cursor bound to the live connection (cached per generation)."""
+    global _raw_cur, _cur_gen
+    conn = _live_conn()
+    with _db_lock:
+        if conn is None:  # pragma: no cover - nothing we can do
+            raise sqlite3.ProgrammingError("database unavailable")
+        if _raw_cur is None or _cur_gen != _db_gen:
+            _raw_cur = conn.cursor()
+            _cur_gen = _db_gen
+        return _raw_cur
+
+
+class _SafeCursor:
+    """Drop-in cursor proxy that never points at a closed connection."""
+
+    __slots__ = ()
+
+    def __getattr__(self, name):
+        return getattr(_live_cursor(), name)
+
+    def __iter__(self):
+        return iter(_live_cursor())
+
+    def __bool__(self):
+        return True
+
+
+class _SafeConnection:
+    """Drop-in connection proxy that never points at a closed connection."""
+
+    __slots__ = ()
+
+    def __getattr__(self, name):
+        return getattr(_live_conn(), name)
+
+    def __bool__(self):
+        return True
+
+
+cur = _SafeCursor()
+db = _SafeConnection()
 
 def setup_db():
     cur.executescript("""

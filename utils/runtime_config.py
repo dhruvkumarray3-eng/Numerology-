@@ -48,14 +48,37 @@ EDITABLE_KEYS = frozenset({
     "temporasms_service_whatsapp",
     "temporasms_service_numchange",
     "temporasms_service_allotp",
+    # Auto-UPI / IMAP gateway
+    "deposit_mode",
+    "upi_id",
+    "gmail_user",
+    "gmail_pass",
+    "imap_host",
+    "imap_port",
 })
 
 
 def _db_path() -> str:
-    """Same resolution order the rest of the bot uses."""
+    """Resolve the SAME sqlite file the rest of the bot uses.
+
+    This used to guess between ``bot.db`` / ``database.db`` while
+    ``database.py`` used ``otp_bot_final.db``.  The result was two separate
+    ``settings`` tables: the admin panel wrote a key into one file and the
+    deposit / IMAP code read it from the other, so a saved UPI id or Gmail
+    password looked like it "did not work".  Always prefer the live path that
+    ``database`` already opened.
+    """
     env = os.getenv("DB_PATH", "").strip()
     if env:
         return env
+    try:
+        import database as _database
+
+        path = getattr(_database, "db_path", None)
+        if path:
+            return path
+    except Exception:
+        pass
     if os.path.exists("bot.db"):
         return "bot.db"
     if os.path.exists("database.db"):

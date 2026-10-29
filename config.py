@@ -358,16 +358,30 @@ def provider_status() -> dict:
     }
 
 # Fetch Dynamic Admin Profit Margin from SQLite Database (if present)
+# NOTE: every name here is prefixed with an underscore on purpose.  Plugins do
+# ``from config import *`` *after* ``from database import cur``; a public ``cur``
+# here used to overwrite the live database cursor with a cursor whose connection
+# had just been closed, which made every admin settings screen die with
+# "Cannot operate on a closed database".  Private names are not exported by
+# ``import *``, so that can never happen again.
 try:
-    db_path = "bot.db" if os.path.exists("bot.db") else "database.db"
-    if os.path.exists(db_path):
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-        db_margin = cur.execute("SELECT value FROM settings WHERE key='admin_profit_inr'").fetchone()
-        if db_margin and db_margin[0]:
-            ADMIN_PROFIT_INR = float(db_margin[0])
-        conn.close()
+    _cfg_db_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "otp_bot_final.db"
+    )
+    if os.path.exists(_cfg_db_path):
+        _cfg_conn = sqlite3.connect(_cfg_db_path, timeout=5)
+        try:
+            _cfg_cur = _cfg_conn.cursor()
+            _cfg_cur.execute(
+                "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)"
+            )
+            _cfg_row = _cfg_cur.execute(
+                "SELECT value FROM settings WHERE key='admin_profit_inr'"
+            ).fetchone()
+            if _cfg_row and _cfg_row[0]:
+                ADMIN_PROFIT_INR = float(_cfg_row[0])
+        finally:
+            _cfg_conn.close()
 except Exception as e:
     logger.warning(f"Could not load dynamic margin from DB: {e}")
 

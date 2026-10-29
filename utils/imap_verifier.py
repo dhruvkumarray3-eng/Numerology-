@@ -9,6 +9,32 @@ import asyncio
 from database import cur, db
 from config import logger
 
+def _setting(key):
+    """Read one key from the ``settings`` table, tolerating a broken DB.
+
+    Falls back to the runtime-config cache (same sqlite file) and finally to
+    the environment.  A closed/locked database must never make the Auto-UPI
+    gateway look "unconfigured" with a confusing crash.
+    """
+    try:
+        row = cur.execute(
+            "SELECT value FROM settings WHERE key=?", (key,)
+        ).fetchone()
+        if row and row[0] is not None and str(row[0]).strip():
+            return str(row[0]).strip()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("IMAP setting read failed (%s): %s", key, exc)
+    try:
+        from utils import runtime_config
+
+        value = runtime_config.get(key, "")
+        if value:
+            return value
+    except Exception:
+        pass
+    return ""
+
+
 def get_imap_credentials():
     """Return the Gmail IMAP login the owner configured in the Admin Panel.
 
@@ -20,11 +46,20 @@ def get_imap_credentials():
     Returns ``("", "")`` when nothing is configured; callers must treat that
     as "gateway not configured" instead of attempting a login.
     """
-    r_user = cur.execute("SELECT value FROM settings WHERE key='gmail_user'").fetchone()
-    r_pass = cur.execute("SELECT value FROM settings WHERE key='gmail_pass'").fetchone()
-    user = (r_user[0] if r_user and r_user[0] else "") or os.getenv("IMAP_USER", "")
-    pwd = (r_pass[0] if r_pass and r_pass[0] else "") or os.getenv("IMAP_PASS", "")
+    user = _setting("gmail_user") or os.getenv("IMAP_USER", "")
+    pwd = _setting("gmail_pass") or os.getenv("IMAP_PASS", "")
     return user.strip(), pwd.strip()
+
+
+def imap_status():
+    """Small helper for the admin panel: is the gateway usable?"""
+    user, pwd = get_imap_credentials()
+    return {
+        "configured": bool(user and pwd),
+        "user": user,
+        "host": _setting("imap_host") or "imap.gmail.com",
+        "port": _setting("imap_port") or "993",
+    }
 
 # Strict whitelist of official FamPay / Payment provider domains
 OFFICIAL_SENDER_DOMAINS = [

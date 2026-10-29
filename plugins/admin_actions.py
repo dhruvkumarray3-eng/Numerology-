@@ -1540,7 +1540,21 @@ def register_admin_actions(bot):
         if is_owned_elsewhere(e.data):
             return
         if is_admin(e.sender_id):
-            await admin_actions(e)
+            # Never let a handler exception bubble up to Telethon: an
+            # unhandled error leaves the admin staring at a spinner with no
+            # feedback at all.  Answer with something actionable instead.
+            try:
+                await admin_actions(e)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error(
+                    "admin action %r failed: %s", e.data, exc, exc_info=True
+                )
+                try:
+                    await e.answer(
+                        "\u26a0\ufe0f Action failed \u2014 please retry.", alert=True
+                    )
+                except Exception:
+                    pass
 
     @bot.on(events.NewMessage(pattern=r"^/setchangefee(?:\s+(\d+))?$"))
     async def cmd_set_change_fee(e):
