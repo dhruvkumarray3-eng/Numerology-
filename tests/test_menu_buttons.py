@@ -109,3 +109,60 @@ def test_send_preview_on_top_has_buttonless_last_resort():
     body = src.split("async def send_preview_on_top", 1)[1]
     assert "retrying without buttons" in body
     assert "return await bot.send_message(peer, message, parse_mode='html', link_preview=True)" in body
+
+
+# ---------------------------------------------------------------------------
+# Global safety net (utils/button_safety.py)
+# ---------------------------------------------------------------------------
+
+def test_button_safety_normalise_matches_helpers():
+    from utils.button_safety import normalise_buttons as ns
+    a, b = _Btn("a"), _Btn("b")
+    assert ns(None) is None
+    assert ns([a, b]) == [[a], [b]]
+    assert ns([[a, b]]) == [[a, b]]
+
+
+def test_button_safety_patches_real_telethon_client():
+    """A flat list must be repaired instead of raising TypeError."""
+    import os as _os
+    _os.environ.setdefault("BOT_TOKEN", "1:AAFake")
+    _os.environ.setdefault("API_ID", "1")
+    _os.environ.setdefault("API_HASH", "0" * 32)
+    _os.environ.setdefault("ADMIN_ID", "1")
+
+    from telethon import TelegramClient, Button
+    from utils.button_safety import install_button_safety
+
+    bot = TelegramClient(":memory:", 1, "0" * 32)
+    install_button_safety(bot)
+
+    flat = [Button.inline("A", b"a"), Button.inline("B", b"b")]
+    markup = bot.build_reply_markup(flat)
+    assert markup is not None
+    assert len(markup.rows) == 2
+    assert all(len(r.buttons) == 1 for r in markup.rows)
+
+    proper = [[Button.inline("A", b"a"), Button.inline("B", b"b")]]
+    m2 = bot.build_reply_markup(proper)
+    assert len(m2.rows) == 1 and len(m2.rows[0].buttons) == 2
+
+
+def test_button_safety_is_idempotent():
+    from telethon import TelegramClient
+    from utils.button_safety import install_button_safety
+
+    bot = TelegramClient(":memory:", 1, "0" * 32)
+    install_button_safety(bot)
+    first = bot.build_reply_markup
+    install_button_safety(bot)
+    assert bot.build_reply_markup is first
+
+
+def test_button_safety_installed_at_startup():
+    path = os.path.join(ROOT, "main.py")
+    with open(path, "r", encoding="utf-8") as fh:
+        src = fh.read()
+    assert "install_button_safety" in src, (
+        "main.py must install the button safety net at startup."
+    )

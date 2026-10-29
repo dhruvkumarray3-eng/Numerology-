@@ -32,6 +32,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Build marker printed on every boot.  Bump this whenever a fix is pushed so
+# the hosting console immediately shows whether the container is running the
+# latest code.  If the console still prints an older tag, the container has
+# not pulled the new files yet.
+BUILD_TAG = "2026-10-29-menu-buttons-v3"
+
 os.makedirs("sessions", exist_ok=True)
 
 # Plugins, Health Server & Utilities
@@ -136,6 +142,18 @@ async def main():
     # 2. Enable HTML parse mode for Custom/Premium Emojis & Formatting
     bot.parse_mode = "html"
 
+    # 2b. Install the global button safety net BEFORE any handler can run.
+    #     A single flat button list used to raise
+    #     "'KeyboardButtonCallback' object is not iterable" and silently kill
+    #     the main menu after terms acceptance.  This makes that impossible.
+    try:
+        from utils.button_safety import install_button_safety
+        install_button_safety(bot)
+    except asyncio.CancelledError:
+        raise
+    except BaseException as e:  # noqa: BLE001
+        logger.warning("\u26a0\ufe0f Button safety net could not be installed: %s", e)
+
     # 3. Align support / owner / logger / force-join links with config.py
     try:
         apply_official_links_migration()
@@ -165,6 +183,7 @@ async def main():
 
     print("==================================================", flush=True)
     print("\U0001F680 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!", flush=True)
+    print(f"\U0001F4E6 BUILD: {BUILD_TAG}", flush=True)
     print("==================================================", flush=True)
 
     # 6. LZT self-check (non-fatal).
