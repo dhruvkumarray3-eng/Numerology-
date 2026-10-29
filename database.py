@@ -439,17 +439,26 @@ def adjust_price_by_mode(base_val, mode):
         return base_val + 150
     return base_val
 
-def _apply_owner_margin(real_cost_inr):
+def _apply_owner_margin(real_cost_inr, mode=None):
     """Panel real cost (INR) -> owner's selling price (INR).
 
     Honours the unified profit engine:
       * percent mode  -> cost + N%
       * fixed mode    -> cost + fixed INR/USD amount
-    Falls back to the legacy per-item LZT margin if the engine is unavailable,
-    so pricing can never break.
+
+    When a ``mode`` (bulk / nonspam / numchange / spam) is supplied and the
+    owner enabled a per-server override for it, that server's rule wins.
+    Otherwise the LZT/global rule is used.  Falls back to the legacy per-item
+    LZT margin if the engine is unavailable, so pricing can never break.
     """
     try:
-        from utils.markup import apply_service_markup, get_service_config
+        from utils.markup import (
+            apply_service_markup, apply_server_markup, get_service_config,
+            is_service_override, server_target_for_mode,
+        )
+        srv_key = server_target_for_mode(mode) if mode else None
+        if srv_key and is_service_override(srv_key):
+            return apply_server_markup(real_cost_inr, mode)
         cfg = get_service_config("lzt")
         # Honour the configured mode even when the fixed amount is 0.
         if cfg.get("mode") in ("percent", "fixed"):
@@ -507,7 +516,7 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
         # apply an extra discount on top of the owner markup.
         rub_rate = get_rub_rate()
         inr_cost = lzt_price_rub * rub_rate
-        return max(int(round(_apply_owner_margin(inr_cost))), 15)
+        return max(int(round(_apply_owner_margin(inr_cost, mode))), 15)
 
     # 3. Check if admin has set explicit custom price in auto_prices table for this specific (country, year)
     row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (country, str(year))).fetchone()
@@ -530,7 +539,7 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
     # No extra mode multipliers are applied so the maths stays predictable.
     rub_rate = get_rub_rate()
     inr_cost = lzt_price_rub * rub_rate
-    return max(int(round(_apply_owner_margin(inr_cost))), 1)
+    return max(int(round(_apply_owner_margin(inr_cost, mode))), 1)
 
 def get_change_number_fee():
     res = cur.execute("SELECT value FROM settings WHERE key='change_number_fee'").fetchone()
