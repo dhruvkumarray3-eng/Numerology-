@@ -147,7 +147,7 @@ async def show_servers(event):
             if blurb:
                 lines.append(f"   <i>{html.escape(blurb)}</i>")
             btns.append([style_btn(f"{icon} {srv['name']} (OFF)",
-                                   f"srv_off|{idx}", "danger")])
+                                   f"srv_off|{idx}", "danger", icon="warning")])
 
     lzt_badge = (PE_CHECK + " Connected") if lzt_ok else ("\u26A0\uFE0F Key missing")
     otp_badge = (PE_CHECK + " Live") if otp_ok else ("\u26A0\uFE0F Key missing")

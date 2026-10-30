@@ -119,7 +119,7 @@ async def show_home(event, page=1):
     btns, row = [], []
     for country, count, min_price in chunk:
         label = f"{flag_for(country)} {clean_name(country)} · {_price(min_price, uid)}"
-        row.append(style_btn(label[:60], f"mtg_c|{country}", "success"))
+        row.append(style_btn(label[:60], f"mtg_c|{country}", "success", icon="cart"))
         if len(row) == 2:
             btns.append(row)
             row = []
@@ -129,7 +129,7 @@ async def show_home(event, page=1):
     nav = []
     if page > 1:
         nav.append(style_btn("⬅️ Prev", f"mtg_pg|{page - 1}", "primary", icon=6129627894349045589))
-    nav.append(style_btn(f"📄 {page}/{total_pages}", f"mtg_pg|{page}", "primary"))
+    nav.append(style_btn(f"📄 {page}/{total_pages}", f"mtg_pg|{page}", "primary", icon="doc"))
     if page < total_pages:
         nav.append(style_btn("Next ➡️", f"mtg_pg|{page + 1}", "primary", icon=6129732880529628243))
     btns.append(nav)
@@ -172,11 +172,11 @@ async def show_country(event, country, page=1):
     btns = []
     for acct in chunk:
         label = f"📱 +{acct['phone']} · {_price(acct['price'], uid)}"
-        btns.append([style_btn(label[:60], f"mtg_buy|{acct['id']}", "success")])
+        btns.append([style_btn(label[:60], f"mtg_buy|{acct['id']}", "success", icon="buy")])
     nav = []
     if page > 1:
         nav.append(style_btn("⬅️ Prev", f"mtg_cp|{country}|{page - 1}", "primary", icon=6129627894349045589))
-    nav.append(style_btn(f"📄 {page}/{total_pages}", f"mtg_cp|{country}|{page}", "primary"))
+    nav.append(style_btn(f"📄 {page}/{total_pages}", f"mtg_cp|{country}|{page}", "primary", icon="doc"))
     if page < total_pages:
         nav.append(style_btn("Next ➡️", f"mtg_cp|{country}|{page + 1}", "primary", icon=6129732880529628243))
     btns.append(nav)

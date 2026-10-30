@@ -680,7 +680,7 @@ async def show_allotp_hub(event, page=1, query=None):
     btns = []
     row = []
     for slug, label in chunk:
-        row.append(style_btn(_ensure_emoji(label)[:60], f"pp_app|{slug}", "primary"))
+        row.append(style_btn(_ensure_emoji(label)[:60], f"pp_app|{slug}", "primary", icon="apps"))
         if len(row) == 2:
             btns.append(row)
             row = []
@@ -690,7 +690,7 @@ async def show_allotp_hub(event, page=1, query=None):
     nav = []
     if page > 1:
         nav.append(style_btn("\u2b05\ufe0f Prev", f"pp_apps|{page - 1}", "primary", icon=6129627894349045589))
-    nav.append(style_btn(f"\U0001F4C4 {page}/{total_pages}", f"pp_apps|{page}", "primary"))
+    nav.append(style_btn(f"\U0001F4C4 {page}/{total_pages}", f"pp_apps|{page}", "primary", icon="doc"))
     if page < total_pages:
         nav.append(style_btn("Next \u27a1\ufe0f", f"pp_apps|{page + 1}", "primary", icon=6129732880529628243))
     btns.append(nav)
@@ -864,7 +864,7 @@ async def show_countries(event, key, page=1, query=None):
     row = []
     for c in chunk:
         label = _country_label(c["code"], c["name"], c["price"], uid, cfg, service=key)
-        row.append(style_btn(label, f"pp_buy|{key}|{c['code']}", p["style"]))
+        row.append(style_btn(label, f"pp_buy|{key}|{c['code']}", p["style"], icon="buy"))
         if len(row) == 2:
             btns.append(row)
             row = []
@@ -874,7 +874,7 @@ async def show_countries(event, key, page=1, query=None):
     nav = []
     if page > 1:
         nav.append(style_btn("⬅️ Prev", f"pp_pg|{key}|{page - 1}", "primary", icon=6129627894349045589))
-    nav.append(style_btn(f"📄 {page}/{total_pages}", f"pp_pg|{key}|{page}", "primary"))
+    nav.append(style_btn(f"📄 {page}/{total_pages}", f"pp_pg|{key}|{page}", "primary", icon="doc"))
     if page < total_pages:
         nav.append(style_btn("Next ➡️", f"pp_pg|{key}|{page + 1}", "primary", icon=6129732880529628243))
     btns.append(nav)
@@ -1153,7 +1153,7 @@ async def _auto_otp(uid, key, order_id, phone, price):
             "<i>\u2728 Tap the code to copy it \u2014 then enter it on the platform right away, it expires quickly.</i></blockquote>",
             buttons=[
                 [style_btn("\U0001F4CB Copy Code", f"copy_otp|{result['otp']}", "success", icon=5409098988156629257)],
-                [style_btn("\u2705 Done", b"pp_hub", "success")],
+                [style_btn("\u2705 Done", b"pp_hub", "success", icon="check")],
             ],
         )
         try:
@@ -1185,7 +1185,7 @@ async def get_otp_now(event):
             f"📞 <b>Number:</b> <code>{html.escape(st.get('phone') or '—')}</code>\n"
             f"🔑 <b>Code:</b> <code>{html.escape(result['otp'])}</code></blockquote>"
         )
-        btns = [[style_btn("✅ Done", b"pp_hub", "success")]]
+        btns = [[style_btn("✅ Done", b"pp_hub", "success", icon="check")]]
     else:
         msg = (
             "<blockquote expandable>⏳ <b>Still waiting for the SMS…</b>\n\n"

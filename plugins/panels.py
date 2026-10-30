@@ -120,7 +120,7 @@ def register_panels(bot):
                
         btns = [
             [style_url("🌐 𝕆𝕡𝕖𝕟 ℙ𝕒𝕟𝕖𝕝 𝕎𝕖𝕓𝕤𝕚𝕥𝕖 ↗️", panel_link, "success", icon=5409119256107297715)],
-            [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐒ᴛᴏʀᴇ", b"panels_menu", "primary")]
+            [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐒ᴛᴏʀᴇ", b"panels_menu", "primary", icon="back")]
         ]
         try: await e.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass

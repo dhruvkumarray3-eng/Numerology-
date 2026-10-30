@@ -562,8 +562,21 @@ def build_color_button(label: str, emoji_key: str = "", fallback_emoji: str = "â
     return f"{emoji_html} {label}".strip()
 
 def style_btn(text: str, data: str, style_type: str = "primary", icon: int = None):
-    """Generates Telethon Inline Button with custom data/style support."""
-    return Button.inline(text, data=data)
+    """Generates a coloured inline button with a premium emoji icon.
+
+    Kept for backwards compatibility only: it delegates to the single
+    canonical implementation in :mod:`utils.keyboards` so that any caller
+    importing it from ``config`` still gets the colour + premium emoji
+    instead of a plain, unstyled button.
+    """
+    try:
+        from utils.keyboards import style_btn as _canonical
+        return _canonical(text, data, style_type=style_type, icon=icon)
+    except Exception:
+        try:
+            return Button.inline(text, data, style=style_type, icon=icon)
+        except Exception:
+            return Button.inline(text, data=data)
 
 # ---------------------------------------------------------
 # 5. PRODUCT PANELS, PROFIT ENGINE, MONGODB & BOT IDENTITY

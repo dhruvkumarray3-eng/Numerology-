@@ -384,6 +384,7 @@ async def admin_actions(event):
                 f"{idx}. {srv['name']}  \u2014  {btn_state}",
                 f"adm_srvtoggle|{idx}",
                 "success" if is_on else "danger",
+                icon="server",
             )])
         lines.append("\n<i>Tap a server to flip it ON/OFF. Changes apply instantly.</i></blockquote>")
         btns.append([style_btn("\U0001F519 Back", "adm_adminmain", "danger", icon=6129888444245089008)])

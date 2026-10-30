@@ -344,7 +344,7 @@ async def do_buy(event, app_slug, country_iso):
     if not result.get("ok"):
         return await event.edit(
             f"<blockquote>❌ <b>Could not get a number.</b>\n<code>{html.escape(str(result.get('error')))}</code></blockquote>",
-            buttons=[[style_btn("🔙 Back", b"all_apps_menu", "primary")]],
+            buttons=[[style_btn("🔙 Back", b"all_apps_menu", "primary", icon="back")]],
         )
     otp_state[uid] = {
         "app": app_slug,
@@ -569,14 +569,14 @@ def register_all_apps(bot):
                 f"<blockquote>{PE_CHECK} <b>OTP Received!</b>\n\n"
                 f"☎️ <b>Number:</b> <code>{html.escape(str(st.get('phone')))}</code>\n"
                 f"🔑 <b>Code:</b> <code>{html.escape(str(code))}</code></blockquote>",
-                buttons=[[style_btn("🔙 Back", b"all_apps_menu", "primary")]],
+                buttons=[[style_btn("🔙 Back", b"all_apps_menu", "primary", icon="back")]],
             )
         else:
             await e.edit(
                 f"<blockquote>⏳ <b>No OTP yet.</b> Please wait a few seconds and tap Get OTP again.</blockquote>",
                 buttons=[
-                    [style_btn("🔑 Get OTP", b"aa_getotp", "success")],
-                    [style_btn("🔙 Back", b"all_apps_menu", "danger")],
+                    [style_btn("🔑 Get OTP", b"aa_getotp", "success", icon="key")],
+                    [style_btn("🔙 Back", b"all_apps_menu", "danger", icon="back")],
                 ],
             )
 
