@@ -116,7 +116,7 @@ def test_single_total_price_card():
     check("all_apps no longer multiplies the price by 100",
           "price * 100.0" not in aa)
     check("all_apps uses the allotp service margin",
-          'format_service_dual_price(price, "allotp", uid=e.sender_id)' in aa)
+          'format_service_dual_price(price, "allotp", uid=event.sender_id)' in aa)
 
 
 def test_live_stock_is_real():

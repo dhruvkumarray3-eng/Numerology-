@@ -259,7 +259,7 @@ async def show_details(event, app_slug, country_iso):
     if price is not None:
         try:
             from utils.markup import format_service_dual_price
-            rate_text = format_service_dual_price(price, "allotp", uid=e.sender_id)
+            rate_text = format_service_dual_price(price, "allotp", uid=event.sender_id)
         except Exception as _pb_ex:
             logger.debug(f"price breakdown failed: {_pb_ex}")
     rate_text = rate_text or "\U0001F7E1 Live rate unavailable \u2014 tap Refresh"

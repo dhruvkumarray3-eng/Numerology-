@@ -6,10 +6,11 @@ Proves the whole chain works with no network and no real credentials being used:
 """
 import asyncio
 import json
+import os
 import sys
 import types
 
-sys.path.insert(0, "/workspace/repo")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import utils.google_oauth as go
 import utils.imap_verifier as iv

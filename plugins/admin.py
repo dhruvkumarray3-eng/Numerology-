@@ -353,6 +353,8 @@ def register_admin(bot):
         from utils import runtime_config
         cfg = temporasms._settings()
         key = cfg.get("api_key") or ""
+        status_txt = ("\u2705 Configured" if temporasms.configured()
+                      else "\u274c Not configured")
         lines = [
             "<blockquote expandable>\U0001F510 <b>OTP / SMS PROVIDER \u2014 TemporaSMS</b>\n\n",
             f"\U0001F511 <b>API Key:</b> <code>{html.escape(runtime_config.mask(key))}</code>",
