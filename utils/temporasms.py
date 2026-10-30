@@ -40,6 +40,7 @@ Environment:
 """
 import asyncio
 import json
+import re
 import time
 
 import aiohttp
@@ -95,6 +96,32 @@ _SERVICE_ALIASES = {
     "chatgpt": "openai",
 }
 
+# Curated canonical (code, operator) candidates for the apps the panels sell.
+# The live catalogue is authoritative, but service codes are operator-scoped
+# and the provider occasionally omits a code from ``getServices``; this table
+# guarantees the right route is tried first and gives ``_prices_for`` a list of
+# fallbacks.  The first candidate the catalogue confirms wins.
+_KNOWN_CODES = {
+    "telegram": [("tvm", 13)],
+    "whatsapp": [("wqp", 13)],
+    "instagram": [("ikm", 13), ("iam", 4), ("ins", 2), ("acm", 1), ("twg", 7),
+                  ("amm", 8), ("tagg", 9), ("tewg", 10), ("tqg", 11),
+                  ("tzg", 12), ("aelm", 15), ("tog", 16)],
+    "facebook": [("flk", 13), ("fsb", 4), ("ffk", 2), ("esb", 1), ("egb", 7),
+                 ("erb", 8), ("eksb", 9), ("ezvb", 10), ("etb", 11),
+                 ("ecb", 12), ("evkb", 15), ("eqb", 16)],
+    "twitter": [("tdr", 13), ("tbr", 4), ("twr", 2), ("tit", 1), ("iut", 7),
+                ("iat", 8), ("iazt", 9), ("tmgt", 10), ("itt", 11),
+                ("iyt", 12), ("imvt", 15), ("int", 16)],
+    "tiktok": [("tak", 13), ("kqd", 1), ("tin", 2), ("kct", 7), ("ktd", 8),
+               ("kfrt", 9), ("krt", 11), ("kft", 12), ("kpfd", 15)],
+    "google": [("gre", 13)],
+    "discord": [("sjo", 1)],
+    "signal": [("syl", 13)],
+    "snapchat": [("sat", 13)],
+    "viber": [("vsr", 13)],
+}
+
 
 def _settings() -> dict:
     """Live settings: admin-panel override -> env -> default."""
@@ -143,6 +170,46 @@ def _normalise_base(raw: str) -> str:
 def _norm_service(service) -> str:
     s = str(service or "").strip().lower()
     return _SERVICE_ALIASES.get(s, s)
+
+
+def _name_tokens(text) -> list:
+    """Split a catalogue name into lowercase word tokens."""
+    return [t for t in re.split(r"[^0-9a-z]+", str(text or "").lower()) if t]
+
+
+def _score_name(wanted, name) -> int:
+    """How well a catalogue ``name`` matches the requested service.
+
+    Returns 0 for no match.  The critical rule is the substring branch: it
+    only fires when the *shorter* side is at least 3 characters.  Without it
+    a service literally named ``A`` matched ``whatsapp`` (because "a" is a
+    substring of "whatsapp") and the WhatsApp panel tried to buy code
+    ``s8-a`` on route 8 -- the exact "no prices for 'whatsapp' (code s8-a,
+    route 8)" error users saw.
+    """
+    w = str(wanted or "").strip().lower()
+    n = str(name or "").strip().lower()
+    if not w or not n:
+        return 0
+    if n == w:
+        return 100
+    if n.startswith(w):
+        return 90
+    if w.startswith(n) and len(n) >= 3:
+        return 85
+    wt = set(_name_tokens(w))
+    nt = set(_name_tokens(n))
+    if w in nt:
+        return 80
+    if n in wt and len(n) >= 3:
+        return 75
+    tokens = _name_tokens(n)
+    if tokens and tokens[0] == w:
+        return 78
+    shorter = min(len(n), len(w))
+    if shorter >= 3 and (w in n or n in w):
+        return 60
+    return 0
 
 
 def _num(value, default=None):
@@ -302,7 +369,15 @@ async def _catalogue():
 async def resolve_service(service):
     """Map an app name/slug onto ``(provider_code, operator)``.
 
-    Never raises; falls back to ``(slug, preferred_operator)``.
+    Never raises.  Resolution order:
+
+    0. curated canonical codes (``_KNOWN_CODES``), but only when the live
+       catalogue confirms the code exists on that route;
+    1. an exact service code (``esb`` -> facebook on route 1);
+    2. the best catalogue name match, scored by :func:`_score_name` so a
+       one-letter service name can never swallow a longer query;
+    3. a curated code even if the catalogue is stale;
+    4. ``(slug, preferred_operator)``.
     """
     raw = str(service or "").strip()
     if not raw:
@@ -316,35 +391,83 @@ async def resolve_service(service):
     resolved = None
 
     if catalogue:
+        # 0. curated canonical codes, validated against the catalogue
+        for code, op in _KNOWN_CODES.get(wanted, ()):
+            entry = catalogue.get(code)
+            if not entry:
+                continue
+            ops = entry.get("operators") or [entry.get("operator")]
+            if op in ops:
+                resolved = (code, op)
+                break
         # 1. exact code
-        if key in catalogue:
+        if resolved is None and key in catalogue:
             e = catalogue[key]
             resolved = (key, e["operator"])
-        # 2. exact name
-        if resolved is None:
-            for code, e in catalogue.items():
-                if e["name"].strip().lower() == wanted:
-                    resolved = (code, e["operator"])
-                    break
-        # 3. containment either way ("Telegram " / "Google, Gmail, Youtube")
-        if resolved is None:
-            for code, e in catalogue.items():
-                nm = e["name"].strip().lower()
-                if wanted and (wanted in nm or nm in wanted):
-                    resolved = (code, e["operator"])
-                    break
-        # 4. first word of the name ("Google, Gmail, Youtube" -> google)
+        # 2. best name match
         if resolved is None and wanted:
+            best = None
+            best_score = 0
             for code, e in catalogue.items():
-                nm = e["name"].strip().lower()
-                if nm.split(",")[0].strip() == wanted:
-                    resolved = (code, e["operator"])
-                    break
+                score = _score_name(wanted, e.get("name", ""))
+                if score > best_score:
+                    best_score, best = score, (code, e["operator"])
+                elif score and score == best_score and best:
+                    if (e.get("operator") == _PREFERRED_OPERATOR
+                            and best[1] != _PREFERRED_OPERATOR):
+                        best = (code, e["operator"])
+            if best:
+                resolved = best
 
     if resolved is None:
-        resolved = (wanted or key, _PREFERRED_OPERATOR)
+        curated = _KNOWN_CODES.get(wanted)
+        if curated:
+            resolved = curated[0]
+        else:
+            resolved = (wanted or key, _PREFERRED_OPERATOR)
     _RESOLVED_SERVICE[key] = resolved
     return resolved
+
+
+async def resolve_candidates(service, limit: int = 6):
+    """Ordered ``(code, operator)`` pairs to try for a service.
+
+    The preferred route comes first, then curated alternatives the catalogue
+    knows about, then every other route that advertises the same code, then
+    strongly-matching codes.  ``_prices_for`` walks this list so an app that
+    is out of stock on one route still works on another.
+    """
+    raw = str(service or "").strip()
+    if not raw:
+        return [("", _PREFERRED_OPERATOR)]
+    wanted = _norm_service(raw)
+    primary = await resolve_service(service)
+    catalogue = await _catalogue()
+
+    out = []
+    seen = set()
+
+    def add(pair):
+        if pair and pair[0] and pair not in seen:
+            seen.add(pair)
+            out.append(pair)
+
+    add(primary)
+    for code, op in _KNOWN_CODES.get(wanted, ()):
+        entry = catalogue.get(code) if catalogue else None
+        if entry:
+            ops = entry.get("operators") or [entry.get("operator")]
+            if op in ops:
+                add((code, op))
+    if catalogue:
+        entry = catalogue.get(primary[0])
+        if entry:
+            for op in entry.get("operators") or []:
+                add((primary[0], op))
+        for code, e in catalogue.items():
+            if _score_name(wanted, e.get("name", "")) >= 75:
+                add((code, e.get("operator")))
+    return out[:max(1, limit)]
 
 
 async def _resolve_service(service):
@@ -432,31 +555,71 @@ async def _sweep_prices(code, operator):
     return out
 
 
+async def _probe_code(code, operator):
+    """Cheaply check whether the provider recognises ``(code, operator)``.
+
+    A full country sweep for a code the provider does not sell wastes ~150
+    requests and always comes back empty.  One ``getPricesV3`` on the first
+    known country tells us ``BAD_SERVICE``/``BAD_OPERATOR`` up front.
+    """
+    countries = await _countries_for(operator)
+    cid = next(iter(countries), None) if countries else None
+    if cid is None:
+        cid = "22"  # India is always in the catalogue
+    text, err = await _call("getPricesV3", operator=operator,
+                            service=code, country=cid)
+    if text is None:
+        return True  # network hiccup: let the real sweep decide
+    if _error_code(text) in ("BAD_SERVICE", "BAD_OPERATOR"):
+        return False
+    return True
+
+
 async def _prices_for(service):
-    """Cached ``{country_id: {'price','stock'}}`` for a service."""
+    """Cached ``{country_id: {'price','stock'}}`` for a service.
+
+    Returns ``(prices, code, operator)`` so the caller can report which route
+    actually answered.  Routes are tried in ``resolve_candidates`` order, so
+    an app that is empty on route 13 is retried on route 4, 1, 7, ... before
+    the panel is declared empty.
+    """
     key = _norm_service(service)
     now = time.time()
     cached = _PRICES_CACHE.get(key)
     if cached and now - cached["ts"] < _PRICES_TTL and cached["data"]:
-        return cached["data"]
+        return cached["data"], cached.get("code"), cached.get("operator")
 
-    code, operator = await resolve_service(service)
-    try:
-        merged = await _sweep_prices(code, operator)
-    except Exception as exc:  # noqa: BLE001 - a slow panel is not fatal
-        logger.warning(f"TemporaSMS price sweep failed for {service}: {exc}")
-        merged = {}
+    candidates = await resolve_candidates(service)
+    chosen = candidates[0] if candidates else ("", _PREFERRED_OPERATOR)
+    merged = {}
+    for code, operator in candidates:
+        if not code:
+            continue
+        try:
+            if not await _probe_code(code, operator):
+                logger.info(f"TemporaSMS route {code}/{operator} not sold for {service}")
+                continue
+            found = await _sweep_prices(code, operator)
+        except Exception as exc:  # noqa: BLE001 - a slow panel is not fatal
+            logger.warning(f"TemporaSMS price sweep failed for {service} on "
+                           f"{code}/{operator}: {exc}")
+            found = {}
+        if found:
+            merged = found
+            chosen = (code, operator)
+            break
 
     if merged:
-        _PRICES_CACHE[key] = {"ts": now, "data": merged}
-        return merged
+        _PRICES_CACHE[key] = {"ts": now, "data": merged,
+                              "code": chosen[0], "operator": chosen[1]}
+        return merged, chosen[0], chosen[1]
 
     # Serve stale data rather than an empty list: a country with yesterday's
     # price is far more useful than "no stock" caused by one slow request.
     if cached and cached.get("data"):
         logger.warning(f"TemporaSMS using stale prices for {service}")
-        return cached["data"]
-    return {}
+        return cached["data"], cached.get("code"), cached.get("operator")
+    return {}, chosen[0], chosen[1]
 
 
 # --------------------------------------------------------------------------- #
@@ -519,24 +682,32 @@ async def get_countries(service: str):
         )
 
     try:
-        prices, names = await asyncio.wait_for(_gather(), timeout=_COUNTRIES_BUDGET)
+        result = await asyncio.wait_for(_gather(), timeout=_COUNTRIES_BUDGET)
     except asyncio.TimeoutError:
         logger.warning(f"TemporaSMS get_countries({service}) exceeded budget")
         cached_prices = (_PRICES_CACHE.get(_norm_service(service)) or {}).get("data")
         prices = cached_prices or {}
         names = (_COUNTRIES_CACHE.get(operator) or {}).get("data") or {}
     else:
-        if isinstance(prices, Exception):
-            logger.warning(f"TemporaSMS prices failed for {service}: {prices}")
-            prices = (_PRICES_CACHE.get(_norm_service(service)) or {}).get("data") or {}
+        prices_res, names = result
+        if isinstance(prices_res, Exception):
+            logger.warning(f"TemporaSMS prices failed for {service}: {prices_res}")
+            cached = _PRICES_CACHE.get(_norm_service(service)) or {}
+            prices = cached.get("data") or {}
+            if cached.get("code"):
+                code, operator = cached["code"], cached.get("operator") or operator
+        else:
+            prices, code, operator = prices_res
         if isinstance(names, Exception) or not names:
             names = (_COUNTRIES_CACHE.get(operator) or {}).get("data") or {}
 
     if not prices:
         return {
             "ok": False,
-            "error": (f"The panel returned no prices for '{service}' "
-                      f"(code {code}, route {operator})."),
+            "unavailable": True,
+            "error": (f"TemporaSMS has no live numbers for '{service}' right "
+                      f"now (service {code or '?'}, route {operator or '?'}). "
+                      f"Pick another app or try again in a few minutes."),
             "countries": [],
         }
 
@@ -797,12 +968,24 @@ async def check_connection():
     catalogue = await _catalogue()
     tg = await resolve_service("telegram")
     wa = await resolve_service("whatsapp")
+
+    async def _status(pair):
+        code, op = pair
+        if not code:
+            return "not offered"
+        try:
+            return "live" if await _probe_code(code, op) else "not sold by this key"
+        except Exception:
+            return "unknown"
+
+    tg_state = await _status(tg)
+    wa_state = await _status(wa)
     lines = [
         "\u2705 <b>TemporaSMS connected!</b>",
         f"\U0001F4B0 Balance: <b>{bal['balance']:.4f}</b>",
         f"\U0001F5C2 Services in catalogue: <b>{len(catalogue)}</b>",
-        f"\u2708\ufe0f Telegram: <code>{tg[0]}</code> (route {tg[1]})",
-        f"\U0001F4AC WhatsApp: <code>{wa[0]}</code> (route {wa[1]})",
+        f"\u2708\ufe0f Telegram: <code>{tg[0]}</code> (route {tg[1]}) \u2014 {tg_state}",
+        f"\U0001F4AC WhatsApp: <code>{wa[0]}</code> (route {wa[1]}) \u2014 {wa_state}",
     ]
     return True, "\n".join(lines)
 
