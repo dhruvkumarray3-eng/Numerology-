@@ -30,6 +30,7 @@ sys.path.insert(0, str(ROOT))
 
 import plugins.buy as buy  # noqa: E402
 from telethon.tl.functions.account import ResetAuthorizationRequest  # noqa: E402
+from telethon.errors import FreshResetAuthorisationForbiddenError  # noqa: E402
 
 PASS = 0
 
@@ -84,6 +85,22 @@ class FakeClient:
         self.calls.append(request)
         if request.__class__.__name__ == "GetAuthorizationsRequest":
             return SimpleNamespace(authorizations=self.auths)
+        return True
+
+
+class FreshClient(FakeClient):
+    """FakeClient that raises Telegram's 24h error for selected hashes."""
+
+    def __init__(self, auths, fresh_hashes):
+        super().__init__(auths)
+        self.fresh = set(fresh_hashes)
+
+    async def __call__(self, request):
+        self.calls.append(request)
+        if request.__class__.__name__ == "GetAuthorizationsRequest":
+            return SimpleNamespace(authorizations=self.auths)
+        if getattr(request, "hash", None) in self.fresh:
+            raise FreshResetAuthorisationForbiddenError(request)
         return True
 
 
@@ -155,12 +172,44 @@ def test_load_authorizations_sorts():
     buy.active_orders.pop("918888888888", None)
 
 
+def test_age_badge():
+    now = datetime.now()
+    fresh = auth(10, "Fresh-Phone", "Android", now - timedelta(minutes=2))
+    old = auth(11, "Old-Laptop", "Windows", now - timedelta(days=10))
+    check("fresh badge flags <24h", "<24h" in buy._age_badge(fresh), buy._age_badge(fresh))
+    check("old badge resettable", "resettable" in buy._age_badge(old), buy._age_badge(old))
+
+
+def test_detailed_fresh_and_live_note():
+    auths = sample_auths()
+    client = FreshClient(auths, {3})
+    buy.active_orders["917777777777"] = {"client": client}
+    targets = [a for a in auths if a.hash in (2, 3)]
+
+    results, err = asyncio.run(buy._terminate_detailed("917777777777", targets))
+    check("detailed no transport error", err is None, err)
+    by_hash = {r["hash"]: r for r in results}
+    check("old device terminated", by_hash[2]["ok"] is True, by_hash[2])
+    check("fresh device flagged", by_hash[3]["reason"] == "fresh", by_hash[3])
+    check("fresh device not marked ok", by_hash[3]["ok"] is False, by_hash[3])
+
+    note = buy._termination_note(results, "TEST")
+    check("note names terminated device", "Old-Laptop" in note, note)
+    check("note names fresh device", "Buyer-Phone" in note, note)
+    check("note has terminated marker", "✅" in note, note)
+    check("note has fresh marker", "⏳" in note, note)
+
+    buy.active_orders.pop("917777777777", None)
+
+
 def main():
     test_metadata()
     test_message_and_buttons()
     test_selection_logic()
     test_terminate_sends_requests()
     test_load_authorizations_sorts()
+    test_age_badge()
+    test_detailed_fresh_and_live_note()
     print(f"\nALL {PASS} CHECKS PASSED")
 
 

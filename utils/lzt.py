@@ -1179,6 +1179,51 @@ class LZTClient:
             logger.debug(f"LZT parse item failed: {e}")
             return None
 
+    @staticmethod
+    def _rank_results(results, mode):
+        """Re-rank collected items so the best value surfaces first.
+
+        * Good Quality (nonspam): clean accounts first, then more stars, then
+          older accounts, then cheaper price.
+        * Cheap (spam): strictly cheapest first.
+        * Bulk: leave the API's price order untouched.
+        """
+        if not results:
+            return results
+
+        def _price(it):
+            try:
+                return float(it.get("price_usd") or it.get("price_rub") or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        def _stars(it):
+            try:
+                return int(it.get("stars") or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        def _year(it):
+            try:
+                return int(it.get("year") or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        m = (mode or "bulk").lower()
+        if m in ("nonspam", "good"):
+            return sorted(
+                results,
+                key=lambda it: (
+                    1 if it.get("is_spam") else 0,   # clean first
+                    -_stars(it),                     # more stars first
+                    _year(it) or 9999,               # older (smaller year) first
+                    _price(it),                      # cheaper first
+                ),
+            )
+        if m in ("spam", "cheap"):
+            return sorted(results, key=lambda it: (_price(it), -_stars(it)))
+        return results
+
     async def search_items(self, country_name, year=None, limit=None, mode='bulk', max_pages=None):
         """Search live LZT Telegram accounts with the correct server-side filters.
 
@@ -1490,6 +1535,9 @@ class LZTClient:
                 logger.warning("LZT search_items fallback timeout")
                 results = []
 
+        # Quality-aware final ordering: make Good Quality genuinely good and
+        # Cheap genuinely cheap instead of both showing the raw API order.
+        results = self._rank_results(results, effective_mode)
         return results
 
     async def fast_buy(self, item_id, price_str, balance_id=None):

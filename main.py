@@ -170,6 +170,24 @@ async def main():
     except BaseException as e:  # noqa: BLE001
         logger.warning("\u26a0\ufe0f Link migration failed: %s", e)
 
+    # 3b. One-time self-heal of provider base URLs stored in the DB.
+    #     Older builds saved website URLs (e.g. https://temporasms.com/api or
+    #     https://api.grabmail.io/v1/messages) instead of the real API roots,
+    #     which made every request 404.  This rewrites the stored value so the
+    #     admin panel shows the correct URL permanently.
+    try:
+        from utils.runtime_config import self_heal_base_urls
+        repaired = self_heal_base_urls()
+        if repaired:
+            for key, (old, new) in repaired.items():
+                logger.info(
+                    "\u2705 Self-healed %s: %s -> %s", key, old, new
+                )
+    except asyncio.CancelledError:
+        raise
+    except BaseException as e:  # noqa: BLE001
+        logger.warning("\u26a0\ufe0f Base-URL self-heal failed: %s", e)
+
     # 4. Register all plugin handlers (start, buy, admin, callbacks, etc.)
     set_bot_instance(bot)  # lets background tasks (OTP poller) send messages
     try:

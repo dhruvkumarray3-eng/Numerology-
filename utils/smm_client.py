@@ -1,8 +1,11 @@
 import aiohttp
 import asyncio
+import difflib
 import logging
 import os
+import re
 import time
+import unicodedata
 from config import logger
 from database import to_usd
 
@@ -249,21 +252,89 @@ async def get_smm_service_details(service_id, server=1):
             return s
     return None
 
+def _norm_text(text):
+    """Lower-case, accent-fold and strip punctuation for fuzzy matching."""
+    text = str(text or "")
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = text.lower().replace("_", " ").replace("-", " ").replace("|", " ")
+    text = re.sub(r"[^\w\s]", " ", text)
+    return " ".join(text.split())
+
+
+# Common shorthand people type when searching for SMM services.  Each key is a
+# normalised token; the value is the canonical word(s) it should match.
+_SMM_ALIASES = {
+    "yt": "youtube",
+    "youtube": "youtube",
+    "ytb": "youtube",
+    "ig": "instagram",
+    "insta": "instagram",
+    "instagram": "instagram",
+    "tg": "telegram",
+    "tele": "telegram",
+    "telegram": "telegram",
+    "fb": "facebook",
+    "facebook": "facebook",
+    "tiktok": "tiktok",
+    "tt": "tiktok",
+    "tw": "twitter",
+    "twitter": "twitter",
+    "x": "twitter",
+    "sc": "soundcloud",
+    "spotify": "spotify",
+    "view": "views",
+    "views": "views",
+    "sub": "subscribers",
+    "subs": "subscribers",
+    "subscriber": "subscribers",
+    "subscribers": "subscribers",
+    "like": "likes",
+    "likes": "likes",
+    "follower": "followers",
+    "followers": "followers",
+    "comment": "comments",
+    "comments": "comments",
+    "share": "shares",
+    "shares": "shares",
+    "watchtime": "watch time",
+    "watch": "watch time",
+    "reel": "reels",
+    "reels": "reels",
+}
+
+
+def _expand_tokens(tokens):
+    """Expand shorthand tokens into their canonical form (keeping originals)."""
+    out = []
+    for t in tokens:
+        if t not in out:
+            out.append(t)
+        alias = _SMM_ALIASES.get(t)
+        if alias and alias not in out:
+            out.append(alias)
+    return out
+
+
 async def search_smm_services(query, server=1, platform=None, limit=60):
     """Search the whole SMM catalogue for services matching ``query``.
 
     Mirrors the "search any service" behaviour users expect (like searching a
-    YouTube service by name): the query is matched case-insensitively against
-    the service name, its category and its numeric service id.  When
-    ``platform`` is given the results are limited to that platform, otherwise
-    every platform on the server is searched.
+    YouTube service by name).  The query is normalised (accents, punctuation,
+    case) and matched against the service name, category and numeric id.
 
-    Results are ranked so the most relevant matches come first:
+    Ranking (best first):
+      1. exact name match
+      2. name starts with the query
+      3. every query token appears in the name (in order)
+      4. every query token appears in the name
+      5. every query token appears anywhere in the haystack
+      6. category contains the query
+      7. exact service id
+      8. fuzzy token match (typo tolerance)
 
-      1. name starts with the query
-      2. name contains the query
-      3. category contains the query
-      4. service id matches exactly
+    If a strict "all tokens" search finds nothing, it automatically relaxes to
+    an "any token" search so a slightly-off query still returns useful results.
 
     Returns a list of raw provider service dicts.
     """
@@ -271,42 +342,94 @@ async def search_smm_services(query, server=1, platform=None, limit=60):
     if not services:
         return []
 
-    q = (query or "").strip().lower()
+    q = _norm_text(query)
     if not q:
         return []
 
-    # Multi-word queries: every token must appear somewhere in the haystack.
-    tokens = [t for t in q.replace("|", " ").split() if t]
+    raw_tokens = [t for t in q.split() if t]
+    tokens = _expand_tokens(raw_tokens)
+    # Keep the longest tokens for fuzzy matching (short ones match too much).
+    fuzzy_tokens = [t for t in tokens if len(t) >= 3] or tokens
 
     def _haystack(s):
-        return " ".join([
+        return _norm_text(" ".join([
             str(s.get('name', '')),
             str(s.get('category', '')),
             str(s.get('service', '')),
-        ]).lower()
+        ]))
+
+    def _score(s, require_all=True):
+        cat = str(s.get('category', ''))
+        if platform and platform not in ("all", "*") and detect_platform(cat) != platform:
+            return None
+
+        name = _norm_text(s.get('name', ''))
+        cat_n = _norm_text(cat)
+        hay = _haystack(s)
+        sid = str(s.get('service', '')).strip()
+
+        if require_all:
+            if not all(tok in hay for tok in tokens):
+                return None
+        else:
+            if not any(tok in hay for tok in tokens):
+                return None
+
+        # Exact / prefix / ordered-token matches on the name.
+        if name == q:
+            return 100
+        if name.startswith(q):
+            return 90
+        if q in name:
+            return 85
+
+        name_tokens = name.split()
+        if all(tok in name_tokens for tok in tokens):
+            # Prefer the same order as the query.
+            positions = [name_tokens.index(tok) for tok in tokens if tok in name_tokens]
+            ordered = positions == sorted(positions)
+            return 80 if ordered else 72
+
+        if q in cat_n:
+            return 60
+        if all(tok in cat_n for tok in tokens):
+            return 55
+        if q == sid:
+            return 95
+
+        # Fuzzy: tolerate typos on any meaningful token.
+        best = 0.0
+        for tok in fuzzy_tokens:
+            for cand in set(name_tokens + cat_n.split()):
+                if abs(len(cand) - len(tok)) > 3:
+                    continue
+                ratio = difflib.SequenceMatcher(None, tok, cand).ratio()
+                if ratio > best:
+                    best = ratio
+        if best >= 0.82:
+            return int(30 + best * 20)  # 46..50
+        if best >= 0.72:
+            return 25
+
+        return 10 if require_all else 5
 
     scored = []
     for s in services:
-        cat = str(s.get('category', ''))
-        if platform and platform not in ("all", "*") and detect_platform(cat) != platform:
+        rank = _score(s, require_all=True)
+        if rank is None:
             continue
-        hay = _haystack(s)
-        if not all(tok in hay for tok in tokens):
-            continue
-        name = str(s.get('name', '')).lower()
-        if name.startswith(q):
-            rank = 0
-        elif q in name:
-            rank = 1
-        elif q in cat.lower():
-            rank = 2
-        elif q == str(s.get('service', '')).lower():
-            rank = 3
-        else:
-            rank = 4
-        scored.append((rank, name, s))
+        scored.append((rank, _norm_text(s.get('name', '')), s))
 
-    scored.sort(key=lambda t: (t[0], t[1]))
+    # Relaxed fallback: if a strict search found nothing, accept any token.
+    if not scored:
+        for s in services:
+            rank = _score(s, require_all=False)
+            if rank is None:
+                continue
+            scored.append((rank, _norm_text(s.get('name', '')), s))
+
+    # Highest score first, then alphabetical for stable, predictable output.
+    scored.sort(key=lambda t: (-t[0], t[1]))
     return [s for _, _, s in scored[:limit]]
 
 

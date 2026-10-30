@@ -236,11 +236,28 @@ async def test_search_keeps_unknown_year_items():
     print("PASS search_items keeps unknown-year item ->", ids)
 
 
+def test_rank_results():
+    """Good Quality prefers clean/starred/older; Cheap is cheapest-first."""
+    items = [
+        {"item_id": 1, "price_usd": 1.0, "stars": 0, "year": 2024, "is_spam": True},
+        {"item_id": 2, "price_usd": 5.0, "stars": 100, "year": 2018, "is_spam": False},
+        {"item_id": 3, "price_usd": 2.0, "stars": 10, "year": 2022, "is_spam": False},
+    ]
+    good = L.lzt_client._rank_results(list(items), "nonspam")
+    assert [i["item_id"] for i in good] == [2, 3, 1], good
+    cheap = L.lzt_client._rank_results(list(items), "spam")
+    assert [i["item_id"] for i in cheap] == [1, 3, 2], cheap
+    bulk = L.lzt_client._rank_results(list(items), "bulk")
+    assert [i["item_id"] for i in bulk] == [1, 2, 3], bulk
+    print("PASS _rank_results good/cheap/bulk ordering")
+
+
 async def main():
     await test_otp_reads_codes_code()
     await test_fast_buy_retry_and_fields()
     test_parse_item_year_email_spam_stars()
     await test_search_keeps_unknown_year_items()
+    test_rank_results()
     print("\nALL TESTS PASSED")
 
 

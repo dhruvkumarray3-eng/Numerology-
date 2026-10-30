@@ -153,7 +153,9 @@ def main():
                    encoding="utf-8").read()
     check("market access button is a real URL button",
           'style_url("\\U0001F4B3 Buy Market Access"' in buy_src)
-    check("buy.py imports style_url", "style_url" in buy_src.split("\n")[30])
+    check("buy.py imports style_url",
+          any("from utils.keyboards import" in ln and "style_url" in ln
+              for ln in buy_src.splitlines()))
     check("cancel_order handler registered", "cb_cancel_order" in buy_src)
     check("get_qr handler registered", "cb_get_qr" in buy_src)
 
