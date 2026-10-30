@@ -135,7 +135,7 @@ async def send_bep20_invoice(uid, amt, rate_text=None):
 async def manual_deposit_init(event, method):
     uid = event.sender_id
     deposit_input[uid] = {'step': 'wait_amt', 'method': method}
-    await event.edit(f"{P_MONEY} <b>𝐄ɴᴛᴇʀ 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴍᴏᴜɴᴛ (ɪɴ {P_INR}):</b>\n\n<i>𝐌ɪɴɪᴍᴜᴍ ᴅᴇᴘᴏsɪᴛ ɪs {P_INR}10.</i>", buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
+    await _safe_edit(event, f"{P_MONEY} <b>𝐄ɴᴛᴇʀ 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴍᴏᴜɴᴛ (ɪɴ {P_INR}):</b>\n\n<i>𝐌ɪɴɪᴍᴜᴍ ᴅᴇᴘᴏsɪᴛ ɪs {P_INR}10.</i>", buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
 
 async def process_referral_bonus(user_id, amt):
     try:
@@ -497,7 +497,7 @@ def register_deposit(bot):
             
         elif a_type == "custom":
             custom_dep_amt[int(dep_id)] = "0"
-            await e.edit(f"<blockquote>{P_KEY} <b>Enter 𝐂ᴜsᴛᴏᴍ 𝐀ᴍᴏᴜɴᴛ for User <code>{t_uid}</code>:</b>\n\n{P_MONEY} <b>{P_INR}0</b></blockquote>", buttons=get_admin_custom_keypad(int(dep_id)))
+            await _safe_edit(e, f"<blockquote>{P_KEY} <b>Enter 𝐂ᴜsᴛᴏᴍ 𝐀ᴍᴏᴜɴᴛ for User <code>{t_uid}</code>:</b>\n\n{P_MONEY} <b>{P_INR}0</b></blockquote>", get_admin_custom_keypad(int(dep_id)))
             
     @bot.on(events.CallbackQuery(pattern=r"^dep_rej\|"))
     async def cb_dep_rej(e):
