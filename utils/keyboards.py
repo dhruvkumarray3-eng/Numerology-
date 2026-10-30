@@ -140,10 +140,35 @@ def pe(name, fallback="✨"):
 # We use bg_primary (blue), bg_success (green), bg_danger (red)
 # For icon, we pass the custom emoji ID (int) or a semantic name.
 
-def style_btn(text, data, style_type=None, icon=None):
+def _parse_style_icon(args, style_type, icon):
+    """Normalise ``style_type``/``icon`` from any calling convention.
+
+    Style names are always strings (``"primary"``/``"success"``/``"danger"``)
+    while premium emoji ids are always integers.  Accepting ``*args`` lets us
+    survive the classic mistake of passing the emoji id positionally *and*
+    ``icon=`` as a keyword, which would otherwise raise
+    ``TypeError: style_btn() got multiple values for argument 'icon'`` before
+    the function body even runs.
+    """
+    if args:
+        first = args[0]
+        if isinstance(first, int):
+            if icon is None:
+                icon = first
+        else:
+            if style_type is None:
+                style_type = first
+            if len(args) > 1 and icon is None and isinstance(args[1], int):
+                icon = args[1]
+    return style_type, icon
+
+
+def style_btn(text, data, *args, style_type=None, icon=None, **kwargs):
+    style_type, icon = _parse_style_icon(args, style_type, icon)
     return Button.inline(text, data, style=style_type, icon=resolve_icon(icon))
 
-def style_url(text, url, style_type=None, icon=None):
+def style_url(text, url, *args, style_type=None, icon=None, **kwargs):
+    style_type, icon = _parse_style_icon(args, style_type, icon)
     return Button.url(text, url, style=style_type, icon=resolve_icon(icon))
 
 
