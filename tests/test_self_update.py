@@ -178,7 +178,7 @@ check("skips non-code files", "*) continue ;;" in sh)
 # ------------------------------------------------------------- 6. build tag
 print("\n[6] Build tag")
 main_src = read("main.py")
-check("BUILD_TAG bumped to v20", "2026-10-30-imap-oauth-ready-v20" in main_src)
+check("BUILD_TAG bumped to v20", "2026-10-30-safe-startup-v21" in main_src)
 
 print("\n" + "=" * 70)
 print(f" RESULT: {PASS} passed, {FAIL} failed")

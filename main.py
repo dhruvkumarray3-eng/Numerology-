@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # the hosting console immediately shows whether the container is running the
 # latest code.  If the console still prints an older tag, the container has
 # not pulled the new files yet.
-BUILD_TAG = "2026-10-30-imap-oauth-ready-v20"
+BUILD_TAG = "2026-10-30-safe-startup-v21"
 
 os.makedirs("sessions", exist_ok=True)
 
