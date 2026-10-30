@@ -1,10 +1,23 @@
 """Gmail IMAP helpers for Auto-UPI verification.
 
-Supports **multiple** Gmail accounts at once.  The owner can paste several
-``email + app password`` pairs in one message and every one of them is stored
-and scanned.  Earlier versions only ever remembered the first address, so a
-second account's app password was glued onto the first one and the login
-failed with ``AUTHENTICATIONFAILED`` -- the "app password catcher" bug.
+Two things this module has to get right:
+
+1. **Logging in with a real Gmail App Password.**  Google shows app passwords
+   as ``abcd efgh ijkl mnop`` (16 lowercase letters in four groups).  People
+   paste them with labels, line breaks, trailing dots, sometimes twice.  This
+   module now *extracts* the 16-letter password out of whatever was pasted and,
+   if the stored value still looks wrong, tries a short list of repaired
+   variants against Gmail before giving up.  When a variant works it is handed
+   back so the caller can persist the repaired value.
+
+2. **Reading real payment notifications.**  Auto-UPI is not only FamPay: money
+   arrives via PhonePe, Google Pay, Paytm, BHIM, Amazon Pay, Mobikwik, CRED
+   and straight from bank alert emails.  ``DEFAULT_SENDER_DOMAINS`` covers all
+   of them (and is overridable from the settings table), and the amount /
+   reference-number parser understands the wording those mails actually use.
+
+Multiple Gmail accounts are supported: every ``email + app password`` pair
+found in one pasted message is stored and every mailbox is scanned.
 """
 
 import imaplib
@@ -77,13 +90,76 @@ _LABEL_RE = re.compile(
 # along with it (commas, quotes, brackets, bullets, ...).
 _EDGE_JUNK = " \t\r\n\u00a0\"'`.,;:|/\\-_=+*#<>()[]{}\u2022\u2013\u2014"
 
+# A Gmail app password is exactly 16 letters, usually shown as 4 x 4.
+_APP_PWD_GROUPED = re.compile(
+    r"(?<![A-Za-z0-9])(?:[A-Za-z]{4}[ \t\r\n]+){3}[A-Za-z]{4}(?![A-Za-z0-9])"
+)
+_APP_PWD_PLAIN = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]{16}(?![A-Za-z0-9])")
+
+
+def extract_app_password(fragment: str) -> str:
+    """Find a Gmail-shaped 16-letter app password inside pasted text.
+
+    Returns ``""`` when the text does not contain one.  This is what makes the
+    catcher reliable: instead of trusting the whole leftover blob, we look for
+    the actual shape Google uses.
+    """
+    if not fragment:
+        return ""
+    text = str(fragment)
+    match = _APP_PWD_GROUPED.search(text)
+    if match:
+        return clean_app_password(match.group(0))
+    match = _APP_PWD_PLAIN.search(text)
+    if match:
+        return match.group(0)
+    return ""
+
 
 def _clean_fragment(fragment: str) -> str:
     """Turn a raw chunk of pasted text into a bare app password."""
     if not fragment:
         return ""
+    found = extract_app_password(fragment)
+    if found:
+        return found
     text = _LABEL_RE.sub(" ", str(fragment))
     return clean_app_password(text).strip(_EDGE_JUNK)
+
+
+def password_candidates(pwd: str):
+    """Return every plausible reading of a stored password, best first.
+
+    Gmail app passwords are 16 letters.  If the stored value is longer (the
+    owner pasted it twice, or pasted a label along with it) we still try the
+    aligned 16-letter windows so a correct password is never rejected just
+    because of surrounding junk.
+    """
+    base = clean_app_password(pwd)
+    out = []
+
+    def _add(value):
+        if value and value not in out:
+            out.append(value)
+
+    _add(base)
+    letters = re.sub(r"[^A-Za-z]", "", base)
+    _add(letters)
+    # Gmail always *shows* app passwords in lowercase.  If the owner typed them
+    # in caps (or their keyboard auto-capitalised the first letter) the exact
+    # value can never match, so try the lowercase reading too.
+    _add(letters.lower())
+    _add(base.lower())
+    if len(letters) > 16:
+        _add(letters[:16])
+        _add(letters[-16:])
+        _add(letters[:16].lower())
+        _add(letters[-16:].lower())
+        for start in range(0, len(letters) - 15, 4):
+            window = letters[start:start + 16]
+            _add(window)
+            _add(window.lower())
+    return out
 
 
 def parse_gmail_accounts(text):
@@ -121,7 +197,6 @@ def parse_gmail_accounts(text):
 
         key = addr.lower()
         if key in seen:
-            # Keep the first non-empty password we found for this address.
             continue
         seen.add(key)
         accounts.append((addr, password))
@@ -186,7 +261,7 @@ def save_gmail_accounts(accounts):
         else:
             continue
         user = str(user or "").strip()
-        pwd = clean_app_password(pwd)
+        pwd = _clean_fragment(pwd) or clean_app_password(pwd)
         if not user or not pwd:
             continue
         key = user.lower()
@@ -222,6 +297,30 @@ def save_gmail_accounts(accounts):
     except Exception:
         pass
     return len(cleaned)
+
+
+def update_stored_password(user, new_password):
+    """Replace the password for one account after a successful repair."""
+    accounts = _load_accounts_json()
+    changed = False
+    for idx, (addr, _pwd) in enumerate(accounts):
+        if addr.lower() == str(user).lower():
+            accounts[idx] = (addr, clean_app_password(new_password))
+            changed = True
+    if not changed:
+        accounts.append((str(user), clean_app_password(new_password)))
+    save_gmail_accounts(accounts)
+    # Keep the legacy pair in sync when it points at this account.
+    if (_setting("gmail_user") or "").lower() == str(user).lower():
+        try:
+            cur.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_pass', ?)",
+                (clean_app_password(new_password),),
+            )
+            db.commit()
+        except Exception:
+            pass
+    return changed
 
 
 def get_imap_accounts():
@@ -277,19 +376,39 @@ def _imap_host_port():
 
 
 def _open_imap(user, pwd, timeout=20):
-    """Open and log in to one mailbox.  Raises on failure."""
+    """Open and log in to one mailbox, trying repaired password variants.
+
+    Returns ``(mail, host, port, used_password)``.  Raises the last error when
+    every candidate is rejected, so the caller can explain it.
+    """
     host, port = _imap_host_port()
     context = ssl.create_default_context()
-    mail = imaplib.IMAP4_SSL(host, port, ssl_context=context, timeout=timeout)
-    try:
-        mail.login(user, pwd)
-    except Exception:
+    candidates = password_candidates(pwd)
+    last_exc = None
+
+    for candidate in candidates:
+        mail = None
         try:
-            mail.logout()
-        except Exception:
-            pass
-        raise
-    return mail, host, port
+            mail = imaplib.IMAP4_SSL(host, port, ssl_context=context, timeout=timeout)
+            mail.login(user, candidate)
+            return mail, host, port, candidate
+        except Exception as exc:
+            last_exc = exc
+            try:
+                if mail is not None:
+                    mail.logout()
+            except Exception:
+                pass
+            low = str(exc).lower()
+            # Only an auth failure is worth retrying with another variant.
+            if ("authenticationfailed" not in low
+                    and "invalid credentials" not in low
+                    and "username and password not accepted" not in low
+                    and "application-specific password required" not in low):
+                raise
+    if last_exc is not None:
+        raise last_exc
+    raise imaplib.IMAP4.error("AUTHENTICATIONFAILED no password candidates")
 
 
 def _explain_imap_error(exc, host, port):
@@ -316,6 +435,9 @@ def _sync_test_connection(timeout=20):
     Returns ``(True, {...})`` on the first success, or ``(False, "reason")``
     when every account fails.  Never raises: the admin panel must always get a
     usable answer.
+
+    On success the payload contains ``repaired_password`` when a variant other
+    than the stored value was needed, so the caller can persist it.
     """
     accounts = get_imap_accounts()
     if not accounts:
@@ -327,7 +449,7 @@ def _sync_test_connection(timeout=20):
     for user, pwd in accounts:
         mail = None
         try:
-            mail, host, port = _open_imap(user, pwd, timeout=timeout)
+            mail, host, port, used = _open_imap(user, pwd, timeout=timeout)
             total = 0
             try:
                 status, data = mail.select("INBOX", readonly=True)
@@ -335,13 +457,16 @@ def _sync_test_connection(timeout=20):
                     total = int(str(data[0]).strip() or 0)
             except Exception:
                 total = 0
-            return True, {
+            result = {
                 "user": user,
                 "host": host,
                 "port": port,
                 "total": total,
                 "accounts": len(accounts),
             }
+            if used != clean_app_password(pwd):
+                result["repaired_password"] = used
+            return True, result
         except Exception as exc:  # pragma: no cover - network dependent
             errors.append(f"{user}: {_explain_imap_error(exc, host, port)}")
         finally:
@@ -373,17 +498,129 @@ def imap_status():
         "port": _setting("imap_port") or "993",
     }
 
-# Strict whitelist of official FamPay / Payment provider domains
-OFFICIAL_SENDER_DOMAINS = [
-    "@famapp.in",
-    "@fampay.in",
-    "@famapp.co.in",
-    "no-reply@famapp.in"
+
+# ---------------------------------------------------------------------------
+# Sender whitelist
+# ---------------------------------------------------------------------------
+# Every UPI app and the big Indian banks send a payment alert email.  Auto-UPI
+# used to accept *only* FamPay, which is why a perfectly valid PhonePe / GPay /
+# bank credit was reported as "Payment not found".  Hybrid mode is supposed to
+# read all of them.
+
+DEFAULT_SENDER_DOMAINS = [
+    # FamPay / FamApp
+    "@famapp.in", "@fampay.in", "@famapp.co.in", "no-reply@famapp.in",
+    # UPI apps
+    "@phonepe.com", "@phonepe.in",
+    "googlepay-noreply@google.com", "noreply@google.com",
+    "@paytm.com", "@paytmbank.com",
+    "@bhimupi.org.in", "@npci.org.in",
+    "@amazonpay.in", "@amazon.in",
+    "@mobikwik.com", "@freecharge.in", "@cred.club",
+    "@sliceit.com", "@jupiter.money", "@navi.com",
+    # Banks (alerts / transaction mails)
+    "@hdfcbank.net", "@hdfcbank.com",
+    "@icicibank.com", "@icicibank.net",
+    "@sbi.co.in", "@onlinesbi.sbi", "@sbicard.com",
+    "@axisbank.com", "@axisbank.co.in",
+    "@kotak.com", "@kotakbank.com",
+    "@pnb.co.in", "@bankofbaroda.com", "@bankofbaroda.in",
+    "@idbibank.com", "@idfcfirstbank.com", "@yesbank.in",
+    "@indusind.com", "@canarabank.com", "@unionbankofindia.co.in",
+    "@federalbank.co.in", "@rblbank.com", "@aubank.in",
+    "@bandhanbank.com", "@dbs.com", "@hsbc.co.in",
 ]
+
+# Kept for backwards compatibility with older imports.
+OFFICIAL_SENDER_DOMAINS = DEFAULT_SENDER_DOMAINS
 
 # Maximum allowed age for auto-verification email (in minutes)
 # Strict 30-minute window to completely block old payments/emails from past days!
 MAX_PAYMENT_AGE_MINUTES = 30
+
+
+def sender_domains():
+    """Return the active whitelist: defaults **plus** any settings override.
+
+    The override is additive on purpose.  Adding a custom sender from the admin
+    panel must never silently drop PhonePe / GPay / FamPay / bank alerts, which
+    is exactly what a plain "replace" would do.
+    """
+    domains = list(DEFAULT_SENDER_DOMAINS)
+    raw = _setting("imap_sender_domains")
+    if raw:
+        for part in re.split(r"[,\s]+", raw):
+            part = part.strip().lower()
+            if part and part not in domains:
+                domains.append(part)
+    return domains
+
+
+def _sender_allowed(from_header):
+    """True when the From header looks like a UPI app, wallet or bank alert.
+
+    Three tiers, cheapest first:
+
+    1. exact domain in the whitelist (PhonePe, GPay, FamPay, 40+ banks);
+    2. the domain itself contains ``bank`` / ``pay`` / ``upi`` / ``wallet``
+       (catches the long tail: small co-op banks, payments banks, new apps);
+    3. the display name mentions a known brand (``"PhonePe" <x@y.com>``).
+    """
+    header = (from_header or "").lower()
+    if not header:
+        return False
+    for domain in sender_domains():
+        if domain in header:
+            return True
+    addr = header.rsplit("<", 1)[-1].rstrip(">").strip()
+    domain = addr.split("@")[-1] if "@" in addr else ""
+    if any(word in domain for word in ("bank", "pay", "upi", "wallet", "fintech")):
+        return True
+    return any(brand in header for brand in (
+        "phonepe", "google pay", "gpay", "famapp", "fampay", "paytm", "bhim",
+        "amazon pay", "mobikwik", "freecharge", "cred", "slice", "jupiter",
+        "navi", "hdfc", "icici", "sbi", "state bank", "axis", "kotak", "pnb",
+        "bank of baroda", "idbi", "idfc", "yes bank", "indusind", "canara",
+        "union bank", "federal bank", "rbl", "au bank", "bandhan", "dbs",
+        "hsbc", "airtel payments", "jio payments", "india post payments",
+    ))
+
+
+_CREDIT_WORDS = (
+    "credited", "credit", "received", "receive", "deposited", "deposit",
+    "added to your", "money added", "payment successful", "paid to you",
+    "has been credited", "successfully added", "incoming",
+)
+
+
+def _looks_like_payment(text):
+    """Heuristic: does this body read like a money-received notification?
+
+    Used as a fallback when the sender is not on the whitelist, so a bank alert
+    from an unexpected domain is still honoured instead of silently dropped.
+    """
+    low = (text or "").lower()
+    if not low:
+        return False
+    has_amount = bool(_AMOUNT_RE.search(low))
+    has_credit = any(word in low for word in _CREDIT_WORDS)
+    has_ref = bool(_REF_RE.search(text or ""))
+    return has_amount and (has_credit or has_ref)
+
+
+# ---------------------------------------------------------------------------
+# Message parsing
+# ---------------------------------------------------------------------------
+
+# "Rs.500", "Rs 1,250.00", "INR 500", "\u20b9500"
+_AMOUNT_RE = re.compile(
+    r"(?:rs\.?|inr|\u20b9)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)", re.I)
+
+# Reference numbers used by UPI apps and banks.
+_REF_RE = re.compile(
+    r"(?:utr|rrn|upi\s*(?:ref(?:erence)?(?:\s*(?:no|number|id))?)?|"
+    r"transaction\s*(?:id|no|number)|txn\s*(?:id|no|number)|"
+    r"ref(?:erence)?\s*(?:no|number|id)?)\s*[:#\-]?\s*([A-Za-z0-9]{6,30})", re.I)
 
 
 def _message_body(msg):
@@ -402,19 +639,64 @@ def _message_body(msg):
     return re.sub(r"\s+", " ", text)
 
 
+def _parse_amount(text):
+    """Best-effort amount extraction, preferring a 'credited/received' amount."""
+    for keyword in ("credited", "received", "credit", "deposit", "paid"):
+        window = re.search(keyword, text, re.I)
+        if window:
+            snippet = text[max(0, window.start() - 160): window.end() + 160]
+            match = _AMOUNT_RE.search(snippet)
+            if match:
+                try:
+                    return float(match.group(1).replace(",", ""))
+                except ValueError:
+                    pass
+    match = _AMOUNT_RE.search(text)
+    if match:
+        try:
+            return float(match.group(1).replace(",", ""))
+        except ValueError:
+            pass
+    return 0.0
+
+
+def _parse_references(text):
+    """Collect every UTR / RRN / transaction id found in the body."""
+    refs = []
+    for match in _REF_RE.finditer(text):
+        value = match.group(1).strip()
+        if value and value not in refs:
+            refs.append(value)
+    return refs
+
+
+def _utr_present(utr_clean, text, refs):
+    """True when the user-supplied UTR appears in the mail or its refs."""
+    needle = utr_clean.lower()
+    if needle in text.lower():
+        return True
+    squashed = re.sub(r"[^a-z0-9]", "", needle)
+    for ref in refs:
+        if ref.lower() == needle:
+            return True
+        # Banks sometimes print the RRN with spaces / dashes inside.
+        if re.sub(r"[^a-z0-9]", "", ref.lower()) == squashed:
+            return True
+    return False
+
+
 def _match_utr_in_message(msg, utr_clean, now_utc, max_age_mins):
     """Inspect one message.  Returns a result dict, or ``None`` to keep going.
 
     Crucially this never aborts the whole scan: a single old or unrelated
     message must not hide a valid payment further down the list.
     """
-    # 1. STRICT SENDER AUTHENTICATION: must come from an official sender.
-    from_header = (msg.get("From") or "").lower()
-    if not any(domain in from_header for domain in OFFICIAL_SENDER_DOMAINS):
-        logger.warning("Ignored fake/unauthorized payment email from: %s", from_header)
+    from_header = msg.get("From") or ""
+    clean_text = _message_body(msg)
+    if not _sender_allowed(from_header) and not _looks_like_payment(clean_text):
+        logger.warning("Ignored payment email from unlisted sender: %s", from_header)
         return None
 
-    # 2. STRICT DATE / EXPIRATION CHECK: prevent reusing old payments.
     date_header = msg.get("Date")
     if date_header:
         try:
@@ -431,27 +713,24 @@ def _match_utr_in_message(msg, utr_clean, now_utc, max_age_mins):
         except Exception as dt_err:
             logger.error("Error parsing email date: %s", dt_err)
 
-    clean_text = _message_body(msg)
-    if utr_clean.lower() not in clean_text.lower():
+    refs = _parse_references(clean_text)
+    if not _utr_present(utr_clean, clean_text, refs):
         return None
 
     msg_id = (msg.get("Message-ID") or "").strip()
+    amt = _parse_amount(clean_text)
 
-    amt_match = re.search(r"received\s*\u20b9\s*([0-9]+(?:\.[0-9]+)?)", clean_text, re.I)
-    if not amt_match:
-        amt_match = re.search(r"\u20b9\s*([0-9]+(?:\.[0-9]+)?)", clean_text)
-    amt = float(amt_match.group(1)) if amt_match else 0.0
-
-    sender_match = re.search(r"from\s+([^.]+?)\s*(?:\.|\sat|\swith)", clean_text, re.I)
+    sender_match = re.search(
+        r"(?:from|paid by|sender)\s*[:\-]?\s*([A-Za-z][A-Za-z .]{2,40}?)\s*(?:\.|\sat|\swith|,|$)",
+        clean_text, re.I)
     sender = sender_match.group(1).strip() if sender_match else "User"
 
-    utr_match = re.search(r"UTR[:\s]*([0-9]{6,15})", clean_text, re.I)
-    detected_utr = utr_match.group(1).strip() if utr_match else (
-        utr_clean if utr_clean.isdigit() else "")
-
-    txnid_match = re.search(r"transaction\s*id[:\s]*([A-Za-z0-9]+)", clean_text, re.I)
-    detected_txnid = txnid_match.group(1).strip() if txnid_match else (
-        utr_clean if not utr_clean.isdigit() else "")
+    detected_utr = next((r for r in refs if r.isdigit()), "")
+    detected_txnid = next((r for r in refs if not r.isdigit()), "")
+    if utr_clean.isdigit() and not detected_utr:
+        detected_utr = utr_clean
+    if not utr_clean.isdigit() and not detected_txnid:
+        detected_txnid = utr_clean
 
     return {
         "utr": utr_clean,
@@ -460,6 +739,8 @@ def _match_utr_in_message(msg, utr_clean, now_utc, max_age_mins):
         "detected_txnid": detected_txnid,
         "amount": int(amt) if amt == int(amt) else amt,
         "sender": sender,
+        "source": from_header[:120],
+        "refs": refs[:6],
         "raw": clean_text[:200],
     }
 
@@ -536,7 +817,13 @@ def _sync_verify_utr(utr_query, max_age_mins=MAX_PAYMENT_AGE_MINUTES):
     for user, pwd in accounts:
         mail = None
         try:
-            mail, _host, _port = _open_imap(user, pwd, timeout=25)
+            mail, _host, _port, used = _open_imap(user, pwd, timeout=25)
+            if used != clean_app_password(pwd):
+                # The stored password was junk; remember the working one.
+                try:
+                    update_stored_password(user, used)
+                except Exception:
+                    pass
             try:
                 mail.select("INBOX")
             except Exception:

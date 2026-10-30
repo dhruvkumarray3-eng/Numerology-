@@ -757,11 +757,25 @@ async def admin_actions(event):
             return await event.answer(f"\u274C IMAP test failed: {imap_err}", alert=True)
 
         if ok:
+            note = ""
+            repaired = res.get("repaired_password")
+            if repaired:
+                try:
+                    from utils.imap_verifier import update_stored_password
+                    update_stored_password(res["user"], repaired)
+                    note = ("\n\U0001F527 App Password auto-repaired "
+                            f"({repaired[:4]} **** **** {repaired[-4:]})")
+                except Exception:
+                    pass
+            extra = ""
+            if res.get("accounts", 1) > 1:
+                extra = f"\n\U0001F4DA Accounts: {res['accounts']}"
             return await event.answer(
                 f"\u2705 IMAP Connected!\n"
                 f"\U0001F4E7 {res['user']}\n"
                 f"\U0001F4E5 Inbox: {res['total']} emails\n"
-                f"\U0001F310 {res['host']}:{res['port']}", alert=True)
+                f"\U0001F310 {res['host']}:{res['port']}"
+                f"{extra}{note}", alert=True)
         return await event.answer(f"\u274C {res}", alert=True)
 
     elif action_data == "stats" and has_perm(uid, 'p_stats'):
@@ -1612,7 +1626,7 @@ async def admin_actions(event):
                     lines.append(
                         f"\u2022 <code>{html.escape(addr)}</code> \u2014 "
                         f"<code>{pwd[:4]} **** **** {pwd[-4:]}</code>")
-                    if len(pwd) != 16:
+                    if len(pwd) != 16 and not re.fullmatch(r"[A-Za-z]{16}", pwd):
                         odd.append(addr)
                 if len(g_pass) != 16 and g_email not in odd:
                     odd.append(g_email)
@@ -1639,6 +1653,18 @@ async def admin_actions(event):
                     ok, res = False, f"{type(t_err).__name__}: {t_err}"
 
                 if ok:
+                    repaired = res.get("repaired_password")
+                    if repaired:
+                        try:
+                            from utils.imap_verifier import update_stored_password
+                            update_stored_password(res["user"], repaired)
+                            await conv.send_message(
+                                "\U0001F527 <b>App Password auto-repaired.</b>\n\n"
+                                "The pasted text contained extra characters, so the "
+                                "16-letter App Password was extracted and saved:\n"
+                                f"<code>{repaired[:4]} **** **** {repaired[-4:]}</code>")
+                        except Exception:
+                            pass
                     await conv.send_message(
                         f"{PE_CHECK} <b>IMAP Login Successful!</b>\n\n"
                         f"\U0001F4E7 <b>Account:</b> <code>{html.escape(res['user'])}</code>\n"
