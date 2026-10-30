@@ -1,10 +1,15 @@
 """Servers screen.
 
-Mirrors the reference app:
-  Server-1 (OFF)
-  Server-2 (Good Quality TG)
-  Server-3 (TG NUM change)
-  Server-4 (cheap phishing)
+Four catalogues, exactly as the owner specified:
+
+  Server-1  Basic TG Account      -> live Telegram account stock (bulk mode)
+  Server-2  LZT Connected         -> LZT.market "Good Quality TG" accounts
+  Server-3  TG Number Change      -> TemporaSMS, Telegram filter
+  Server-4  Buy WhatsApp Account  -> TemporaSMS, WhatsApp filter
+
+Server-3 and Server-4 are the same live panels used elsewhere in the bot, so
+they stay ONLINE and show real TemporaSMS numbers whenever the provider has
+stock.
 """
 import html
 from telethon import events
@@ -21,13 +26,41 @@ from config import (
 from utils.keyboards import style_btn
 
 SERVER_ICONS = {
-    "bulk": "📦",
-    "nonspam": "✅",
-    "numchange": "🔁",
-    "spam": "💰",
-    "whatsapp": "💬",
-    "allotp": "🧩",
+    "bulk": "\U0001F4E6",
+    "nonspam": "\U0001F6D2",
+    "numchange": "\U0001F501",
+    "spam": "\U0001F4B0",
+    "whatsapp": "\U0001F4AC",
+    "allotp": "\U0001F9E9",
 }
+
+# One-line explanation under each server name on the Servers screen.
+SERVER_BLURBS = {
+    "bulk": "Live Telegram accounts, standard stock.",
+    "nonspam": "LZT.market connected \u2014 Good Quality TG accounts.",
+    "numchange": "TemporaSMS Telegram filter \u2014 live numbers for TG number change.",
+    "spam": "Cheap Telegram accounts from live stock.",
+    "whatsapp": "TemporaSMS WhatsApp filter \u2014 live numbers for WhatsApp accounts.",
+    "allotp": "Every app on the OTP panel.",
+}
+
+
+def _lzt_ready():
+    """True when an LZT API key is configured (Server-2 is 'connected')."""
+    try:
+        from database import get_lzt_key
+        return bool(get_lzt_key())
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
+def _otp_ready():
+    """True when the TemporaSMS key is configured (Server-3/4 are live)."""
+    try:
+        from utils import temporasms
+        return bool(temporasms.configured())
+    except Exception:  # pragma: no cover - defensive
+        return False
 
 
 def _server_status_key(idx):
@@ -86,32 +119,66 @@ def parse_servers():
 
 
 async def show_servers(event):
+    """Render the four servers with their live connection status.
+
+    Server-2 shows whether LZT is connected, Server-3/4 show whether the
+    TemporaSMS key is live, so the owner can see at a glance that the
+    number-change and WhatsApp catalogues are actually online.
+    """
     servers = parse_servers()
     lines = []
     btns = []
+    lzt_ok = _lzt_ready()
+    otp_ok = _otp_ready()
+
     for idx, srv in enumerate(servers, start=1):
-        icon = SERVER_ICONS.get(srv["mode"], "📦")
+        mode = srv["mode"]
+        icon = SERVER_ICONS.get(mode, "\U0001F4E6")
+        blurb = SERVER_BLURBS.get(mode, "")
         if srv["status"] == "on":
-            badge = "✅"
-            lines.append(f"{icon} <b>{html.escape(srv['name'])}</b> — <b>ONLINE</b>")
-            btns.append([style_btn(f"{icon} {srv['name']}", f"srv_open|{srv['mode']}", "success", icon=5409098988156629257)])
+            lines.append(f"{icon} <b>{html.escape(srv['name'])}</b> \u2014 <b>ONLINE</b>")
+            if blurb:
+                lines.append(f"   <i>{html.escape(blurb)}</i>")
+            btns.append([style_btn(f"{icon} {srv['name']}",
+                                   f"srv_open|{mode}", "success",
+                                   icon=5409098988156629257)])
         else:
-            badge = "🔴 OFF"
-            lines.append(f"{icon} <b>{html.escape(srv['name'])}</b> — <b>{badge}</b>")
-            btns.append([style_btn(f"{icon} {srv['name']} (OFF)", f"srv_off|{idx}", "danger")])
+            lines.append(f"{icon} <b>{html.escape(srv['name'])}</b> \u2014 <b>\U0001F534 OFF</b>")
+            if blurb:
+                lines.append(f"   <i>{html.escape(blurb)}</i>")
+            btns.append([style_btn(f"{icon} {srv['name']} (OFF)",
+                                   f"srv_off|{idx}", "danger")])
+
+    lzt_badge = (PE_CHECK + " Connected") if lzt_ok else ("\u26A0\uFE0F Key missing")
+    otp_badge = (PE_CHECK + " Live") if otp_ok else ("\u26A0\uFE0F Key missing")
+    status_lines = [
+        f"\U0001F6D2 <b>LZT.market:</b> {lzt_badge}",
+        f"\U0001F4F1 <b>TemporaSMS:</b> {otp_badge}",
+    ]
 
     msg = (
-        f"<blockquote expandable>{PE_LOCATION} <b>🖥 Servers</b>\n\n"
+        f"<blockquote expandable>{PE_LOCATION} <b>\U0001F5A5 Servers</b>\n\n"
         + "\n".join(lines)
-        + f"\n\n<i>Pick a server to continue. Server-3 uses TemporaSMS for number change.</i></blockquote>"
+        + "\n\n" + "\n".join(status_lines)
+        + "\n\n<i>Server-3 and Server-4 use the live TemporaSMS panel "
+          "(Telegram / WhatsApp filters).</i></blockquote>"
     )
-    btns.append([style_btn("🔙 Back", b"dashboard_main", "danger", icon=6129812419028982717)])
+    btns.append([style_btn("\U0001F504 Refresh", b"servers_menu", "primary",
+                           icon=5409320020058584473)])
+    btns.append([style_btn("\U0001F519 Back", b"dashboard_main", "danger",
+                           icon=6129812419028982717)])
 
     if isinstance(event, events.CallbackQuery.Event):
         try:
             await event.edit(msg, buttons=btns)
         except MessageNotModifiedError:
             pass
+        except Exception as exc:  # noqa: BLE001 - never leave a dead button
+            logger.warning(f"servers edit failed: {exc}")
+            try:
+                await event.respond(msg, buttons=btns)
+            except Exception:
+                pass
     else:
         await event.respond(msg, buttons=btns)
 
@@ -147,19 +214,26 @@ def register_servers(bot):
     async def cb_srv_open(e):
         raw = e.pattern_match.group(1)
         mode = raw.decode() if isinstance(raw, bytes) else raw
-        # Each server opens its own dedicated panel.
-        from plugins.product_panels import PANELS, show_terms, show_countries as pp_countries
+        # Server-2 is the LZT catalogue; accept the friendly alias too.
+        if mode == "lzt":
+            mode = "nonspam"
+
+        from plugins.product_panels import (
+            PANELS, show_terms, show_countries as pp_countries, _terms_accepted,
+        )
+        # Server-3 (numchange) and Server-4 (whatsapp) are live TemporaSMS
+        # panels, so they get the terms gate + country list like the rest of
+        # the bot.
         if mode in PANELS:
-            from plugins.product_panels import _terms_accepted
             if not _terms_accepted(e.sender_id, mode):
                 return await show_terms(e, mode)
             return await pp_countries(e, mode, 1)
         if mode == "numchange":
             return await show_num_change(e)
-        # Other servers open the buy catalogue filtered by that mode
+        # Server-1 (bulk) and Server-2 (nonspam/LZT) open the account catalogue.
         from plugins.buy import show_countries
         await show_countries(e, mode, 1)
 
     @bot.on(events.CallbackQuery(pattern=r"^srv_off\|(\d+)$"))
     async def cb_srv_off(e):
-        await e.answer("🔴 This server is currently offline. Please pick another.", alert=True)
+        await e.answer("\U0001F534 This server is currently offline. Please pick another.", alert=True)

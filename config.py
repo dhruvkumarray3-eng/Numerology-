@@ -297,12 +297,18 @@ ALL_APPS_CATALOG_JSON = os.getenv("ALL_APPS_CATALOG_JSON", "").strip()
 
 # --- Servers shown in the "Servers" screen ---
 # Format: "name|status|mode" separated by commas. status: on/off
+# The four catalogues shown on the Servers screen.  Order matters: the index
+# is what the admin ON/OFF override is stored against (server_status_<n>).
+#   Server-1 -> plain Telegram accounts from live stock
+#   Server-2 -> LZT.market (Good Quality TG accounts)
+#   Server-3 -> Telegram number change via TemporaSMS (Telegram filter)
+#   Server-4 -> WhatsApp account numbers via TemporaSMS (WhatsApp filter)
 SERVERS_CONFIG = os.getenv(
     "SERVERS_CONFIG",
-    "Server-1|off|bulk,"
-    "Server-2 (Good Quality TG)|on|nonspam,"
-    "Server-3 (TG NUM change)|on|numchange,"
-    "Server-4 (cheap phishing)|on|spam",
+    "Server-1 (Basic TG Account)|on|bulk,"
+    "Server-2 (LZT Connected)|on|nonspam,"
+    "Server-3 (TG Number Change)|on|numchange,"
+    "Server-4 (Buy WhatsApp Account)|on|whatsapp",
 ).strip()
 
 # --- Default user preferences ---

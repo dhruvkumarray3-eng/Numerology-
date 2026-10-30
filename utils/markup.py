@@ -359,11 +359,11 @@ SERVICE_ORDER = ("whatsapp", "numchange", "allotp", "smm", "lzt")
 # services (``markup_svc_<key>_<field>``) so the admin console, the preview and
 # the reset logic all work unchanged.
 SERVER_TARGETS = {
-    "srv_bulk": "Server-1 \u00b7 Bulk TG",
-    "srv_nonspam": "Server-2 \u00b7 Good Quality TG",
+    "srv_bulk": "Server-1 \u00b7 Basic TG Account",
+    "srv_nonspam": "Server-2 \u00b7 LZT Connected",
     "srv_numchange": "Server-3 \u00b7 TG Number Change",
-    "srv_spam": "Server-4 \u00b7 Cheap / Phishing",
-    "srv_whatsapp": "WhatsApp Server",
+    "srv_spam": "Legacy \u00b7 Cheap / Phishing",
+    "srv_whatsapp": "Server-4 \u00b7 Buy WhatsApp Account",
     "srv_allotp": "All Apps OTP Server",
 }
 
