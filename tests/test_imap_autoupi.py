@@ -55,12 +55,12 @@ from utils.imap_verifier import parse_gmail_credentials
 cases = [
     # (input, expected email, expected password)
     ("neetasgaritsairlank@gmail.com cpe ungh swit limb", "neetasgaritsairlank@gmail.com", "cpeunghswitlimb"),
-    ("neetasgaritsairlank@gmail.com expe ungh swit limb.", "neetasgaritsairlank@gmail.com", "expeunghswitlimb."),
+    ("neetasgaritsairlank@gmail.com expe ungh swit limb.", "neetasgaritsairlank@gmail.com", "expeunghswitlimb"),
     ("neetasgaritsairlank@gmail.com", "neetasgaritsairlank@gmail.com", ""),
     ("  \n neetasgaritsairlank@gmail.com   dqwo agxp srsw fdax \n ", "neetasgaritsairlank@gmail.com", "dqwoagxpsrswfdax"),
     ("dqwo agxp srsw fdax neetasgaritsairlank@gmail.com", "neetasgaritsairlank@gmail.com", "dqwoagxpsrswfdax"),
-    ("Email: neetasgaritsairlank@gmail.com Pass: dqwo agxp srsw fdax", "neetasgaritsairlank@gmail.com", "Email:Pass:dqwoagxpsrswfdax"),
-    ("neetasgaritsairlank@gmail.com, dqwo agxp srsw fdax", "neetasgaritsairlank@gmail.com", ",dqwoagxpsrswfdax"),
+    ("Email: neetasgaritsairlank@gmail.com Pass: dqwo agxp srsw fdax", "neetasgaritsairlank@gmail.com", "dqwoagxpsrswfdax"),
+    ("neetasgaritsairlank@gmail.com, dqwo agxp srsw fdax", "neetasgaritsairlank@gmail.com", "dqwoagxpsrswfdax"),
     ("not an email at all", "", ""),
     ("", "", ""),
     (None, "", ""),
@@ -70,6 +70,41 @@ for raw, want_mail, want_pass in cases:
     label = repr(raw)[:46]
     check(f"parse {label} -> email", got_mail == want_mail, f"{got_mail!r} != {want_mail!r}")
     check(f"parse {label} -> pass", got_pass == want_pass, f"{got_pass!r} != {want_pass!r}")
+
+# ---------------------------------------------------------------------------
+section("1c. Multiple accounts in one message are all captured")
+from utils.imap_verifier import parse_gmail_accounts
+from database import cur, db
+
+multi = parse_gmail_accounts(
+    "first@gmail.com abcd efgh ijkl mnop\n"
+    "second@gmail.com wxyz wxyz wxyz wxyz")
+check("two accounts parsed", len(multi) == 2, multi)
+check("first account", multi[0] == ("first@gmail.com", "abcd efgh ijkl mnop".replace(" ", "")), multi[0])
+check("second account", multi[1] == ("second@gmail.com", "wxyzwxyzwxyzwxyz"), multi[1])
+
+labelled = parse_gmail_accounts(
+    "Email: a@gmail.com Pass: abcd efgh ijkl mnop\n"
+    "Email: b@gmail.com Pass: wxyz wxyz wxyz wxyz")
+check("labelled multi parsed", len(labelled) == 2, labelled)
+check("labelled first password clean", labelled[0][1] == "abcdefghijklmnop", labelled[0])
+check("labelled second password clean", labelled[1][1] == "wxyzwxyzwxyzwxyz", labelled[1])
+
+check("single email no password", parse_gmail_accounts("a@gmail.com") == [("a@gmail.com", "")])
+check("no email -> empty list", parse_gmail_accounts("nothing here") == [])
+check("duplicate email collapsed", len(parse_gmail_accounts(
+    "a@gmail.com abcd efgh ijkl mnop a@gmail.com wxyz wxyz wxyz wxyz")) == 1)
+
+# Round-trip through the settings table
+from utils.imap_verifier import save_gmail_accounts, get_imap_accounts
+saved = save_gmail_accounts([("one@gmail.com", "abcd efgh ijkl mnop"),
+                             ("two@gmail.com", "wxyz wxyz wxyz wxyz")])
+check("two accounts saved", saved == 2, saved)
+back = get_imap_accounts()
+check("two accounts read back", len(back) == 2, back)
+check("legacy gmail_user points at first", back[0][0] == "one@gmail.com", back)
+cur.execute("DELETE FROM settings WHERE key='gmail_accounts'")
+db.commit()
 
 # The exact screenshot failure: an email alone must never yield an empty
 # "Got:" line again.
@@ -141,12 +176,12 @@ check("test_imap handles timeout", "TimeoutError" in test_block)
 
 gm_start = src.index('elif action_data == "change_gmail"')
 gm_block = src[gm_start:gm_start + 7000]
-check("change_gmail uses the shared parser", "parse_gmail_credentials" in gm_block)
+check("change_gmail uses the shared parser", "parse_gmail_accounts" in gm_block)
 check("change_gmail normalises password", "clean_app_password" in gm_block)
 check("change_gmail retries bad input", "for attempt in range(3)" in gm_block)
-check("change_gmail warns on odd password length", "len(g_pass) != 16" in gm_block)
+check("change_gmail warns on odd password length", "len(pwd) != 16" in gm_block)
 check("change_gmail auto-tests after save", "test_imap_connection" in gm_block)
-check("change_gmail uses INSERT OR REPLACE", "INSERT OR REPLACE INTO settings" in gm_block)
+check("change_gmail saves every account", "save_gmail_accounts" in gm_block)
 check("change_gmail escapes echoed input", "html.escape(text[:80])" in gm_block)
 
 # The prompt must not contain a raw "<placeholder>" tag: Telegram's HTML

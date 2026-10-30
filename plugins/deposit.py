@@ -157,6 +157,24 @@ async def process_referral_bonus(user_id, amt):
         except: pass
     except Exception as e: logger.error(f"Ref bonus error: {e}")
 
+async def _safe_edit(e, text, buttons=None):
+    """Edit a callback message, ignoring Telegram's "nothing changed" error.
+
+    The custom-amount keypad re-renders the *same* text/buttons on several
+    actions (pressing ``Del`` on an empty amount, tapping a digit after the
+    7-digit cap, re-opening the keypad for the same deposit).  Telegram then
+    answers ``MessageNotModifiedError``, which used to bubble up and crash the
+    handler.  Swallowing it here keeps the keypad perfectly usable.
+    """
+    try:
+        if buttons is None:
+            await e.edit(text)
+        else:
+            await e.edit(text, buttons=buttons)
+    except MessageNotModifiedError:
+        pass
+
+
 def get_admin_custom_keypad(dep_id):
     return [
         [style_btn("1", f"dkp|{dep_id}|1", "primary", icon=5375125990118793401), style_btn("2", f"dkp|{dep_id}|2", "primary", icon=5409098988156629257), style_btn("3", f"dkp|{dep_id}|3", "primary", icon=6154249597532248059)],
@@ -536,7 +554,7 @@ def register_deposit(bot):
                  style_btn("❌ 𝐑ᴇᴊᴇᴄᴛ", f"dep_rej|{dep_id}|{t_uid}", "danger", icon=5409119256107297715)],
                 [style_btn("✏️ 𝐂ᴜsᴛᴏᴍ 𝐀ᴍᴏᴜɴᴛ", f"dep_acc|{dep_id}|{t_uid}|{method}|custom|0", "primary", icon=5409098988156629257)]
             ]
-            return await e.edit(f"<blockquote>{PE_LIGHTNING} <b>𝐍ᴇᴡ 𝐃ᴇᴘᴏsɪᴛ 𝐑ᴇǫᴜᴇsᴛ</b>\n\n{P_ACC} 𝐔sᴇʀ: <code>{t_uid}</code>\n{P_MONEY} 𝐑ᴇǫᴜᴇsᴛ: <b>{P_INR}{orig_amt}</b>\n{P_CARD} 𝐌ᴇᴛʜᴏᴅ: <code>{method}</code>\n{P_ID} 𝐑ᴇғ: <code>#{dep_id}</code></blockquote>", buttons=btns)
+            return await _safe_edit(e, f"<blockquote>{PE_LIGHTNING} <b>𝐍ᴇᴡ 𝐃ᴇᴘᴏsɪᴛ 𝐑ᴇǫᴜᴇsᴛ</b>\n\n{P_ACC} 𝐔sᴇʀ: <code>{t_uid}</code>\n{P_MONEY} 𝐑ᴇǫᴜᴇsᴛ: <b>{P_INR}{orig_amt}</b>\n{P_CARD} 𝐌ᴇᴛʜᴏᴅ: <code>{method}</code>\n{P_ID} 𝐑ᴇғ: <code>#{dep_id}</code></blockquote>", btns)
         elif action == "conf":
             amt = int(curr)
             if amt <= 0: return await e.answer("Amount must be > 0", alert=True)
@@ -554,7 +572,7 @@ def register_deposit(bot):
                          f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{t_uid}</code>\n"
                          f"{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ 𝐂ʀᴇᴅɪᴛᴇᴅ:</b> <b>{P_INR}{amt}</b>\n"
                          f"👨‍💻 <b>𝐀ᴘᴘʀᴏᴠᴇᴅ 𝐁ʏ:</b> <code>{uid}</code></blockquote>")
-            await e.edit(conf_text)
+            await _safe_edit(e, conf_text)
             try:
                 await bot.send_message(int(t_uid), f"<blockquote>{PE_CHECK} <b>🎉 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴘᴘʀᴏᴠᴇᴅ!</b>\n\n{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ 𝐀ᴅᴅᴇᴅ:</b> <b>{P_INR}{amt}</b>\n📉 <b>𝐎ʟᴅ:</b> {P_INR}{prev_bal} | 📈 <b>𝐍ᴇᴡ:</b> <b>{P_INR}{prev_bal+amt}</b></blockquote>")
             except: pass
@@ -562,7 +580,7 @@ def register_deposit(bot):
             return
 
         custom_dep_amt[dep_id] = curr
-        await e.edit(f"<blockquote>{P_KEY} <b>Enter 𝐂ᴜsᴛᴏᴍ 𝐀ᴍᴏᴜɴᴛ for User <code>{t_uid}</code>:</b>\n\n{P_MONEY} <b>{P_INR}{curr}</b></blockquote>", buttons=get_admin_custom_keypad(dep_id))
+        await _safe_edit(e, f"<blockquote>{P_KEY} <b>Enter 𝐂ᴜsᴛᴏᴍ 𝐀ᴍᴏᴜɴᴛ for User <code>{t_uid}</code>:</b>\n\n{P_MONEY} <b>{P_INR}{curr}</b></blockquote>", get_admin_custom_keypad(dep_id))
 
 # =====================================================================
 # BEP-20 (USDT - BSC) PAYMENT HANDLER & UI (ADDED AT BOTTOM)
