@@ -668,7 +668,8 @@ async def admin_actions(event):
             [style_btn(f"🔄 Mode: {dep_mode.capitalize()}", "adm_toggle_dep_mode", "success", icon=5409271925014801629)],
             [style_btn("✏️ Change UPI ID", "adm_change_upi", "primary", icon=5409098988156629257),
              style_btn("📧 Change Gmail", "adm_change_gmail", "primary", icon=5409098988156629257)],
-            [style_btn("🧪 Test IMAP Connection", "adm_test_imap", "primary", icon=5409320020058584473)],
+            [style_btn("🧪 Test IMAP Connection", "adm_test_imap", "primary", icon=5409320020058584473),
+             style_btn("🩺 Diagnose", "adm_diag_imap", "success", icon=5409271925014801629)],
             [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129888444245089008)]
         ]
         return await event.edit(msg, buttons=btns)
@@ -704,7 +705,8 @@ async def admin_actions(event):
             [style_btn(f"🔄 Mode: {dep_mode.capitalize()}", "adm_toggle_dep_mode", "success", icon=5409271925014801629)],
             [style_btn("✏️ Change UPI ID", "adm_change_upi", "primary", icon=5409098988156629257),
              style_btn("📧 Change Gmail", "adm_change_gmail", "primary", icon=5409098988156629257)],
-            [style_btn("🧪 Test IMAP Connection", "adm_test_imap", "primary", icon=5409320020058584473)],
+            [style_btn("🧪 Test IMAP Connection", "adm_test_imap", "primary", icon=5409320020058584473),
+             style_btn("🩺 Diagnose", "adm_diag_imap", "success", icon=5409271925014801629)],
             [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129888444245089008)]
         ]
         return await event.edit(msg, buttons=btns)
@@ -776,7 +778,33 @@ async def admin_actions(event):
                 f"\U0001F4E5 Inbox: {res['total']} emails\n"
                 f"\U0001F310 {res['host']}:{res['port']}"
                 f"{extra}{note}", alert=True)
-        return await event.answer(f"\u274C {res}", alert=True)
+        # Failure: hand back the real reason *plus* a full health report, so
+        # the owner can see whether it is the password, the port or Gmail
+        # itself instead of getting the same alert over and over.
+        try:
+            from utils.imap_verifier import diagnose_imap
+            report = await asyncio.wait_for(diagnose_imap(), timeout=40)
+        except Exception:
+            report = ""
+        body = f"\u274C {res}"
+        if report:
+            body += f"\n\n\U0001FA7A <b>Diagnostics</b>\n<blockquote>{html.escape(report)}</blockquote>"
+        return await event.answer(body[:900], alert=True)
+
+    elif action_data == "diag_imap" and has_perm(uid, 'p_settings'):
+        await event.answer("\U0001FA7A Running diagnostics\u2026", alert=False)
+        try:
+            from utils.imap_verifier import diagnose_imap
+            report = await asyncio.wait_for(diagnose_imap(), timeout=45)
+        except asyncio.TimeoutError:
+            report = "Diagnostics timed out after 45s (network unreachable)."
+        except Exception as exc:
+            report = f"{type(exc).__name__}: {exc}"
+        await bot.send_message(
+            uid,
+            "<blockquote>\U0001FA7A <b>IMAP Diagnostics</b>\n\n"
+            f"<code>{html.escape(report)}</code></blockquote>")
+        return
 
     elif action_data == "stats" and has_perm(uid, 'p_stats'):
         u_row = cur.execute("SELECT COUNT(*) FROM users").fetchone()
@@ -1677,6 +1705,16 @@ async def admin_actions(event):
                         f"{P_NO} <b>Credentials saved, but the login test failed.</b>\n\n"
                         f"<blockquote>{html.escape(str(res))}</blockquote>\n\n"
                         "<i>Fix the issue, then tap \u201cTest IMAP Connection\u201d again.</i>")
+                    # Show the full picture right away instead of making the
+                    # owner guess why the same alert keeps coming back.
+                    try:
+                        from utils.imap_verifier import diagnose_imap
+                        report = await asyncio.wait_for(diagnose_imap(), timeout=40)
+                        await conv.send_message(
+                            "<blockquote>\U0001FA7A <b>Diagnostics</b>\n\n"
+                            f"<code>{html.escape(report)}</code></blockquote>")
+                    except Exception:
+                        pass
 
             elif action_data == "ban" and has_perm(uid, 'p_bal'):
                 t_uid = int((await get_reply(f"{P_ACC} <b>User ID:</b>")).text)
