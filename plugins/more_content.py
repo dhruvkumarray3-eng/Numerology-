@@ -183,12 +183,12 @@ def register_more_content(bot):
                 await e.respond(
                     f"<blockquote>{PE_CHECK} <b>{html.escape(message)}</b>\n"
                     f"💰 <b>Credited:</b> <code>{amount:.2f} {cur_code}</code></blockquote>",
-                    buttons=[[style_btn("🔙 Back", b"mc_home", "primary")]],
+                    buttons=[[style_btn("🔙 Back", b"mc_home", "primary", icon="back")]],
                 )
             else:
                 await e.respond(
                     f"<blockquote>{html.escape(message)}</blockquote>",
-                    buttons=[[style_btn("🔙 Back", b"mc_home", "primary")]],
+                    buttons=[[style_btn("🔙 Back", b"mc_home", "primary", icon="back")]],
                 )
             raise events.StopPropagation
 
@@ -207,7 +207,7 @@ def register_more_content(bot):
             else:
                 await e.respond(
                     f"<blockquote>❌ <b>Could not generate session.</b>\n<code>{html.escape(str(err))}</code></blockquote>",
-                    buttons=[[style_btn("🔙 Back", b"mc_home", "primary")]],
+                    buttons=[[style_btn("🔙 Back", b"mc_home", "primary", icon="back")]],
                 )
             raise events.StopPropagation
 
@@ -231,7 +231,7 @@ def register_more_content(bot):
             await e.respond(
                 f"<blockquote>{PE_CHECK} <b>Session file read successfully</b>\n\n"
                 f"{html.escape(summary)}</blockquote>",
-                buttons=[[style_btn("🔙 Back", b"mc_home", "primary")]],
+                buttons=[[style_btn("🔙 Back", b"mc_home", "primary", icon="back")]],
             )
         except Exception as ex:
             await e.respond(f"<blockquote>❌ Could not read session: <code>{html.escape(str(ex))}</code></blockquote>")
