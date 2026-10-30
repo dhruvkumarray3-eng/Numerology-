@@ -203,6 +203,52 @@ check("client secret parsed by prefix", "GOCSPX-" in admin_src)
 check("consent link rendered as anchor", "OPEN GOOGLE LOGIN" in admin_src)
 
 # ---------------------------------------------------------------------------
+section("9. client credentials can come from environment variables")
+# ---------------------------------------------------------------------------
+import os as _os
+
+_saved_env = {k: _os.environ.pop(k, None) for k in
+              ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET")}
+_orig_get = go._get
+try:
+    go._get = lambda key, default="": ""          # nothing stored in the DB
+    check("no env, no db -> empty", go.client_credentials() == ("", ""))
+
+    _os.environ["GOOGLE_CLIENT_ID"] = "env-123.apps.googleusercontent.com"
+    _os.environ["GOOGLE_CLIENT_SECRET"] = "GOCSPX-envsecret"
+    cid, secret = go.client_credentials()
+    check("env client id used", cid == "env-123.apps.googleusercontent.com", cid)
+    check("env client secret used", secret == "GOCSPX-envsecret", secret)
+    check("has_client true from env", go.has_client() is True)
+
+    go._get = lambda key, default="": {
+        "google_client_id": "db-456.apps.googleusercontent.com",
+        "google_client_secret": "GOCSPX-dbsecret",
+    }.get(key, "")
+    cid, secret = go.client_credentials()
+    check("db value wins over env", cid == "db-456.apps.googleusercontent.com", cid)
+finally:
+    go._get = _orig_get
+    for k, v in _saved_env.items():
+        if v is None:
+            _os.environ.pop(k, None)
+        else:
+            _os.environ[k] = v
+
+# ---------------------------------------------------------------------------
+section("10. setup text avoids the billing trap")
+# ---------------------------------------------------------------------------
+check("says it is free", "FREE" in admin_src)
+check("says no billing needed", "billing" in admin_src)
+check("tells to skip the free-trial page", "Skip" in admin_src or "skip" in admin_src)
+check("no Gmail API enable step", "apis/library/gmail.googleapis.com" not in admin_src)
+check("consent screen linked", "apis/credentials/consent" in admin_src)
+check("test user step present", "Test user" in admin_src)
+check("7-day testing warning present", "7 din" in admin_src)
+check("publish app step present", "PUBLISH APP" in admin_src)
+check("env var shortcut mentioned", "GOOGLE_CLIENT_ID" in admin_src)
+
+# ---------------------------------------------------------------------------
 print(f"\n{PASS} passed, {FAIL} failed")
 if FAIL:
     print("=== SOME TESTS FAILED ===")
