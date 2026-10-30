@@ -20,6 +20,7 @@ Run from the repository root:
 import asyncio
 import inspect
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -46,7 +47,10 @@ def check(label, cond, detail=""):
 # ---------------------------------------------------------------------------
 def test_no_hardcoded_imap_credentials():
     src = (ROOT / "utils" / "imap_verifier.py").read_text(encoding="utf-8")
-    check("no gmail address baked in", "@gmail.com" not in src)
+    # A bare "@gmail.com" is fine (it is the Gmail *domain* constant used to
+    # force imap.gmail.com); a full hard-coded address is not.
+    check("no gmail address baked in",
+          not re.search(r"[A-Za-z0-9._%+\-]+@gmail\.com", src))
     check("no app password baked in", "dqwo agxp" not in src)
     check("reads IMAP_USER env", "IMAP_USER" in src)
     check("reads IMAP_PASS env", "IMAP_PASS" in src)

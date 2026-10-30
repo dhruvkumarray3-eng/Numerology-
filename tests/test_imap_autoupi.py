@@ -267,6 +267,61 @@ cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_id', ?)",
 db.commit()
 
 # ---------------------------------------------------------------------------
+# 8. Login hardening (v17)
+# ---------------------------------------------------------------------------
+from utils.imap_verifier import (
+    password_candidates, _mailbox_count, _is_gmail, _endpoints_for,
+    _sender_allowed, _looks_like_payment, _is_auth_error, probe_network,
+)
+
+# Gmail always shows app passwords in lowercase; a caps-typed one must still work.
+check("caps password gets a lowercase candidate",
+      "siyyziefwytprtku" in password_candidates("SIYY ZIEF WYTP RTKU"),
+      password_candidates("SIYY ZIEF WYTP RTKU"))
+check("spaced password glued first",
+      password_candidates("siyy zief wytp rtku")[0] == "siyyziefwytprtku")
+
+# imaplib returns bytes; str(b'1751') used to break int() and report 0 emails.
+check("mailbox count from bytes", _mailbox_count(b"1751") == 1751)
+check("mailbox count from quoted bytes", _mailbox_count(b'"INBOX" 42') == 42)
+check("mailbox count None", _mailbox_count(None) == 0)
+
+# Gmail addresses must always hit imap.gmail.com, never a stale setting.
+check("gmail detected", _is_gmail("someone@gmail.com"))
+check("googlemail detected", _is_gmail("someone@googlemail.com"))
+check("non-gmail detected", not _is_gmail("someone@yahoo.com"))
+eps = _endpoints_for("someone@gmail.com")
+check("gmail endpoint is imap.gmail.com:993", eps[0] == ("imap.gmail.com", 993, False), eps)
+check("gmail has STARTTLS fallback", any(e[2] for e in eps), eps)
+
+# Sender gate: known app, unknown bank domain, brand-only display name.
+check("phonepe allowed", _sender_allowed("PhonePe <noreply@phonepe.com>"))
+check("fampay allowed", _sender_allowed("FamPay <no-reply@famapp.in>"))
+check("unknown bank domain allowed",
+      _sender_allowed("Alerts <alerts@somecoopbank.co.in>"))
+check("brand in display name allowed",
+      _sender_allowed('"Google Pay" <x@randomdomain.xyz>'))
+check("plain promo blocked", not _sender_allowed("Shop <promo@shop.com>"))
+
+# Body fallback so an unexpected sender is still honoured.
+check("body fallback credit+amount",
+      _looks_like_payment("Rs.500 has been credited to your account"))
+check("body fallback ref only",
+      _looks_like_payment("Rs.500 UTR 412345678901"))
+check("body fallback rejects noise", not _looks_like_payment("Big sale today"))
+
+# Auth vs network errors must be distinguished.
+check("auth error detected",
+      _is_auth_error(Exception("[AUTHENTICATIONFAILED] Invalid credentials")))
+check("network error not auth",
+      not _is_auth_error(OSError("Network is unreachable")))
+
+# probe_network returns one row per endpoint without raising.
+probe = probe_network("someone@gmail.com", timeout=1)
+check("probe_network rows", len(probe) == len(eps), probe)
+check("probe_network shape", all(len(r) == 3 for r in probe), probe)
+
+# ---------------------------------------------------------------------------
 print(f"\n{PASS} passed, {FAIL} failed")
 if FAIL:
     print("=== SOME TESTS FAILED ===")

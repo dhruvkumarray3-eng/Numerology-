@@ -364,8 +364,44 @@ def get_imap_credentials():
     return "", ""
 
 
-def _imap_host_port():
-    """Resolve the IMAP server from settings, with sane Gmail defaults."""
+GMAIL_DOMAINS = ("@gmail.com", "@googlemail.com")
+
+# (host, port, use_starttls) tried in order.  993 is the normal IMAPS port; 143
+# with STARTTLS is the fallback for hosts that block outbound 993 (common on
+# game/Pterodactyl panels).
+GMAIL_ENDPOINTS = [
+    ("imap.gmail.com", 993, False),
+    ("imap.gmail.com", 143, True),
+]
+
+
+def _mailbox_count(raw):
+    """Turn an IMAP SELECT reply into an int.
+
+    ``imaplib`` hands back ``b'1751'``; ``str(b'1751')`` is ``"b'1751'"``, which
+    made ``int()`` raise and silently reported an empty inbox.  Decode first.
+    """
+    if raw is None:
+        return 0
+    if isinstance(raw, bytes):
+        raw = raw.decode("ascii", "ignore")
+    match = re.search(r"\d+", str(raw))
+    return int(match.group(0)) if match else 0
+
+
+def _is_gmail(user):
+    return str(user or "").strip().lower().endswith(GMAIL_DOMAINS)
+
+
+def _imap_host_port(user=""):
+    """Resolve the IMAP server for one account.
+
+    A Gmail address always goes to ``imap.gmail.com``: the legacy
+    ``imap_host`` setting belongs to the old grabmail feature and must never be
+    allowed to point a Gmail login at some other server.
+    """
+    if _is_gmail(user):
+        return "imap.gmail.com", 993
     host = (_setting("imap_host") or "imap.gmail.com").strip()
     raw_port = (_setting("imap_port") or "993").strip()
     try:
@@ -375,57 +411,142 @@ def _imap_host_port():
     return host, port
 
 
+def _endpoints_for(user):
+    """Every (host, port, starttls) pair worth trying for this account."""
+    if _is_gmail(user):
+        return list(GMAIL_ENDPOINTS)
+    host, port = _imap_host_port(user)
+    return [(host, port, False)]
+
+
+def _connect(host, port, use_starttls, context, timeout):
+    """Open one IMAP connection, optionally upgrading a plain socket."""
+    if use_starttls:
+        mail = imaplib.IMAP4(host, port, timeout=timeout)
+        mail.starttls(ssl_context=context)
+        return mail
+    return imaplib.IMAP4_SSL(host, port, ssl_context=context, timeout=timeout)
+
+
+def _is_auth_error(exc):
+    low = str(exc).lower()
+    return any(token in low for token in (
+        "authenticationfailed",
+        "invalid credentials",
+        "username and password not accepted",
+        "application-specific password required",
+        "invalid login",
+    ))
+
+
 def _open_imap(user, pwd, timeout=20):
-    """Open and log in to one mailbox, trying repaired password variants.
+    """Open and log in to one mailbox, trying every plausible reading.
+
+    For each endpoint (IMAPS 993, then STARTTLS 143 for Gmail) every password
+    candidate is tried.  A rejected password on one endpoint is retried on the
+    next, and each candidate gets a second chance on a fresh connection because
+    Gmail occasionally throttles rapid logins with a bogus
+    ``AUTHENTICATIONFAILED``.
 
     Returns ``(mail, host, port, used_password)``.  Raises the last error when
-    every candidate is rejected, so the caller can explain it.
+    everything fails, so the caller can explain it.
     """
-    host, port = _imap_host_port()
     context = ssl.create_default_context()
     candidates = password_candidates(pwd)
-    last_exc = None
+    endpoints = _endpoints_for(user)
+    last_auth_error = None
+    last_network_error = None
 
-    for candidate in candidates:
-        mail = None
-        try:
-            mail = imaplib.IMAP4_SSL(host, port, ssl_context=context, timeout=timeout)
-            mail.login(user, candidate)
-            return mail, host, port, candidate
-        except Exception as exc:
-            last_exc = exc
-            try:
-                if mail is not None:
-                    mail.logout()
-            except Exception:
-                pass
-            low = str(exc).lower()
-            # Only an auth failure is worth retrying with another variant.
-            if ("authenticationfailed" not in low
-                    and "invalid credentials" not in low
-                    and "username and password not accepted" not in low
-                    and "application-specific password required" not in low):
-                raise
-    if last_exc is not None:
-        raise last_exc
+    for host, port, use_starttls in endpoints:
+        for candidate in candidates:
+            for _attempt in (1, 2):
+                mail = None
+                try:
+                    mail = _connect(host, port, use_starttls, context, timeout)
+                    mail.login(user, candidate)
+                    return mail, host, port, candidate
+                except Exception as exc:
+                    try:
+                        if mail is not None:
+                            mail.logout()
+                    except Exception:
+                        pass
+                    if _is_auth_error(exc):
+                        last_auth_error = exc
+                        continue          # retry once on a fresh connection
+                    last_network_error = exc
+                    break                 # port unusable, next endpoint
+                finally:
+                    mail = None
+            else:
+                continue                  # both attempts were auth failures
+            break                         # network failure, next endpoint
+
+    if last_auth_error is not None:
+        raise last_auth_error
+    if last_network_error is not None:
+        raise last_network_error
     raise imaplib.IMAP4.error("AUTHENTICATIONFAILED no password candidates")
 
 
+def probe_network(user="", timeout=8):
+    """Quick TCP reachability check used by the admin diagnostics.
+
+    Returns a list of ``(host, port, ok, detail)`` tuples so a blocked port can
+    be told apart from a rejected password.
+    """
+    import socket
+
+    results = []
+    for host, port, use_starttls in _endpoints_for(user):
+        label = f"{host}:{port}" + (" (STARTTLS)" if use_starttls else "")
+        sock = None
+        try:
+            sock = socket.create_connection((host, port), timeout=timeout)
+            results.append((label, True, "reachable"))
+        except Exception as exc:
+            results.append((label, False, f"{type(exc).__name__}: {exc}"))
+        finally:
+            try:
+                if sock is not None:
+                    sock.close()
+            except Exception:
+                pass
+    return results
+
+
 def _explain_imap_error(exc, host, port):
-    """Turn an IMAP/SSL exception into a human readable sentence."""
+    """Turn an IMAP/SSL exception into a human readable sentence.
+
+    The raw server reply is always appended in a ``<code>`` block: without it
+    an owner has no way to tell "wrong password" apart from "IMAP is switched
+    off in Gmail settings", and the same alert just repeats forever.
+    """
     raw = str(exc)
+    # IMAP4.error stringifies as  b'[AUTHENTICATIONFAILED] ...'  - strip the
+    # bytes wrapper so the owner sees the server's actual words.
+    clean = re.sub(r"^b['\"]|['\"]$", "", raw).strip()
     low = raw.lower()
+    reply = f"\n<code>{clean[:160]}</code>"
     if isinstance(exc, imaplib.IMAP4.error):
-        if ("authenticationfailed" in low or "invalid credentials" in low
-                or "username and password not accepted" in low):
-            return ("Gmail rejected the login. Make sure 2-Step Verification is ON "
-                    "and you are using a 16-character App Password "
-                    "(not your normal Gmail password).")
+        if "imap access is disabled" in low:
+            return ("IMAP is switched OFF for this Gmail account.\n"
+                    "Gmail \u2192 Settings \u2192 See all settings \u2192 "
+                    "Forwarding and POP/IMAP \u2192 Enable IMAP \u2192 Save." + reply)
         if "application-specific password required" in low:
-            return "Gmail requires an App Password for this account (2FA is enabled)."
+            return ("Gmail requires an App Password for this account "
+                    "(2-Step Verification is ON)." + reply)
+        if ("authenticationfailed" in low or "invalid credentials" in low
+                or "username and password not accepted" in low
+                or "invalid login" in low):
+            return ("Gmail rejected the login.\n"
+                    "\u2022 2-Step Verification must be ON\n"
+                    "\u2022 use a 16-letter App Password (abcd efgh ijkl mnop)\n"
+                    "\u2022 delete old app passwords and make a fresh one" + reply)
         return f"IMAP error: {raw}"
     if isinstance(exc, (ssl.SSLError, OSError)):
-        return f"Network/SSL error connecting to {host}:{port} \u2014 {exc}"
+        return (f"Network/SSL error connecting to {host}:{port}. "
+                "The hosting panel may be blocking outbound IMAP ports." + reply)
     return f"{type(exc).__name__}: {exc}"
 
 
@@ -444,7 +565,7 @@ def _sync_test_connection(timeout=20):
         return False, ("IMAP is not configured yet. Use "
                        "Admin Panel \u2192 Auto-UPI / IMAP \u2192 Change Gmail first.")
 
-    host, port = _imap_host_port()
+    host, port = _imap_host_port(accounts[0][0] if accounts else "")
     errors = []
     for user, pwd in accounts:
         mail = None
@@ -454,7 +575,7 @@ def _sync_test_connection(timeout=20):
             try:
                 status, data = mail.select("INBOX", readonly=True)
                 if status == "OK" and data and data[0]:
-                    total = int(str(data[0]).strip() or 0)
+                    total = _mailbox_count(data[0])
             except Exception:
                 total = 0
             result = {
@@ -479,6 +600,48 @@ def _sync_test_connection(timeout=20):
     if len(errors) == 1:
         return False, errors[0]
     return False, "All accounts failed:\n" + "\n".join(f"\u2022 {e}" for e in errors)
+
+
+def _sync_diagnose(timeout=15):
+    """Full IMAP health report for the admin panel.
+
+    Returns a plain-text block covering everything that can make Auto-UPI look
+    "broken": how many accounts are stored, what the stored password actually
+    looks like, whether the ports are reachable, and what Gmail replies.
+    """
+    lines = []
+    accounts = get_imap_accounts()
+    lines.append(f"\U0001F4DA Stored accounts: {len(accounts)}")
+    if not accounts:
+        lines.append("\u274C No email + app password saved yet.")
+        return "\n".join(lines)
+
+    for user, pwd in accounts:
+        masked = f"{pwd[:2]}****{pwd[-2:]}" if len(pwd) > 4 else "****"
+        shape = "OK" if re.fullmatch(r"[a-z]{16}", pwd) else "unusual"
+        lines.append(f"\n\U0001F4E7 {user}")
+        lines.append(f"   \U0001F511 password: {masked}  len={len(pwd)} ({shape})")
+
+    user, pwd = accounts[0]
+    for label, ok, detail in probe_network(user, timeout=min(timeout, 10)):
+        mark = "\u2705" if ok else "\u274C"
+        lines.append(f"   {mark} {label} \u2014 {detail}")
+
+    ok, res = _sync_test_connection(timeout=timeout)
+    if ok:
+        lines.append(f"\n\u2705 Login OK \u2014 inbox {res['total']} emails "
+                     f"({res['host']}:{res['port']})")
+        if res.get("repaired_password"):
+            lines.append("\U0001F527 A repaired password variant was needed "
+                         "and has been saved.")
+    else:
+        lines.append(f"\n\u274C Login failed:\n{res}")
+    return "\n".join(lines)
+
+
+async def diagnose_imap(timeout=15):
+    """Async wrapper around :func:`_sync_diagnose`."""
+    return await asyncio.to_thread(_sync_diagnose, timeout)
 
 
 async def test_imap_connection(timeout=20):
@@ -770,7 +933,7 @@ def _scan_mailbox(mail, utr_clean, now_utc, max_age_mins):
         try:
             status, data = mail.select("INBOX", readonly=True)
             if status == "OK" and data and data[0]:
-                total = int(str(data[0]).strip() or 0)
+                total = _mailbox_count(data[0])
                 if total > 0:
                     start = max(1, total - LOCAL_SCAN_LIMIT + 1)
                     status, data = mail.fetch(f"{start}:{total}", "(RFC822)")
