@@ -21,10 +21,12 @@ meant the main menu was never delivered after the channel-join / terms flow.
 
 import os
 import re
-
-from utils.helpers import normalise_buttons
+import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from utils.helpers import normalise_buttons
 
 
 class _Btn:

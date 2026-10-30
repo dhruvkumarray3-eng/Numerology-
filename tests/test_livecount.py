@@ -1,5 +1,5 @@
-import asyncio, sys, time
-sys.path.insert(0, '/workspace/repo')
+import asyncio, os, sys, time
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.livecount import register_live, unregister_live, is_live
 
 
