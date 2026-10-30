@@ -656,18 +656,25 @@ async def admin_actions(event):
         except Exception:
             _gmail_count = 0
         gmail_extra = f" <i>(+{_gmail_count - 1} more)</i>" if _gmail_count > 1 else ""
+        try:
+            from utils import google_oauth as _go
+            _g_status = _go.status_text()
+        except Exception:
+            _g_status = "\u274C unavailable"
         
         msg = (f"<blockquote>💳 <b>𝐀ᴜᴛᴏ-𝐔𝐏𝐈 & 𝐈𝐌𝐀𝐏 𝐆ᴀᴛᴇᴡᴀʏ 𝐒ᴇᴛᴛɪɴɢs</b>\n\n"
                f"⚙️ <b>𝐃ᴇᴘᴏsɪᴛ 𝐌ᴏᴅᴇ:</b> <b>{mode_label}</b>\n"
                f"🆔 <b>𝐀ᴄᴛɪᴠᴇ 𝐔𝐏𝐈 𝐈𝐃:</b> <code>{active_upi}</code>\n"
                f"📧 <b>𝐆ᴍᴀɪʟ 𝐀ᴄᴄᴏᴜɴᴛ:</b> <code>{active_gmail}</code>{gmail_extra}\n"
                f"🔒 <b>𝐀ɴᴛɪ-𝐃ᴜᴘʟɪᴄᴀᴛᴇ 𝐔𝐓𝐑:</b> 🟢 <b>Active (100% Protected)</b>\n\n"
+               f"\U0001F510 <b>Google Login:</b> {_g_status}\n\n"
                f"<i>💡 In Auto/Hybrid mode, payments are verified in real-time from bank notification emails!</i></blockquote>")
                
         btns = [
             [style_btn(f"🔄 Mode: {dep_mode.capitalize()}", "adm_toggle_dep_mode", "success", icon=5409271925014801629)],
             [style_btn("✏️ Change UPI ID", "adm_change_upi", "primary", icon=5409098988156629257),
              style_btn("📧 Change Gmail", "adm_change_gmail", "primary", icon=5409098988156629257)],
+            [style_btn("\U0001F510 Google Login", "adm_google_login", "success", icon=5409098988156629257)],
             [style_btn("🧪 Test IMAP Connection", "adm_test_imap", "primary", icon=5409320020058584473),
              style_btn("🩺 Diagnose", "adm_diag_imap", "success", icon=5409271925014801629)],
             [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129888444245089008)]
@@ -694,17 +701,24 @@ async def admin_actions(event):
         except Exception:
             _gmail_count = 0
         gmail_extra = f" <i>(+{_gmail_count - 1} more)</i>" if _gmail_count > 1 else ""
+        try:
+            from utils import google_oauth as _go
+            _g_status = _go.status_text()
+        except Exception:
+            _g_status = "\u274C unavailable"
         
         msg = (f"<blockquote>💳 <b>𝐀ᴜᴛᴏ-𝐔𝐏𝐈 & 𝐈𝐌𝐀𝐏 𝐆ᴀᴛᴇᴡᴀʏ 𝐒ᴇᴛᴛɪɴɢs</b>\n\n"
                f"⚙️ <b>𝐃ᴇᴘᴏsɪᴛ 𝐌ᴏᴅᴇ:</b> <b>{mode_label}</b>\n"
                f"🆔 <b>𝐀ᴄᴛɪᴠᴇ 𝐔𝐏𝐈 𝐈𝐃:</b> <code>{active_upi}</code>\n"
                f"📧 <b>𝐆ᴍᴀɪʟ 𝐀ᴄᴄᴏᴜɴᴛ:</b> <code>{active_gmail}</code>{gmail_extra}\n"
                f"🔒 <b>𝐀ɴᴛɪ-𝐃ᴜᴘʟɪᴄᴀᴛᴇ 𝐔𝐓𝐑:</b> 🟢 <b>Active (100% Protected)</b>\n\n"
+               f"\U0001F510 <b>Google Login:</b> {_g_status}\n\n"
                f"<i>💡 In Auto/Hybrid mode, payments are verified in real-time from bank notification emails!</i></blockquote>")
         btns = [
             [style_btn(f"🔄 Mode: {dep_mode.capitalize()}", "adm_toggle_dep_mode", "success", icon=5409271925014801629)],
             [style_btn("✏️ Change UPI ID", "adm_change_upi", "primary", icon=5409098988156629257),
              style_btn("📧 Change Gmail", "adm_change_gmail", "primary", icon=5409098988156629257)],
+            [style_btn("\U0001F510 Google Login", "adm_google_login", "success", icon=5409098988156629257)],
             [style_btn("🧪 Test IMAP Connection", "adm_test_imap", "primary", icon=5409320020058584473),
              style_btn("🩺 Diagnose", "adm_diag_imap", "success", icon=5409271925014801629)],
             [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129888444245089008)]
@@ -954,7 +968,7 @@ async def admin_actions(event):
         "supporturl", "bcast", "bal", "discount", "refpct", "usdtrate",
         "setlztkey", "setrubrate", "setlztmargin", "restoreusr",
         "add_fsub", "add_logch", "set_all_fsub", "change_upi",
-        "change_gmail", "ban",
+        "change_gmail", "ban", "google_login",
     )
     _is_wizard = (
         action_data in _WIZARDS
@@ -1570,6 +1584,97 @@ async def admin_actions(event):
                 cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_id', ?)", (new_upi,))
                 db.commit()
                 await conv.send_message(f"{P_YES} <b>UPI ID Updated:</b> <code>{new_upi}</code>")
+
+            elif action_data == "google_login" and has_perm(uid, 'p_settings'):
+                # Real "Sign in with Google" (OAuth 2.0 / XOAUTH2).
+                # Google no longer accepts a normal password for IMAP and
+                # rejects App Passwords on many accounts, so this is the only
+                # login method that is guaranteed to keep working.
+                from utils import google_oauth
+
+                if not google_oauth.has_client():
+                    await conv.send_message(
+                        "\U0001F510 <b>Google Login \u2014 one-time setup</b>\n\n"
+                        "Google ab normal password se IMAP allow nahi karta. "
+                        "Isliye hum Google ka official OAuth login use karenge "
+                        "\u2014 ek baar setup, phir hamesha kaam karega.\n\n"
+                        "<b>Steps (2 minute):</b>\n"
+                        "1\uFE0F\u20E3 <a href=\"https://console.cloud.google.com/projectcreate\">"
+                        "New Project</a> banao\n"
+                        "2\uFE0F\u20E3 <a href=\"https://console.cloud.google.com/apis/library/gmail.googleapis.com\">"
+                        "Gmail API</a> \u2192 <b>Enable</b>\n"
+                        "3\uFE0F\u20E3 <a href=\"https://console.cloud.google.com/apis/credentials\">"
+                        "Credentials</a> \u2192 Create Credentials \u2192 "
+                        "<b>OAuth client ID</b>\n"
+                        "4\uFE0F\u20E3 Application type: <b>Desktop app</b>\n"
+                        "5\uFE0F\u20E3 Client ID aur Client Secret copy karo\n\n"
+                        "<i>Ab dono ek hi message me bhejo:</i>\n"
+                        "<code>CLIENT_ID CLIENT_SECRET</code>")
+                    setup = await get_reply(
+                        "\U0001F511 <b>Paste Client ID and Client Secret</b>\n"
+                        "<i>Example:</i> <code>123-abc.apps.googleusercontent.com GOCSPX-xxxx</code>")
+                    parts = setup.text.split()
+                    cid = next((x for x in parts if x.endswith(".apps.googleusercontent.com")), "")
+                    secret = next((x for x in parts if x.startswith("GOCSPX-")), "")
+                    if not cid or not secret:
+                        return await conv.send_message(
+                            "\u274C <b>Could not read that.</b>\n\n"
+                            "Client ID <code>...apps.googleusercontent.com</code> pe khatam "
+                            "hota hai aur Secret <code>GOCSPX-</code> se shuru hota hai.\n"
+                            "Dono ek hi line me bhejo.")
+                    google_oauth.save_client_credentials(cid, secret)
+                    await conv.send_message(
+                        "\u2705 <b>OAuth client saved.</b>\n\n"
+                        "Ab neeche diye link se Google login karo.")
+
+                link = google_oauth.auth_url()
+                if not link:
+                    return await conv.send_message(
+                        "\u274C Could not build the Google login link. "
+                        "Client ID / Secret dobara set karo.")
+
+                await conv.send_message(
+                    "\U0001F510 <b>Step 1 \u2014 Google se login karo</b>\n\n"
+                    f'<a href="{link}">\U0001F517 OPEN GOOGLE LOGIN</a>\n\n'
+                    "<i>Apna normal Gmail password wahin Google ke page pe daalna \u2014 "
+                    "bot ko password dikhta hi nahi.</i>\n\n"
+                    "<b>Step 2 \u2014</b> Login ke baad browser "
+                    "<code>http://localhost/?code=...</code> pe error dikhayega. "
+                    "<b>Ye normal hai.</b> Address bar ka poora link copy karke "
+                    "yahin paste kar do.")
+
+                resp = await get_reply(
+                    "\U0001F4CB <b>Paste the redirect link (or just the code)</b>")
+                ok, res = await asyncio.to_thread(google_oauth.exchange_code, resp.text)
+                if not ok:
+                    return await conv.send_message(
+                        f"\u274C <b>Google login failed.</b>\n\n"
+                        f"<blockquote>{html.escape(str(res))}</blockquote>")
+
+                email = res.get("email") or ""
+                await conv.send_message(
+                    "\u2705 <b>Google Login successful!</b>\n\n"
+                    f"\U0001F4E7 <b>Account:</b> <code>{html.escape(email or 'connected')}</code>\n\n"
+                    "\u23F3 <i>Testing IMAP with OAuth\u2026</i>")
+
+                try:
+                    from utils.imap_verifier import test_imap_connection
+                    t_ok, t_res = await asyncio.wait_for(test_imap_connection(), timeout=45)
+                except Exception as t_err:
+                    t_ok, t_res = False, f"{type(t_err).__name__}: {t_err}"
+
+                if t_ok:
+                    await conv.send_message(
+                        f"{PE_CHECK} <b>IMAP Connected via Google Login!</b>\n\n"
+                        f"\U0001F4E7 <b>Account:</b> <code>{html.escape(t_res['user'])}</code>\n"
+                        f"\U0001F4E5 <b>Inbox:</b> {t_res['total']} emails\n"
+                        f"\U0001F510 <b>Method:</b> {t_res.get('method', 'Google OAuth')}\n\n"
+                        "<i>Auto-UPI verification ab live hai \u2014 App Password ki "
+                        "zaroorat nahi.</i>")
+                else:
+                    await conv.send_message(
+                        f"{P_NO} <b>Google login saved, but IMAP test failed.</b>\n\n"
+                        f"<blockquote>{html.escape(str(t_res))}</blockquote>")
 
             elif action_data == "change_gmail" and has_perm(uid, 'p_settings'):
                 from utils.imap_verifier import (
