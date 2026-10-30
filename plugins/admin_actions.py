@@ -650,11 +650,17 @@ async def admin_actions(event):
         
         gmail_res = cur.execute("SELECT value FROM settings WHERE key='gmail_user'").fetchone()
         active_gmail = gmail_res[0] if gmail_res and gmail_res[0] else "vinitgodaragodara3@gmail.com"
+        try:
+            from utils.imap_verifier import get_imap_accounts
+            _gmail_count = len(get_imap_accounts())
+        except Exception:
+            _gmail_count = 0
+        gmail_extra = f" <i>(+{_gmail_count - 1} more)</i>" if _gmail_count > 1 else ""
         
         msg = (f"<blockquote>💳 <b>𝐀ᴜᴛᴏ-𝐔𝐏𝐈 & 𝐈𝐌𝐀𝐏 𝐆ᴀᴛᴇᴡᴀʏ 𝐒ᴇᴛᴛɪɴɢs</b>\n\n"
                f"⚙️ <b>𝐃ᴇᴘᴏsɪᴛ 𝐌ᴏᴅᴇ:</b> <b>{mode_label}</b>\n"
                f"🆔 <b>𝐀ᴄᴛɪᴠᴇ 𝐔𝐏𝐈 𝐈𝐃:</b> <code>{active_upi}</code>\n"
-               f"📧 <b>𝐆ᴍᴀɪʟ 𝐀ᴄᴄᴏᴜɴᴛ:</b> <code>{active_gmail}</code>\n"
+               f"📧 <b>𝐆ᴍᴀɪʟ 𝐀ᴄᴄᴏᴜɴᴛ:</b> <code>{active_gmail}</code>{gmail_extra}\n"
                f"🔒 <b>𝐀ɴᴛɪ-𝐃ᴜᴘʟɪᴄᴀᴛᴇ 𝐔𝐓𝐑:</b> 🟢 <b>Active (100% Protected)</b>\n\n"
                f"<i>💡 In Auto/Hybrid mode, payments are verified in real-time from bank notification emails!</i></blockquote>")
                
@@ -681,11 +687,17 @@ async def admin_actions(event):
         active_upi = upi_res[0] if upi_res and upi_res[0] else "vinit-godara@fam"
         gmail_res = cur.execute("SELECT value FROM settings WHERE key='gmail_user'").fetchone()
         active_gmail = gmail_res[0] if gmail_res and gmail_res[0] else "vinitgodaragodara3@gmail.com"
+        try:
+            from utils.imap_verifier import get_imap_accounts
+            _gmail_count = len(get_imap_accounts())
+        except Exception:
+            _gmail_count = 0
+        gmail_extra = f" <i>(+{_gmail_count - 1} more)</i>" if _gmail_count > 1 else ""
         
         msg = (f"<blockquote>💳 <b>𝐀ᴜᴛᴏ-𝐔𝐏𝐈 & 𝐈𝐌𝐀𝐏 𝐆ᴀᴛᴇᴡᴀʏ 𝐒ᴇᴛᴛɪɴɢs</b>\n\n"
                f"⚙️ <b>𝐃ᴇᴘᴏsɪᴛ 𝐌ᴏᴅᴇ:</b> <b>{mode_label}</b>\n"
                f"🆔 <b>𝐀ᴄᴛɪᴠᴇ 𝐔𝐏𝐈 𝐈𝐃:</b> <code>{active_upi}</code>\n"
-               f"📧 <b>𝐆ᴍᴀɪʟ 𝐀ᴄᴄᴏᴜɴᴛ:</b> <code>{active_gmail}</code>\n"
+               f"📧 <b>𝐆ᴍᴀɪʟ 𝐀ᴄᴄᴏᴜɴᴛ:</b> <code>{active_gmail}</code>{gmail_extra}\n"
                f"🔒 <b>𝐀ɴᴛɪ-𝐃ᴜᴘʟɪᴄᴀᴛᴇ 𝐔𝐓𝐑:</b> 🟢 <b>Active (100% Protected)</b>\n\n"
                f"<i>💡 In Auto/Hybrid mode, payments are verified in real-time from bank notification emails!</i></blockquote>")
         btns = [
@@ -1519,7 +1531,8 @@ async def admin_actions(event):
 
             elif action_data == "change_gmail" and has_perm(uid, 'p_settings'):
                 from utils.imap_verifier import (
-                    clean_app_password, parse_gmail_credentials, test_imap_connection)
+                    clean_app_password, parse_gmail_accounts,
+                    save_gmail_accounts, test_imap_connection)
 
                 # NOTE: the prompt used to contain literal "<email>" and
                 # "<16-digit-app-password>" inside an HTML message.  Telegram's
@@ -1530,6 +1543,9 @@ async def admin_actions(event):
                     "\U0001F4E7 <b>Enter Gmail Address and App Password</b>\n\n"
                     "<i>Format:</i> <code>you@gmail.com abcd efgh ijkl mnop</code>\n"
                     "<i>(email and password on one line \u2014 spaces are fine)</i>\n\n"
+                    "<i>You can add several accounts in one message, one per line:</i>\n"
+                    "<code>first@gmail.com abcd efgh ijkl mnop\n"
+                    "second@gmail.com wxyz wxyz wxyz wxyz</code>\n\n"
                     "<i>Get it from: Google Account \u2192 Security \u2192 2-Step Verification "
                     "\u2192 App passwords \u2192 Mail \u2192 Other</i>")
                 retry_prompt = (
@@ -1537,7 +1553,7 @@ async def admin_actions(event):
                     "Send it again in this exact shape:\n"
                     "<code>you@gmail.com abcd efgh ijkl mnop</code>")
 
-                g_email, g_pass = "", ""
+                parsed = []
                 for attempt in range(3):
                     resp = await get_reply(prompt if attempt == 0 else retry_prompt)
                     text = (resp.text or "").strip()
@@ -1547,8 +1563,8 @@ async def admin_actions(event):
                             "Send the email and app password as text.")
                         continue
 
-                    g_email, g_pass = parse_gmail_credentials(text)
-                    if not g_email:
+                    found = parse_gmail_accounts(text)
+                    if not found:
                         await conv.send_message(
                             "\u274C <b>No email address found.</b>\n"
                             f"Got: <code>{html.escape(text[:80])}</code>\n\n"
@@ -1556,11 +1572,19 @@ async def admin_actions(event):
                             "<code>you@gmail.com</code>")
                         continue
 
-                    if not g_pass:
+                    missing = [addr for addr, pwd in found if not pwd]
+                    if missing:
                         await conv.send_message(
-                            "\u274C <b>App Password is missing.</b>\n\n"
-                            "Send the email <b>and</b> the app password together:\n"
+                            "\u274C <b>App Password is missing for:</b>\n"
+                            + "\n".join(
+                                f"\u2022 <code>{html.escape(a)}</code>" for a in missing)
+                            + "\n\nSend the email <b>and</b> the app password together:\n"
                             "<code>you@gmail.com abcd efgh ijkl mnop</code>")
+                        continue
+
+                    parsed = [(addr, clean_app_password(pwd))
+                              for addr, pwd in found if pwd]
+                    if not parsed:
                         continue
                     break
                 else:
@@ -1571,21 +1595,40 @@ async def admin_actions(event):
                 # Save first, then test.  Even a wrong-length password is worth
                 # storing: the live login test below produces a far more useful
                 # error than a bare "16 characters expected" refusal.
-                cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_user', ?)", (g_email,))
-                cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gmail_pass', ?)", (g_pass,))
-                db.commit()
+                # save_gmail_accounts() writes the full list to the settings
+                # table (INSERT OR REPLACE INTO settings) and keeps the legacy
+                # gmail_user / gmail_pass keys pointing at the first account.
+                saved = save_gmail_accounts(parsed)
+                if not saved:
+                    return await conv.send_message(
+                        "\u274C <b>Could not save the credentials.</b>\n"
+                        "Please try again.")
+
+                g_email, g_pass = parsed[0]
+
+                lines = []
+                odd = []
+                for addr, pwd in parsed:
+                    lines.append(
+                        f"\u2022 <code>{html.escape(addr)}</code> \u2014 "
+                        f"<code>{pwd[:4]} **** **** {pwd[-4:]}</code>")
+                    if len(pwd) != 16:
+                        odd.append(addr)
+                if len(g_pass) != 16 and g_email not in odd:
+                    odd.append(g_email)
 
                 length_note = ""
-                if len(g_pass) != 16:
-                    length_note = (f"\n\n\u26A0\uFE0F <i>Heads up: a Gmail App Password is normally "
-                                   f"16 characters, this one is {len(g_pass)}. "
-                                   f"Testing anyway\u2026</i>")
+                if odd:
+                    length_note = (
+                        "\n\n\u26A0\uFE0F <i>Heads up: a Gmail App Password is normally "
+                        f"16 characters. Odd length for: {html.escape(', '.join(odd))}. "
+                        "Testing anyway\u2026</i>")
 
                 await conv.send_message(
-                    f"{P_YES} <b>Gmail IMAP Credentials Saved!</b>\n"
-                    f"\u2022 Email: <code>{html.escape(g_email)}</code>\n"
-                    f"\u2022 App Password: <code>{g_pass[:4]} **** **** {g_pass[-4:]}</code>"
-                    f"{length_note}\n\n"
+                    f"{P_YES} <b>Gmail IMAP Credentials Saved!</b> "
+                    f"({saved} account{'s' if saved != 1 else ''})\n"
+                    + "\n".join(lines)
+                    + f"{length_note}\n\n"
                     "\u23F3 <i>Testing the connection now\u2026</i>")
 
                 try:
