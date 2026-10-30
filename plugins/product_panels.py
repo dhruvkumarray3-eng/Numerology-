@@ -417,12 +417,27 @@ def _terms_accepted(uid, key):
 
 
 def _accept_terms(uid, key):
-    cur.execute(
-        "INSERT INTO settings (key, value) VALUES (?, '1') "
-        "ON CONFLICT(key) DO UPDATE SET value='1'",
-        (f"pp_tc_{uid}_{key}",),
-    )
-    db.commit()
+    """Persist a terms acceptance and return ``True`` on success.
+
+    A locked/corrupt DB must never kill the callback (which made the "Agree &
+    Continue" button look dead).  We log, roll back and report failure so the
+    caller can still move the user forward.
+    """
+    try:
+        cur.execute(
+            "INSERT INTO settings (key, value) VALUES (?, '1') "
+            "ON CONFLICT(key) DO UPDATE SET value='1'",
+            (f"pp_tc_{uid}_{key}",),
+        )
+        db.commit()
+        return True
+    except Exception as exc:  # noqa: BLE001 - never break the panel
+        logger.warning(f"Could not store terms acceptance for {uid}/{key}: {exc}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _selected_app(uid):
@@ -546,10 +561,18 @@ async def _safe_edit(event, text, buttons=None):
     if isinstance(event, events.CallbackQuery.Event):
         try:
             await event.edit(text, buttons=buttons)
+            return
         except MessageNotModifiedError:
-            pass
-    else:
+            return
+        except Exception as exc:  # noqa: BLE001 - never leave a dead button
+            logger.warning(
+                f"panel edit failed ({type(exc).__name__}: {exc}); "
+                f"falling back to respond"
+            )
+    try:
         await event.respond(text, buttons=buttons)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"panel respond failed: {exc}")
 
 
 # --------------------------------------------------------------------------
@@ -773,14 +796,17 @@ async def show_countries(event, key, page=1, query=None):
         if err:
             msg = (
                 f"<blockquote expandable>{p['icon']} <b>{p['title']}</b>\n\n"
-                "\u26a0\ufe0f <b>The panel is not returning live data right now.</b>\n\n"
+                "\U0001F7E1 <b>No live numbers for this app right now.</b>\n\n"
                 f"<i>{html.escape(str(err))}</i>\n\n"
-                "This is a provider/API-key issue, not a stock issue. Please tap "
-                "Refresh in a moment or contact support.</blockquote>"
+                "Your OTP key is working \u2014 the provider just has no stock "
+                "for this app at the moment. Tap Refresh in a moment, or open "
+                "All Apps OTP to pick another app.</blockquote>"
             )
             btns = [
                 [style_btn("\U0001F504 Refresh", f"pp_open|{key}", "success",
                            icon=5409320020058584473)],
+                [style_btn("\U0001F9E9 All Apps OTP", b"pp_open|allotp",
+                           "primary", icon="allapps_otp")],
                 [style_btn("\U0001F519 Back", b"pp_hub", "danger",
                            icon=6129812419028982717)],
             ]
@@ -1315,8 +1341,17 @@ def register_product_panels(bot):
         key = e.pattern_match.group(1).decode()
         if key not in PANELS:
             return await e.answer("Unknown panel", alert=True)
+        # Stop the button spinner immediately so a slow provider call later
+        # cannot make the button look unresponsive.
+        try:
+            await e.answer()
+        except Exception:
+            pass
         _accept_terms(e.sender_id, key)
-        await mongo_store.log_event(e.sender_id, "panel_terms_accepted", panel=key)
+        try:
+            await mongo_store.log_event(e.sender_id, "panel_terms_accepted", panel=key)
+        except Exception:
+            pass
         if PANELS[key].get("dynamic_apps"):
             return await show_allotp_hub(e)
         await show_countries(e, key, 1)
