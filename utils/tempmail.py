@@ -69,7 +69,37 @@ def _require_key() -> str:
 
 
 def _base() -> str:
-    return (settings().get("base_url") or "https://grabmail.io/api/v1").rstrip("/")
+    return _normalise_base(settings().get("base_url") or _GRABMAIL_CANON)
+
+
+# The one and only GrabMail API root.  Every documented endpoint
+# (/mailbox, /message/{id}, /domains, /me) hangs off this path.
+_GRABMAIL_CANON = "https://grabmail.io/api/v1"
+
+
+def _normalise_base(raw: str) -> str:
+    """Return a canonical GrabMail API base URL.
+
+    The admin panel lets the owner type any base URL, and a wrong host or
+    path (``https://api.grabmail.io/v1``, a bare ``https://grabmail.io`` or a
+    stray ``/messages`` suffix) used to 404 on *every* call.  Map the common
+    mistakes onto the single real endpoint so a saved typo can never break
+    Temp Mail again.
+    """
+    value = (raw or "").strip().rstrip("/")
+    if not value:
+        return _GRABMAIL_CANON
+    low = value.lower()
+    # Any grabmail.io host (api.grabmail.io, www.grabmail.io, grabmail.io,
+    # .../v1/messages) collapses to the canonical API root.
+    if "grabmail.io" in low:
+        return _GRABMAIL_CANON
+    # A self-hosted / custom domain: keep the host but guarantee /api/v1.
+    if low.endswith("/api/v1"):
+        return value
+    if low.endswith("/api"):
+        return value + "/v1"
+    return value + "/api/v1"
 
 
 def _headers() -> Dict[str, str]:

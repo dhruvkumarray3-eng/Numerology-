@@ -179,6 +179,22 @@ def _fuzzy_ratio(a, b):
         return 0.0
 
 
+# Filler words users type around a country name.  They carry no matching
+# value, so stripping them lets "india number" / "buy usa sim" resolve to the
+# country instead of failing the substring test.
+_NOISE_WORDS = frozenset({
+    "number", "numbers", "num", "sim", "sims", "card", "cards", "account",
+    "accounts", "acc", "phone", "mobile", "virtual", "code", "otp", "sms",
+    "verification", "verify", "for", "the", "a", "an", "of", "in", "to",
+    "buy", "get", "any", "all", "new", "fresh", "cheap", "best",
+})
+
+
+def _tokens(value):
+    """Lowercase word tokens (keeps spaces, unlike ``_normalise``)."""
+    return [t for t in re.split(r"[^a-z0-9]+", str(value or "").lower()) if t]
+
+
 def country_score(query, *values):
     """How well ``query`` matches any of ``values`` (0 = no match).
 
@@ -194,6 +210,9 @@ def country_score(query, *values):
     resolved = resolve_country(raw)
     q_key = _normalise(raw)
     q_digits = re.sub(r"\D", "", raw)
+    # Cleaned query: filler words removed, e.g. "india number" -> "india".
+    q_tokens = [t for t in _tokens(raw) if t not in _NOISE_WORDS]
+    q_clean = _normalise(" ".join(q_tokens)) or q_key
     best = 0
 
     for value in values:
@@ -238,6 +257,21 @@ def country_score(query, *values):
             v_digits = re.sub(r"\D", "", v_raw)
             if v_digits and q_digits == v_digits:
                 best = max(best, _SCORE_EXACT)
+
+        # 6b. Cleaned query (filler words removed) as an alternative target,
+        #     so "india number" / "buy usa sim" still resolve.
+        if q_clean != q_key and len(q_clean) >= 3:
+            if v_key.startswith(q_clean):
+                best = max(best, _SCORE_PREFIX)
+            elif q_clean in v_key or v_key in q_clean:
+                best = max(best, _SCORE_SUBSTR)
+
+        # 6c. Token-set match: every meaningful query word appears as a token
+        #     prefix in the value ("south korea", "united arab emirates").
+        if len(q_tokens) >= 2:
+            v_tokens = _tokens(v_raw)
+            if all(any(vt.startswith(qt) for vt in v_tokens) for qt in q_tokens):
+                best = max(best, _SCORE_WORD + 5)
 
         # 7. Typo tolerance, only for reasonably long queries so that "us"
         #    does not fuzzy-match "AU".
