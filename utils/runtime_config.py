@@ -202,6 +202,49 @@ def clear(key: str) -> bool:
             conn.close()
 
 
+def self_heal_base_urls() -> Dict[str, tuple]:
+    """One-time repair of wrong provider base URLs stored in the DB.
+
+    Older builds stored website URLs (e.g. ``https://temporasms.com/api`` or
+    ``https://api.grabmail.io/v1/messages``) instead of the real API roots,
+    which made every request 404.  The provider clients now normalise on read,
+    but this also repairs the *stored* value so the admin panel shows the truth
+    permanently.
+
+    Safe to call on every startup: it only writes when the stored value differs
+    from its normalised form.  Returns ``{key: (old, new)}`` for every value
+    that was repaired.  Never raises.
+    """
+    repaired: Dict[str, tuple] = {}
+
+    try:
+        from utils.tempmail import _normalise_base as _tm_norm
+    except Exception:
+        _tm_norm = None
+    try:
+        from utils.temporasms import _normalise_base as _ts_norm
+    except Exception:
+        _ts_norm = None
+
+    checks = (
+        ("tempmail_base_url", _tm_norm),
+        ("temporasms_base_url", _ts_norm),
+    )
+    for key, norm in checks:
+        if norm is None:
+            continue
+        try:
+            old = get(key, "")
+            if not old:
+                continue
+            new = norm(old)
+            if new and new != old and set(key, new):
+                repaired[key] = (old, new)
+        except Exception:
+            continue
+    return repaired
+
+
 def source_of(key: str) -> str:
     """'panel' when an admin override is stored, else 'env'."""
     return "panel" if get(key, "") else "env"

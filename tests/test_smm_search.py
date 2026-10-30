@@ -91,6 +91,25 @@ def run():
     # 8. No match.
     check("no match", asyncio.run(smm.search_smm_services("zzzznope", 1)) == [])
 
+    # 8a. Shorthand aliases: "yt" -> youtube, "ig" -> instagram.
+    res_yt = asyncio.run(smm.search_smm_services("yt views", 1))
+    check("alias yt->youtube", any(r["service"] == "101" for r in res_yt), [r["service"] for r in res_yt])
+    res_ig2 = asyncio.run(smm.search_smm_services("ig likes", 1))
+    check("alias ig->instagram", any(r["service"] == "104" for r in res_ig2), [r["service"] for r in res_ig2])
+
+    # 8b. Punctuation / accent normalisation.
+    res_punct = asyncio.run(smm.search_smm_services("YouTube-Views!", 1))
+    check("punctuation normalised", any(r["service"] == "101" for r in res_punct), [r["service"] for r in res_punct])
+
+    # 8c. Typo tolerance (fuzzy): "youtub" should still find YouTube services.
+    res_typo = asyncio.run(smm.search_smm_services("youtub", 1))
+    check("typo tolerance", len(res_typo) >= 1, [r["service"] for r in res_typo])
+
+    # 8d. Relaxed fallback: a query where one token is absent still returns
+    #     results from the tokens that do match.
+    res_relax = asyncio.run(smm.search_smm_services("youtube nonsenseword", 1))
+    check("relaxed fallback", len(res_relax) >= 1, [r["service"] for r in res_relax])
+
     # 9. Every Search button in plugins/smm.py carries the premium emoji id.
     src = io.open(ROOT / "plugins" / "smm.py", encoding="utf-8").read()
     search_btn_lines = [ln for ln in src.splitlines() if "smm_search|" in ln and "style_btn" in ln]

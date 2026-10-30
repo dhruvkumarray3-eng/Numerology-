@@ -11,7 +11,8 @@ from telethon import events, Button, TelegramClient, types
 from telethon.errors import (
     MessageNotModifiedError, PhoneNumberInvalidError, PhoneNumberOccupiedError,
     PhoneCodeInvalidError, PhoneCodeExpiredError,
-    FreshChangePhoneForbiddenError, FloodWaitError
+    FreshChangePhoneForbiddenError, FreshResetAuthorisationForbiddenError,
+    FloodWaitError
 )
 from telethon.errors.rpcerrorlist import MessageIdInvalidError
 from telethon.tl.functions.account import (
@@ -1555,6 +1556,32 @@ def _fmt_auth_date(auth):
         return "unknown"
 
 
+def _auth_age_hours(auth):
+    """Age of an authorization in hours, or None if the date is unknown."""
+    ts = _auth_ts(auth)
+    if not ts:
+        return None
+    return max(0.0, (time.time() - ts) / 3600.0)
+
+
+def _age_badge(auth):
+    """Human badge telling whether Telegram will let this session be reset.
+
+    Telegram refuses to terminate a session that was authorised less than
+    24 hours ago (``FreshResetAuthorisationForbiddenError``).  Surfacing the
+    age makes that limitation obvious instead of silently failing.
+    """
+    age = _auth_age_hours(auth)
+    if age is None:
+        return "🕓 age unknown"
+    if age < 24:
+        return f"⏳ NEW · {age:.1f}h old · <24h (Telegram won't reset yet)"
+    days = age / 24.0
+    if days < 2:
+        return f"✅ {age:.0f}h old · resettable"
+    return f"✅ {days:.1f}d old · resettable"
+
+
 async def _ensure_order_client(phone):
     """Return (client, error) for an active order's Telethon client."""
     order = active_orders.get(phone)
@@ -1605,12 +1632,14 @@ def _sessions_message(phone, auths):
     if current:
         lines.append(
             f"🖥 <b>{_sty('Panel device')}:</b> {html.escape(_auth_device_name(current))} "
-            f"({html.escape(_auth_platform(current))})"
+            f"({html.escape(_auth_platform(current))})\n"
+            f"    {_age_badge(current)}"
         )
     lines += [
         "",
         f"<i>{_sty('Select a device below to terminate it')}, "
         f"{_sty('or use a bulk option')}.</i>",
+        f"<i>⏳ {_sty('Sessions younger than 24h cannot be reset by Telegram')}.</i>",
         "",
     ]
 
@@ -1631,7 +1660,8 @@ def _sessions_message(phone, auths):
         lines.append(
             f"<b>{idx}.</b> {html.escape(_auth_device_name(auth))} "
             f"({html.escape(_auth_platform(auth))}){country_line}\n"
-            f"    🕒 {_fmt_auth_date(auth)}"
+            f"    🕒 {_fmt_auth_date(auth)}\n"
+            f"    {_age_badge(auth)}"
         )
 
     if idx == 0:
@@ -1682,8 +1712,13 @@ def _sessions_buttons(phone, auths):
     return btns
 
 
-async def _show_sessions(event, phone):
-    """Render the active-device list for an order."""
+async def _show_sessions(event, phone, note=None):
+    """Render the live active-device list for an order.
+
+    ``note`` is an optional already-HTML-safe banner shown above the device
+    list so the buyer sees exactly what the last action did (terminated /
+    blocked by the 24h rule / failed).
+    """
     auths, err = await _load_authorizations(phone)
     if err:
         msg = (
@@ -1701,6 +1736,8 @@ async def _show_sessions(event, phone):
         except Exception:
             return await event.respond(msg, buttons=btns)
     msg = _sessions_message(phone, auths)
+    if note:
+        msg = note + "\n\n" + msg
     btns = _sessions_buttons(phone, auths)
     try:
         await event.edit(msg, buttons=btns)
@@ -1743,6 +1780,86 @@ async def _terminate_hashes(phone, hashes):
             logger.error(f"ResetAuthorization failed for {phone}: {exc}")
             failed.append(str(exc))
     return done, failed
+
+
+async def _terminate_detailed(phone, targets):
+    """Terminate a list of Authorization objects with per-device results.
+
+    Returns ``(results, error)``.  Each result is a dict::
+
+        {"hash": int, "name": str, "platform": str,
+         "ok": bool, "reason": "fresh" | "error" | None, "error": str}
+
+    Unlike :func:`_terminate_hashes`, this never hides the Telegram
+    24-hour ``FreshResetAuthorisationForbiddenError``: the caller can show the
+    buyer exactly which device was removed and which is still protected by
+    Telegram's fresh-session rule.
+    """
+    client, err = await _ensure_order_client(phone)
+    if err:
+        return [], err
+
+    results = []
+    for auth in targets:
+        item = {
+            "hash": getattr(auth, "hash", None),
+            "name": _auth_device_name(auth),
+            "platform": _auth_platform(auth),
+            "ok": False,
+            "reason": None,
+            "error": "",
+        }
+        try:
+            await client(ResetAuthorizationRequest(hash=item["hash"]))
+            item["ok"] = True
+        except FreshResetAuthorisationForbiddenError as exc:
+            item["reason"] = "fresh"
+            item["error"] = str(exc)
+            logger.info(
+                f"ResetAuthorization blocked by 24h rule for {phone} "
+                f"({item['name']}): {exc}"
+            )
+        except Exception as exc:
+            item["reason"] = "error"
+            item["error"] = str(exc)
+            logger.error(f"ResetAuthorization failed for {phone}: {exc}")
+        results.append(item)
+    return results, None
+
+
+def _termination_note(results, title):
+    """Build an HTML-safe banner summarising a termination attempt."""
+    ok = [r for r in results if r["ok"]]
+    fresh = [r for r in results if r["reason"] == "fresh"]
+    bad = [r for r in results if r["reason"] == "error"]
+
+    lines = ["<blockquote expandable>", f"🛡 <b>{_sty(title)}</b>", ""]
+    lines.append(f"✅ <b>{_sty('Terminated')}:</b> {len(ok)}")
+    if fresh:
+        lines.append(f"⏳ <b>{_sty('Blocked by Telegram 24h rule')}:</b> {len(fresh)}")
+    if bad:
+        lines.append(f"❌ <b>{_sty('Failed')}:</b> {len(bad)}")
+    lines.append("")
+
+    for r in results:
+        name = html.escape(f"{r['name']} ({r['platform']})")
+        if r["ok"]:
+            lines.append(f"✅ {name} — {_sty('terminated')}")
+        elif r["reason"] == "fresh":
+            lines.append(
+                f"⏳ {name} — {_sty('new session <24h, Telegram will not reset it yet')}"
+            )
+        else:
+            lines.append(f"❌ {name} — {html.escape(str(r['error'])[:140])}")
+
+    if fresh and not ok:
+        lines.append("")
+        lines.append(
+            f"<i>{_sty('Telegram blocks resetting a session younger than 24 hours')}. "
+            f"{_sty('Try again after 24h, or use LZT Market Reset')}.</i>"
+        )
+    lines.append("</blockquote>")
+    return "\n".join(lines)
 
 
 @bot.on(events.CallbackQuery(pattern=r"^reset_sessions\|(.+)$"))
@@ -1796,12 +1913,26 @@ async def cb_reset_one(event):
         return await event.answer("❌ That device is no longer in the list. Tap Refresh.", alert=True)
 
     target = others[idx - 1]
-    done, failed = await _terminate_hashes(phone, [target.hash])
-    if done:
+    results, err = await _terminate_detailed(phone, [target])
+    if err:
+        return await event.answer(f"❌ {err}", alert=True)
+
+    r = results[0] if results else None
+    if r and r["ok"]:
         await event.answer("✅ Device terminated successfully.", alert=True)
+    elif r and r["reason"] == "fresh":
+        await event.answer(
+            "⏳ This is a new session (<24h). Telegram will not let it be "
+            "terminated yet — try again after 24 hours.",
+            alert=True,
+        )
     else:
-        await event.answer(f"❌ Could not terminate device: {failed[0] if failed else 'unknown error'}", alert=True)
-    await _show_sessions(event, phone)
+        await event.answer(
+            f"❌ Could not terminate device: {(r or {}).get('error', 'unknown error')}",
+            alert=True,
+        )
+    note = _termination_note(results, "TERMINATE DEVICE — LIVE RESULT") if results else None
+    await _show_sessions(event, phone, note=note)
 
 
 @bot.on(events.CallbackQuery(pattern=r"^reset_all\|(.+)$"))
@@ -1825,19 +1956,33 @@ async def cb_reset_all(event):
         return await event.answer("ℹ️ No other devices to terminate.", alert=True)
 
     # Newest device = buyer's new phone. Keep it, terminate the rest.
-    to_kill = _hashes_keep_newest(auths)
+    keep = max(others, key=_auth_ts)
+    to_kill = [a for a in others if a.hash != keep.hash]
 
     if not to_kill:
         return await event.answer("✅ Only your newest device is logged in — nothing else to remove.", alert=True)
 
-    done, failed = await _terminate_hashes(phone, to_kill)
-    await event.answer(
-        f"✅ Terminated {done} other device(s). Kept your newest device.",
-        alert=True,
-    )
-    if failed:
-        logger.warning(f"reset_all partial failures for {phone}: {failed}")
-    await _show_sessions(event, phone)
+    results, err = await _terminate_detailed(phone, to_kill)
+    if err:
+        return await event.answer(f"❌ {err}", alert=True)
+
+    done = sum(1 for r in results if r["ok"])
+    fresh = sum(1 for r in results if r["reason"] == "fresh")
+    if done:
+        await event.answer(
+            f"✅ Terminated {done} device(s). Kept your newest device.",
+            alert=True,
+        )
+    elif fresh:
+        await event.answer(
+            f"⏳ {fresh} device(s) are new (<24h). Telegram blocks their reset "
+            "until they are 24 hours old.",
+            alert=True,
+        )
+    else:
+        await event.answer("❌ Could not terminate the other devices. See the list for details.", alert=True)
+    note = _termination_note(results, "TERMINATE ALL OTHERS — LIVE RESULT")
+    await _show_sessions(event, phone, note=note)
 
 
 @bot.on(events.CallbackQuery(pattern=r"^reset_panel\|(.+)$"))
@@ -1852,18 +1997,37 @@ async def cb_reset_panel(event):
     if err:
         return await event.answer(f"❌ {err}", alert=True)
 
-    to_kill = _hashes_all_others(auths)
-    if not to_kill:
+    targets = _other_authorizations(auths)
+    if not targets:
         return await event.answer("ℹ️ Only the panel device is logged in.", alert=True)
 
-    done, failed = await _terminate_hashes(phone, to_kill)
-    await event.answer(
-        f"✅ Removed {done} device(s). Only the panel device remains — you can log in now.",
-        alert=True,
-    )
-    if failed:
-        logger.warning(f"reset_panel partial failures for {phone}: {failed}")
-    await _show_sessions(event, phone)
+    results, err = await _terminate_detailed(phone, targets)
+    if err:
+        return await event.answer(f"❌ {err}", alert=True)
+
+    done = sum(1 for r in results if r["ok"])
+    fresh = sum(1 for r in results if r["reason"] == "fresh")
+    if done and not fresh:
+        await event.answer(
+            f"✅ Removed {done} device(s). Only the panel device remains — you can log in now.",
+            alert=True,
+        )
+    elif done and fresh:
+        await event.answer(
+            f"✅ Removed {done} device(s). {fresh} new (<24h) device(s) are still "
+            "protected by Telegram's 24h rule.",
+            alert=True,
+        )
+    elif fresh:
+        await event.answer(
+            f"⏳ All {fresh} other device(s) are new (<24h). Telegram will not let "
+            "them be reset until they are 24 hours old.",
+            alert=True,
+        )
+    else:
+        await event.answer("❌ Could not remove the other devices. See the list for details.", alert=True)
+    note = _termination_note(results, "KEEP ONLY PANEL — LIVE RESULT")
+    await _show_sessions(event, phone, note=note)
 
 
 @bot.on(events.CallbackQuery(pattern=r"^lzt_reset\|(.+)$"))
@@ -1926,13 +2090,26 @@ async def cb_lzt_reset(event):
     # Failure: show the reason inline (e.g. the 24h Telegram limitation) and
     # keep the device list reachable so the buyer can try the per-device path.
     await event.answer(message, alert=True)
+
+    # Live re-check: the panel session still exists after a failed reset, so we
+    # can list the real current devices and their ages.  This is the "live from
+    # lzt.market" feedback: terminated / not / new session <24h.
+    live_lines = ""
+    try:
+        auths, load_err = await _load_authorizations(phone)
+        if not load_err and auths:
+            live_lines = "\n\n" + _sessions_message(phone, auths)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error(f"Live session re-check failed for {phone}: {exc}")
+
     try:
         await event.edit(
             "<blockquote expandable>"
             f"⚠️ <b>{_sty('LZT RESET FAILED')}</b>\n\n"
             f"{html.escape(message)}\n\n"
             f"<i>{_sty('You can still remove individual devices from the list')}.</i>"
-            "</blockquote>",
+            "</blockquote>"
+            + live_lines,
             buttons=[
                 [style_btn(f"🔄 {_sty('Back to Devices')}", f"reset_sessions|{phone}", "primary",
                            icon=5409320020058584473)],
