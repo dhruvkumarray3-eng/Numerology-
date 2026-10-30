@@ -52,6 +52,21 @@ KEY_CLIENT_SECRET = "google_client_secret"
 KEY_REFRESH = "google_refresh_token"
 KEY_EMAIL = "google_account_email"
 
+# ---------------------------------------------------------------------------
+# Built-in OAuth client (project ``numerology-oauth``).
+#
+# These are the credentials of the bot owner's own Google Cloud project, baked
+# in so that a fresh deployment works immediately: no wizard, no copy-paste.
+# They are only a *fallback* -- anything stored in the settings table or passed
+# through the panel environment wins, so the owner can still swap the client
+# from the UI or from Pterodactyl variables at any time.
+# ---------------------------------------------------------------------------
+DEFAULT_CLIENT_ID = (
+    "1001300537784-8lpg0tk4satrtts2k83gdcu30uuvdtp0"
+    ".apps.googleusercontent.com"
+)
+DEFAULT_CLIENT_SECRET = "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"
+
 # Access tokens live ~1 hour; refresh a little early to avoid races.
 _TOKEN_CACHE = {"token": "", "expires_at": 0.0, "email": ""}
 _EXPIRY_SKEW = 120
@@ -91,8 +106,16 @@ def client_credentials():
     (``GOOGLE_CLIENT_ID`` / ``GOOGLE_CLIENT_SECRET``).  That way the owner can
     set them once in Pterodactyl and never touch the bot UI.
     """
-    client_id = _get(KEY_CLIENT_ID) or os.getenv("GOOGLE_CLIENT_ID", "").strip()
-    secret = _get(KEY_CLIENT_SECRET) or os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+    client_id = (
+        _get(KEY_CLIENT_ID)
+        or os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        or DEFAULT_CLIENT_ID
+    )
+    secret = (
+        _get(KEY_CLIENT_SECRET)
+        or os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+        or DEFAULT_CLIENT_SECRET
+    )
     return client_id, secret
 
 
