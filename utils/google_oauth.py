@@ -25,6 +25,7 @@ Everything is plain ``urllib`` - no extra dependency, works on Python 3.11+.
 
 import base64
 import json
+import os
 import re
 import time
 import urllib.error
@@ -83,8 +84,16 @@ def _set(key, value):
 
 
 def client_credentials():
-    """Return ``(client_id, client_secret)`` as configured, or ``("", "")``."""
-    return _get(KEY_CLIENT_ID), _get(KEY_CLIENT_SECRET)
+    """Return ``(client_id, client_secret)`` as configured, or ``("", "")``.
+
+    The panel wizard stores the pair in the settings table, but the same values
+    can also be supplied through the hosting panel's environment variables
+    (``GOOGLE_CLIENT_ID`` / ``GOOGLE_CLIENT_SECRET``).  That way the owner can
+    set them once in Pterodactyl and never touch the bot UI.
+    """
+    client_id = _get(KEY_CLIENT_ID) or os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    secret = _get(KEY_CLIENT_SECRET) or os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+    return client_id, secret
 
 
 def save_client_credentials(client_id, client_secret):
