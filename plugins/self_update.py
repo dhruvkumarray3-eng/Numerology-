@@ -24,6 +24,7 @@ import io
 import logging
 import os
 import shutil
+import sys
 import tarfile
 import urllib.request
 
@@ -116,6 +117,24 @@ async def _run_update(target_dir: str):
     return await asyncio.to_thread(_sync_update, target_dir)
 
 
+def _restart_process():
+    """Replace the running interpreter with a fresh one so new code loads.
+
+    ``os.execv`` keeps the same PID (Pterodactyl's supervisor stays happy) but
+    re-reads every module from disk, which is exactly what a stale-bytecode
+    process needs after an in-place update.
+    """
+    argv0 = os.path.abspath(sys.argv[0]) if sys.argv and sys.argv[0] else "main.py"
+    args = [sys.executable, "-u", argv0]
+    logger.warning("Auto-restarting process: %s", " ".join(args))
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
+    os.execv(sys.executable, args)
+
+
 def register_self_update(bot_instance):
     @bot_instance.on(events.NewMessage(pattern=r"(?i)^/updatebot(?:@\w+)?$"))
     async def cmd_updatebot(event):
@@ -148,6 +167,30 @@ def register_self_update(bot_instance):
         preview = "\n".join(f"\u2022 <code>{p}</code>" for p in changed[:15])
         if len(changed) > 15:
             preview += f"\n\u2026 and {len(changed) - 15} more"
+
+        auto = os.getenv("AUTO_RESTART_AFTER_UPDATE", "1").strip().lower() not in (
+            "0", "false", "no", "off")
+
+        if auto:
+            await note.edit(
+                f"\u2705 <b>{len(changed)} file(s) updated from GitHub.</b>\n\n"
+                f"{preview}\n\n"
+                "\U0001F504 <b>Restarting the bot automatically\u2026</b>\n"
+                "<i>The new code loads in a few seconds. Your database, session "
+                "and settings are untouched.</i>")
+            # Give Telegram a moment to deliver the message before exec.
+            await asyncio.sleep(3)
+            try:
+                _restart_process()
+            except Exception as exc:  # pragma: no cover - environment specific
+                logger.exception("auto-restart failed")
+                await note.edit(
+                    f"\u2705 <b>{len(changed)} file(s) updated.</b>\n\n"
+                    f"{preview}\n\n"
+                    f"\u26A0\uFE0F <b>Auto-restart failed:</b> "
+                    f"<code>{type(exc).__name__}: {exc}</code>\n"
+                    "<i>Please press Restart in the panel.</i>")
+            return
 
         await note.edit(
             f"\u2705 <b>{len(changed)} file(s) updated from GitHub.</b>\n\n"
