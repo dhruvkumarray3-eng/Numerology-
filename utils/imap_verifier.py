@@ -36,6 +36,9 @@ from config import logger
 # comes back empty (Gmail indexes can lag by a minute or two).
 LOCAL_SCAN_LIMIT = 40
 
+# (user, password) -> (host, port, use_starttls, working password)
+_LOGIN_CACHE = {}
+
 
 def _setting(key):
     """Read one key from the ``settings`` table, tolerating a broken DB.
@@ -349,6 +352,19 @@ def get_imap_accounts():
 
     _add(_setting("gmail_user"), _setting("gmail_pass"))
     _add(os.getenv("IMAP_USER", ""), os.getenv("IMAP_PASS", ""))
+
+    # A Google Login (OAuth) account needs no App Password at all.  The marker
+    # "XOAUTH2" tells _open_imap to use the token instead of a password.
+    try:
+        from utils import google_oauth
+
+        if google_oauth.is_connected():
+            oauth_email = str(google_oauth.oauth_account_email() or "").strip()
+            if oauth_email and oauth_email.lower() not in seen:
+                seen.add(oauth_email.lower())
+                accounts.append((oauth_email, "XOAUTH2"))
+    except Exception:
+        pass
     return accounts
 
 
@@ -439,53 +455,139 @@ def _is_auth_error(exc):
     ))
 
 
-def _open_imap(user, pwd, timeout=20):
-    """Open and log in to one mailbox, trying every plausible reading.
+def _google_oauth_ready(user):
+    """True when a Google Login (OAuth) token can be used for this account."""
+    try:
+        from utils import google_oauth
+    except Exception:
+        return False
+    if not google_oauth.is_connected():
+        return False
+    email = (google_oauth.oauth_account_email() or "").lower()
+    # No email stored yet -> let it try; the server decides.
+    return not email or not user or email == str(user).strip().lower()
 
-    For each endpoint (IMAPS 993, then STARTTLS 143 for Gmail) every password
-    candidate is tried.  A rejected password on one endpoint is retried on the
-    next, and each candidate gets a second chance on a fresh connection because
-    Gmail occasionally throttles rapid logins with a bogus
-    ``AUTHENTICATIONFAILED``.
 
-    Returns ``(mail, host, port, used_password)``.  Raises the last error when
-    everything fails, so the caller can explain it.
-    """
+def _open_imap_oauth(user, timeout=20):
+    """Log in with Google OAuth (XOAUTH2).  Raises when it is not usable."""
+    from utils import google_oauth
+
     context = ssl.create_default_context()
-    candidates = password_candidates(pwd)
-    endpoints = _endpoints_for(user)
+    first_exc = None
+    network_exc = None
+    for host, port, use_starttls in _endpoints_for(user):
+        mail = None
+        try:
+            mail = _connect(host, port, use_starttls, context, timeout)
+            google_oauth.imap_login(mail, user, timeout=timeout)
+            return mail, host, port, "XOAUTH2"
+        except Exception as exc:
+            try:
+                if mail is not None:
+                    mail.logout()
+            except Exception:
+                pass
+            if first_exc is None:
+                first_exc = exc
+            if _is_auth_error(exc):
+                raise
+            # Connection level failure on this endpoint; keep the original
+            # error (e.g. "invalid_client") instead of the port error.
+            network_exc = exc
+    # Prefer the meaningful error over "port unreachable".
+    raise first_exc or network_exc or imaplib.IMAP4.error("XOAUTH2 login failed")
+
+
+def _open_imap(user, pwd, timeout=20):
+    """Open and log in to one mailbox.
+
+    Order of attempts:
+
+    1. **Google Login (OAuth / XOAUTH2)** when it is connected - this is the
+       method Google actually supports and it needs no App Password.
+    2. Every plausible reading of the stored App Password, on IMAPS 993 first
+       and then STARTTLS 143, each candidate retried once on a fresh
+       connection because Gmail throttles rapid logins with a bogus
+       ``AUTHENTICATIONFAILED``.
+
+    Returns ``(mail, host, port, used_password)``.  ``used_password`` is
+    ``"XOAUTH2"`` for the OAuth path.  Raises the last error when everything
+    fails, so the caller can explain it.
+    """
+    oauth_exc = None
+    if _google_oauth_ready(user):
+        try:
+            return _open_imap_oauth(user, timeout=timeout)
+        except Exception as exc:
+            oauth_exc = exc
+            logger.warning("Google OAuth IMAP login failed for %s: %s", user, exc)
+
+    if pwd == "XOAUTH2":
+        # OAuth-only account: there is no password to try.
+        if oauth_exc is not None:
+            raise oauth_exc
+        raise imaplib.IMAP4.error(
+            "Google Login (OAuth) failed and no App Password is stored.")
+
+    # A working (account, password) pair is remembered for the process
+    # lifetime.  Gmail starts returning a bogus AUTHENTICATIONFAILED when it is
+    # hammered with logins, so re-testing must not re-authenticate every time.
+    cache_key = (str(user).strip().lower(), clean_app_password(pwd))
+    cached = _LOGIN_CACHE.get(cache_key)
+    if cached:
+        c_host, c_port, c_starttls, c_pwd = cached
+        try:
+            mail = _connect(c_host, c_port, c_starttls,
+                            ssl.create_default_context(), timeout)
+            mail.login(user, c_pwd)
+            return mail, c_host, c_port, c_pwd
+        except Exception:
+            _LOGIN_CACHE.pop(cache_key, None)
+
+    context = ssl.create_default_context()
+    # Only a handful of candidates: the exact value, the glued/lowercase
+    # reading and one aligned 16-letter window.  Trying every permutation is
+    # what triggered Gmail's throttling.
+    candidates = password_candidates(pwd)[:3]
     last_auth_error = None
     last_network_error = None
 
-    for host, port, use_starttls in endpoints:
+    for host, port, use_starttls in _endpoints_for(user):
+        try:
+            probe = _connect(host, port, use_starttls, context, timeout)
+        except Exception as exc:
+            last_network_error = exc
+            continue                      # port unusable, next endpoint
+        try:
+            probe.logout()
+        except Exception:
+            pass
+
         for candidate in candidates:
-            for _attempt in (1, 2):
-                mail = None
+            mail = None
+            try:
+                mail = _connect(host, port, use_starttls, context, timeout)
+                mail.login(user, candidate)
+                _LOGIN_CACHE[cache_key] = (host, port, use_starttls, candidate)
+                return mail, host, port, candidate
+            except Exception as exc:
                 try:
-                    mail = _connect(host, port, use_starttls, context, timeout)
-                    mail.login(user, candidate)
-                    return mail, host, port, candidate
-                except Exception as exc:
-                    try:
-                        if mail is not None:
-                            mail.logout()
-                    except Exception:
-                        pass
-                    if _is_auth_error(exc):
-                        last_auth_error = exc
-                        continue          # retry once on a fresh connection
-                    last_network_error = exc
-                    break                 # port unusable, next endpoint
-                finally:
-                    mail = None
-            else:
-                continue                  # both attempts were auth failures
-            break                         # network failure, next endpoint
+                    if mail is not None:
+                        mail.logout()
+                except Exception:
+                    pass
+                if _is_auth_error(exc):
+                    last_auth_error = exc
+                    continue
+                last_network_error = exc
+                break
 
     if last_auth_error is not None:
         raise last_auth_error
     if last_network_error is not None:
         raise last_network_error
+    if oauth_exc is not None:
+        raise oauth_exc
     raise imaplib.IMAP4.error("AUTHENTICATIONFAILED no password candidates")
 
 
@@ -584,8 +686,11 @@ def _sync_test_connection(timeout=20):
                 "port": port,
                 "total": total,
                 "accounts": len(accounts),
+                "method": "Google OAuth" if used == "XOAUTH2" else "App Password",
             }
-            if used != clean_app_password(pwd):
+            # Never persist "XOAUTH2" as a password - it is a marker, not a
+            # credential.
+            if used != "XOAUTH2" and used != clean_app_password(pwd):
                 result["repaired_password"] = used
             return True, result
         except Exception as exc:  # pragma: no cover - network dependent
@@ -981,7 +1086,7 @@ def _sync_verify_utr(utr_query, max_age_mins=MAX_PAYMENT_AGE_MINUTES):
         mail = None
         try:
             mail, _host, _port, used = _open_imap(user, pwd, timeout=25)
-            if used != clean_app_password(pwd):
+            if used != "XOAUTH2" and used != clean_app_password(pwd):
                 # The stored password was junk; remember the working one.
                 try:
                     update_stored_password(user, used)
