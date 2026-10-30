@@ -390,8 +390,18 @@ def register_deposit(bot):
                                  f"𝐍ᴏ ʀᴇᴄᴇɴᴛ ᴘᴀʏᴍᴇɴᴛ ᴡᴀs ғᴏᴜɴᴅ ғᴏʀ ᴛʜɪs 𝐔𝐓𝐑.\n"
                                  f"• 𝐈ғ ʏᴏᴜ ᴊᴜsᴛ ᴘᴀɪᴅ, ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ <b>1-2 ᴍɪɴᴜᴛᴇs</b> ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ.\n"
                                  f"• 𝐎ʀ ᴜsᴇ <b>✍️ 𝐌ᴀɴᴜᴀʟ 𝐔𝐏𝐈</b> ᴛᴏ ᴜᴘʟᴏᴀᴅ ʏᴏᴜʀ ᴘᴀʏᴍᴇɴᴛ sᴄʀᴇᴇɴsʜᴏᴛ.</blockquote>")
-                    try: await status_msg.edit(fail_text, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
-                    except: await e.reply(fail_text, buttons=[[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]])
+                    # Hybrid mode is supposed to fall back to a manual screenshot
+                    # when the inbox scan finds nothing, so say that explicitly
+                    # instead of leaving the user stuck.
+                    reason = str(v_res) if v_res else ""
+                    if reason and "server error" not in reason.lower():
+                        fail_text += f"\n\n<i>\U0001F50D {html.escape(reason)}</i>"
+                    if dep_mode == "hybrid":
+                        fail_text += ("\n\n\u26A1 <b>Hybrid Mode:</b> abhi apna payment "
+                                      "screenshot bhej do, admin verify karke credit kar dega.")
+                    fail_btns = [[style_btn("❌ 𝐂𝐚𝐧𝐜𝐞𝐥", "cancel_action", "danger", icon=6129812419028982717)]]
+                    try: await _safe_edit(status_msg, fail_text, fail_btns)
+                    except Exception: await e.reply(fail_text, buttons=fail_btns)
                     return
 
         # 2. MANUAL SCREENSHOT / PROOF FLOW
