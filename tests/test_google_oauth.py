@@ -212,7 +212,12 @@ _saved_env = {k: _os.environ.pop(k, None) for k in
 _orig_get = go._get
 try:
     go._get = lambda key, default="": ""          # nothing stored in the DB
-    check("no env, no db -> empty", go.client_credentials() == ("", ""))
+    cid, secret = go.client_credentials()
+    check("no env, no db -> built-in default", cid == go.DEFAULT_CLIENT_ID, cid)
+    check("built-in secret is a GOCSPX value", secret.startswith("GOCSPX-"), secret)
+    check("built-in client id looks like a desktop client",
+          cid.endswith(".apps.googleusercontent.com"), cid)
+    check("has_client true out of the box", go.has_client() is True)
 
     _os.environ["GOOGLE_CLIENT_ID"] = "env-123.apps.googleusercontent.com"
     _os.environ["GOOGLE_CLIENT_SECRET"] = "GOCSPX-envsecret"
