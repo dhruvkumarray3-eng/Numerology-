@@ -110,7 +110,34 @@ def configured() -> bool:
 
 
 def _base_url() -> str:
-    return (_settings().get("base_url") or "https://api.temporasms.com").rstrip("/")
+    return _normalise_base(_settings().get("base_url") or _TEMPORA_CANON)
+
+
+# The real TemporaSMS API host.  Every action is a query on
+# ``/stubs/handler_api.php`` beneath it.
+_TEMPORA_CANON = "https://api.temporasms.com"
+
+
+def _normalise_base(raw: str) -> str:
+    """Return a canonical TemporaSMS API base URL.
+
+    The admin panel lets the owner type a base URL, and the common mistake
+    ``https://temporasms.com/api`` (the *website*, not the API host) made
+    every request 404, which the panel then reported as "Not configured"
+    even though the key was valid.  Strip a mistaken endpoint/suffix and map
+    any temporasms.com host onto the one real API host.
+    """
+    value = (raw or "").strip().rstrip("/")
+    if not value:
+        return _TEMPORA_CANON
+    low = value.lower()
+    for suffix in ("/stubs/handler_api.php", "/stubs", "/api"):
+        if low.endswith(suffix):
+            value = value[: -len(suffix)].rstrip("/")
+            low = value.lower()
+    if "temporasms.com" in low:
+        return _TEMPORA_CANON
+    return value or _TEMPORA_CANON
 
 
 def _norm_service(service) -> str:

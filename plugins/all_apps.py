@@ -8,6 +8,7 @@ import html
 import asyncio
 import difflib
 import re
+import unicodedata
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
 
@@ -63,34 +64,69 @@ aa_search_state = {}
 aa_appsearch_state = {}
 
 
+def _norm_text(text):
+    """Lowercase, strip accents/punctuation, collapse whitespace."""
+    text = str(text or "")
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = text.lower().replace("_", " ").replace("-", " ")
+    text = re.sub(r"[^\w\s]", " ", text)
+    return " ".join(text.split())
+
+
 def _search_apps(query):
-    """Fuzzy search over the app catalogue (also used by the text router)."""
-    q = " ".join(str(query or "").lower().replace("_", " ").split()).lstrip("@")
+    """Ranked fuzzy search over the app catalogue (buttons + text router).
+
+    Improvements over the old plain substring test:
+      * accents / punctuation normalised ("whats-app" -> "whats app"),
+      * multi-word queries require every token to be present ("google mail"),
+      * common abbreviations and misspellings resolve ("tg", "wa", "insta",
+        "chat gpt", "tele gram", "telegrm"),
+      * a typo-tolerant ratio catches small mistakes ("telegrm" -> Telegram).
+    """
+    q = _norm_text(query).lstrip("@")
     if not q:
         return []
     alias = {
-        "tg": "telegram", "wa": "whatsapp", "insta": "instagram", "ig": "instagram",
-        "fb": "facebook", "x": "twitter", "gmail": "google", "chatgpt": "openai",
-        "gpt": "openai", "yt": "youtube", "ninja": "ninja", "ninja app": "ninja",
+        "tg": "telegram", "tele gram": "telegram", "telegramm": "telegram",
+        "telegrm": "telegram", "telegramme": "telegram",
+        "wa": "whatsapp", "whats app": "whatsapp", "whatsap": "whatsapp",
+        "watsapp": "whatsapp",
+        "insta": "instagram", "ig": "instagram", "instgram": "instagram",
+        "fb": "facebook", "face book": "facebook", "fbk": "facebook",
+        "x": "twitter", "twiter": "twitter",
+        "gmail": "google", "google mail": "google", "googl": "google",
+        "chatgpt": "openai", "chat gpt": "openai", "gpt": "openai",
+        "open ai": "openai", "yt": "youtube", "you tube": "youtube",
+        "ninja": "ninja", "ninja app": "ninja",
     }
     if q in alias:
         slug = alias[q]
-        return [(s, l) for s, l in APP_CATALOG if s == slug] or [(slug, slug.title())]
+        hit = [(s, l) for s, l in APP_CATALOG if s == slug]
+        return hit or [(slug, slug.title())]
+
+    tokens = q.split()
     scored = []
     for slug, label in APP_CATALOG:
-        s = slug.lower()
-        l = re.sub(r"[^\w\s]", " ", label.lower())
-        l = " ".join(l.split())
+        s = _norm_text(slug)
+        l = _norm_text(label)
+        hay = f"{l} {s}"
         if q == s or q == l:
             score = 100
         elif l.startswith(q) or s.startswith(q):
-            score = 80
-        elif q in l or q in s:
-            score = 60
+            score = 85
+        elif all(tok in hay for tok in tokens):
+            # every query word appears somewhere -> strong multi-word match
+            score = 70 + (5 if l.startswith(tokens[0]) else 0)
+        elif any(tok in hay for tok in tokens):
+            score = 55
         else:
-            ratio = max(difflib.SequenceMatcher(None, q, l).ratio(),
-                        difflib.SequenceMatcher(None, q.replace(" ", ""), s).ratio())
-            score = ratio * 35 if ratio >= 0.62 else 0
+            ratio = max(
+                difflib.SequenceMatcher(None, q, l).ratio(),
+                difflib.SequenceMatcher(None, q.replace(" ", ""), s).ratio(),
+                difflib.SequenceMatcher(None, q, s).ratio(),
+            )
+            score = ratio * 40 if ratio >= 0.6 else 0
         if score > 0:
             scored.append((score, slug, label))
     scored.sort(key=lambda x: (-x[0], x[1]))
