@@ -220,6 +220,7 @@ def register_servers(bot):
 
         from plugins.product_panels import (
             PANELS, show_terms, show_countries as pp_countries, _terms_accepted,
+            show_accounts_terms,
         )
         # Server-3 (numchange) and Server-4 (whatsapp) are live TemporaSMS
         # panels, so they get the terms gate + country list like the rest of
@@ -230,6 +231,14 @@ def register_servers(bot):
             return await pp_countries(e, mode, 1)
         if mode == "numchange":
             return await show_num_change(e)
+        # Server-1 (bulk) and Server-2 (nonspam/LZT) open the account catalogue,
+        # which now has its own "Agree & Continue" terms gate.
+        if mode in ("bulk", "nonspam", "spam"):
+            if not _terms_accepted(e.sender_id, "accounts"):
+                return await show_accounts_terms(
+                    e, {"fn": "countries", "mode": mode, "page": 1})
+            from plugins.buy import show_countries
+            return await show_countries(e, mode, 1)
         # Server-1 (bulk) and Server-2 (nonspam/LZT) open the account catalogue.
         from plugins.buy import show_countries
         await show_countries(e, mode, 1)

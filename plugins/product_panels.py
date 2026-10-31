@@ -132,7 +132,40 @@ PANELS = {
             "details</b> appear first. Then tap <b>Buy Now</b>.\n"
             "4\ufe0f\u20e3 Enter that number in the app's signup screen.\n"
             "5\ufe0f\u20e3 Tap <b>Get OTP</b> here \u2014 the code arrives in this chat.\n"
-            "6\ufe0f\u20e3 No SMS? Tap <b>Cancel & Refund</b> and try another country."
+            "6\\ufe0f\\u20e3 No SMS? Tap <b>Cancel & Refund</b> and try another country."
+        ),
+    },
+    # Telegram account catalogue (Good Quality TG / Cheap TG / Buy WP Account /
+    # filters / years).  It is NOT a TemporaSMS panel, so it has no ``service``
+    # or ``country`` key -- it only needs the terms text + guide.  After the
+    # user taps "Agree & Continue" we dispatch to the pending buy action.
+    "accounts": {
+        "title": "Telegram Accounts",
+        "short": "Accounts",
+        "icon": "\U0001F4E6",
+        "style": "success",
+        "tc_title": "Telegram Accounts \u2014 Terms & Conditions",
+        "tc_body": (
+            "You are about to browse <b>live Telegram accounts</b> \u2014 both "
+            "<b>Good Quality</b> (100% spam-block free, ideal for DM &amp; "
+            "personal use) and <b>Cheap</b> (budget accounts for channel "
+            "joiners &amp; members).\n\n"
+            "Every account shown is real, in-stock and priced live from the "
+            "market \u2014 no fake counts. Stock and prices change in real time, "
+            "so a country may sell out between views.\n\n"
+            "Once you buy, the session file / code is delivered straight into "
+            "this chat. Please keep it safe and change the password after the "
+            "first login.\n\n"
+            "Read the guide below, then tap <b>Agree &amp; Continue</b>."
+        ),
+        "guide": (
+            "<b>How to buy a Telegram account</b>\n\n"
+            "1\ufe0f\u20e3 Pick <b>Good Quality</b> or <b>Cheap</b>.\n"
+            "2\ufe0f\u20e3 Choose a country (or use <b>Search Country</b>).\n"
+            "3\ufe0f\u20e3 Tap the account you want and confirm the purchase.\n"
+            "4\ufe0f\u20e3 The session / login code is delivered in this chat.\n"
+            "5\ufe0f\u20e3 Log in, then change the password and enable 2FA.\n\n"
+            "<i>Tip: use More Account Filters for stars, 2FA, age and more.</i>"
         ),
     },
 }
@@ -416,13 +449,16 @@ _TC_MEMORY = set()
 
 
 def _terms_accepted(uid, key):
-    """True if *uid* already accepted the T&C for *key*.
+    """True if *uid* already accepted the T&C for this specific *key*.
 
-    Three layers, cheapest first: in-process memory, the per-panel settings
-    row, then the global ``users.terms_accepted`` flag (so accepting once in
-    any panel stops the prompt everywhere).
+    Acceptance is tracked **per panel** (``pp_tc_<uid>_<key>`` + in-process
+    memory).  We deliberately do NOT fall back to the global
+    ``users.terms_accepted`` flag: the owner wants every product entry point
+    (WhatsApp, TG Number Change, All Apps OTP, Good Quality / Cheap TG ...)
+    to show its own "Agree & Continue" screen the first time it is opened,
+    even if the user already accepted the generic /start terms.
     """
-    if (uid, key) in _TC_MEMORY or (uid, "*") in _TC_MEMORY:
+    if (uid, key) in _TC_MEMORY:
         return True
     try:
         row = cur.execute("SELECT value FROM settings WHERE key=?",
@@ -432,14 +468,6 @@ def _terms_accepted(uid, key):
             return True
     except Exception as exc:  # noqa: BLE001 - never break the panel
         logger.debug(f"terms read failed for {uid}/{key}: {exc}")
-    try:
-        row = cur.execute("SELECT terms_accepted FROM users WHERE user_id=?",
-                          (uid,)).fetchone()
-        if row and row[0]:
-            _TC_MEMORY.add((uid, key))
-            return True
-    except Exception as exc:  # noqa: BLE001
-        logger.debug(f"terms flag read failed for {uid}: {exc}")
     return False
 
 
@@ -451,9 +479,9 @@ def _accept_terms(uid, key):
     caller can still move the user forward.
     """
     # Memory first: this alone guarantees the user is never asked again in
-    # this process, whatever the DB does.
+    # this process, whatever the DB does.  Per-panel only (no wildcard), so
+    # each product keeps its own acceptance record.
     _TC_MEMORY.add((uid, key))
-    _TC_MEMORY.add((uid, "*"))
     ok = False
     try:
         cur.execute(
@@ -488,6 +516,44 @@ def _accept_terms(uid, key):
     # The in-process flag is authoritative: the user has agreed, so report
     # success even when the DB refused the write.
     return True
+
+
+def _set_pending(uid, action):
+    """Remember what the user wanted to open before the terms gate."""
+    if action:
+        panel_state.setdefault(uid, {})["pending"] = action
+
+
+def _pop_pending(uid):
+    """Return and clear the pending post-terms action for *uid*."""
+    return (panel_state.get(uid) or {}).pop("pending", None)
+
+
+async def _run_pending(event, action):
+    """Dispatch the action stored before the terms gate was shown.
+
+    Never raises: if anything is missing we simply land on the account menu so
+    the user is never stuck on a dead screen.
+    """
+    from plugins import buy as _buy
+    try:
+        if not action:
+            return await _buy.show_buy_menu(event)
+        fn = action.get("fn")
+        if fn == "countries":
+            return await _buy.show_countries(event, action.get("mode", "bulk"),
+                                             int(action.get("page", 1)))
+        if fn == "filters":
+            return await _buy.show_filters_catalog(event, int(action.get("page", 1)))
+        if fn == "years":
+            return await _buy.show_years_catalog(event)
+        return await _buy.show_buy_menu(event)
+    except Exception as exc:  # noqa: BLE001 - never leave a dead button
+        logger.warning(f"pending action dispatch failed ({action}): {exc}")
+        try:
+            return await _buy.show_buy_menu(event)
+        except Exception:
+            return None
 
 
 def _selected_app(uid):
@@ -681,6 +747,27 @@ async def show_terms(event, key, country=None):
         [style_btn("📖 How to buy", f"pp_guide|{key}", "primary", icon=5409320020058584473)],
         [style_btn("✅ Agree & Continue", f"pp_agree|{key}", "success", icon=5408995930416362034)],
         [style_btn("❌ Cancel", b"pp_cancel", "danger", icon=6129812419028982717)],
+    ]
+    await _safe_edit(event, msg, btns)
+
+
+async def show_accounts_terms(event, action=None):
+    """Terms gate for the Telegram account catalogue.
+
+    Shown before Good Quality / Cheap TG / Buy WP / filters / years content.
+    *action* describes what to open once the user taps "Agree & Continue".
+    """
+    uid = event.sender_id
+    _set_pending(uid, action)
+    p = PANELS["accounts"]
+    msg = (
+        f"<blockquote expandable>{p['icon']} <b>{p['tc_title']}</b>\n\n"
+        f"{p['tc_body']}</blockquote>"
+    )
+    btns = [
+        [style_btn("\U0001F4D6 How to buy", "pp_guide|accounts", "primary", icon=5409320020058584473)],
+        [style_btn("\u2705 Agree & Continue", "pp_agree|accounts", "success", icon=5408995930416362034)],
+        [style_btn("\u274c Cancel", b"pp_cancel", "danger", icon=6129812419028982717)],
     ]
     await _safe_edit(event, msg, btns)
 
@@ -1439,6 +1526,12 @@ def register_product_panels(bot):
         if key not in PANELS:
             return await e.answer("Unknown panel", alert=True)
         uid = e.sender_id
+        # The account catalogue is not a TemporaSMS panel: route it through its
+        # own terms gate / pending dispatcher.
+        if key == "accounts":
+            if not _terms_accepted(uid, "accounts"):
+                return await show_accounts_terms(e)
+            return await _run_pending(e, _pop_pending(uid))
         panel_state.setdefault(uid, {})["panel"] = key
         if not _terms_accepted(uid, key):
             return await show_terms(e, key)
@@ -1466,6 +1559,8 @@ def register_product_panels(bot):
             await mongo_store.log_event(e.sender_id, "panel_terms_accepted", panel=key)
         except Exception:
             pass
+        if key == "accounts":
+            return await _run_pending(e, _pop_pending(e.sender_id))
         if PANELS[key].get("dynamic_apps"):
             return await show_allotp_hub(e)
         await show_countries(e, key, 1)

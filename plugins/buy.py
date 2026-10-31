@@ -1286,12 +1286,18 @@ async def cb_buy_menu_main(event):
 
 @bot.on(events.CallbackQuery(pattern=r"^by_years_menu$"))
 async def cb_by_years_menu(event):
+    from plugins.product_panels import _terms_accepted, show_accounts_terms
+    if not _terms_accepted(event.sender_id, "accounts"):
+        return await show_accounts_terms(event, {"fn": "years"})
     await show_years_catalog(event)
 
 @bot.on(events.CallbackQuery(pattern=r"^pg_filters\|(\d+)"))
 async def cb_pg_filters(event):
     raw = event.pattern_match.group(1)
     page = int(raw.decode('utf-8') if isinstance(raw, bytes) else raw)
+    from plugins.product_panels import _terms_accepted, show_accounts_terms
+    if not _terms_accepted(event.sender_id, "accounts"):
+        return await show_accounts_terms(event, {"fn": "filters", "page": page})
     await show_filters_catalog(event, page)
 
 @bot.on(events.CallbackQuery(pattern=r"^c_by_yr\|(\d+)\|(\d+)"))
@@ -1308,6 +1314,9 @@ async def cb_pg_c(event):
     r2 = event.pattern_match.group(2)
     mode = r1.decode('utf-8') if isinstance(r1, bytes) else r1
     page = int(r2.decode('utf-8') if isinstance(r2, bytes) else r2)
+    from plugins.product_panels import _terms_accepted, show_accounts_terms
+    if not _terms_accepted(event.sender_id, "accounts"):
+        return await show_accounts_terms(event, {"fn": "countries", "mode": mode, "page": page})
     await show_countries(event, mode, page)
 
 @bot.on(events.CallbackQuery(pattern=r"^bc\|([^|]+)\|(.+)"))
