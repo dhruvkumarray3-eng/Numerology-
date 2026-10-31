@@ -1,3 +1,4 @@
+import unicodedata
 from telethon import Button
 from telethon.tl.types import ReplyKeyboardMarkup, KeyboardButtonRow, KeyboardButton, KeyboardButtonStyle
 from config import TERMS_URL, PRIVACY_URL, JOIN_URLS, USE_PREMIUM_EMOJIS
@@ -269,13 +270,48 @@ def _build_menu_fold():
     })
 
 
+# ---------------------------------------------------------------------------
+# Letterlike / fullwidth / super-subscript glyphs.
+#
+# Older builds of the keyboard used the Unicode "letterlike symbols" block
+# (\u2119 P, \u2102 C, \u211d R, \u210d H, \u2124 Z ...) and fullwidth forms.
+# Those are *not* part of the mathematical-alphanumeric blocks above, so a
+# stale keyboard on the user's phone sent text the fold map could not read and
+# the button looked dead.  Fold every such character whose NFKC form is plain
+# ASCII alphanumeric - and *only* those, so emoji like \U0001f198 (SOS) are
+# left untouched and simply stripped later.
+# ---------------------------------------------------------------------------
+_EXTRA_FOLD = {}
+
+
+def _build_extra_fold():
+    ranges = (
+        (0x1D00, 0x1DC0),   # phonetic extensions / small capitals / superscripts
+        (0x2070, 0x20A0),   # super- and subscripts
+        (0x2100, 0x2150),   # letterlike symbols  (\u2119 \u2102 \u211d \u210d ...)
+        (0x2460, 0x2500),   # enclosed alphanumerics
+        (0xFB00, 0xFB07),   # latin ligatures
+        (0xFF01, 0xFF5F),   # fullwidth ASCII
+    )
+    for start, end in ranges:
+        for cp in range(start, end):
+            ch = chr(cp)
+            folded = unicodedata.normalize("NFKC", ch)
+            if (folded and folded != ch and len(folded) == 1
+                    and folded.isascii() and folded.isalnum()):
+                _EXTRA_FOLD[ch] = folded
+
+
 _build_menu_fold()
+_build_extra_fold()
 
 
 def normalise_menu_text(value) -> str:
     """Fold stylised Unicode letters to plain ASCII and strip decoration."""
     text = str(value or "")
-    folded = "".join(_MENU_FOLD.get(ch, ch) for ch in text)
+    folded = "".join(
+        _MENU_FOLD.get(ch) or _EXTRA_FOLD.get(ch) or ch for ch in text
+    )
     return "".join(ch for ch in folded.lower() if ch.isalnum())
 
 
@@ -317,6 +353,17 @@ _MENU_LABEL_KEYS = {
     "freetempmail": "tempmail",
     "recharge": "recharge",
 }
+
+
+# Bump this whenever the bottom keyboard layout or its glyphs change.
+# Reply keyboards are a *client-side* state: Telegram keeps the old one on the
+# user's screen until the bot sends a new one.  Without a version check a user
+# who installed the keyboard once would keep tapping the *old* labels forever
+# (that is exactly why "Profile" stayed dead after the glyph fix: the stale
+# keyboard still sent "\u2119\u0280\u1d0f\u0493\u026a\u029f\u1d07" with U+2119, which the fold map
+# did not know).  `install_persistent_menu` now re-sends the keyboard whenever
+# the stored version is older than this value.
+MENU_VERSION = 3
 
 
 def menu_label_key(value):

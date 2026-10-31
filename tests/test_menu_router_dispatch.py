@@ -177,6 +177,47 @@ check("main.py prints menu routing self-test",
       "Menu routing self-test" in main_src)
 
 # ---------------------------------------------------------------------------
+# 4. Legacy / stale keyboard glyphs must still route
+#
+# A reply keyboard lives on the user's phone: after a layout change the old
+# one stays on screen until the bot sends a new one.  Older builds used the
+# Unicode "letterlike symbols" block (U+2119 P, U+2102 C, U+211D R, U+210D H)
+# and fullwidth forms.  Those must fold to the same canonical key, otherwise
+# "Profile" stays dead for every user holding a stale keyboard.
+# ---------------------------------------------------------------------------
+from utils.keyboards import MENU_VERSION, menu_label_key, normalise_menu_text  # noqa: E402
+
+LEGACY = {
+    "\u2119\u0280\u1d0f\u0493\u026a\u029f\u1d07": "profile",          # ℙʀᴏғɪʟᴇ
+    "\U0001f464 \u2119\u0280\u1d0f\u0493\u026a\u029f\u1d07": "profile",  # 👤 ℙʀᴏғɪʟᴇ
+    "\U0001f4ca \U0001d54a\u1d1b\u1d0f\u1d04\u1d0b": "stock",          # 📊 𝕊ᴛᴏᴄᴋ
+    "\uff23\uff4c\uff4f\uff53\uff45": "close",                          # Ｃｌｏｓｅ
+    "\u2102\U0001d55d\U0001d560\U0001d564\U0001d556": "close",          # ℂ𝕝𝕠𝕤𝕖
+    "\U0001f198 Help": "help",                                             # 🆘 Help
+}
+for label, expected in LEGACY.items():
+    got = menu_label_key(label)
+    check(f"legacy label {label!r} routes to {expected}", got == expected,
+          f"got {got} (folded={normalise_menu_text(label)!r})")
+
+# The SOS emoji must not be expanded to the letters "SOS" by NFKC folding.
+check("squared SOS emoji is not expanded",
+      "sos" not in normalise_menu_text("\U0001f198 Help"))
+
+check("MENU_VERSION is a positive int", isinstance(MENU_VERSION, int) and MENU_VERSION > 0,
+      f"got {MENU_VERSION!r}")
+
+# install_persistent_menu must re-send a stale keyboard.
+start_src = pathlib.Path(ROOT, "plugins", "start.py").read_text(encoding="utf-8")
+check("start.py compares stored menu version", "get_menu_version(uid) < MENU_VERSION" in start_src)
+check("start.py records the installed menu version", "set_menu_version(uid, MENU_VERSION)" in start_src)
+
+db_src = pathlib.Path(ROOT, "database.py").read_text(encoding="utf-8")
+check("database exposes get_menu_version", "def get_menu_version(" in db_src)
+check("database exposes set_menu_version", "def set_menu_version(" in db_src)
+check("users table gets a menu_version column", "ADD COLUMN menu_version" in db_src)
+
+# ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
 failed = [c for c in CHECKS if not c[1]]

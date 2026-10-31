@@ -525,3 +525,59 @@ raise kare.
 
 - `12/12` keyboard labels router se match.
 - `48/48` test files pass, `compileall` clean.
+
+---
+
+## 5. v26 — Stale reply keyboard on the user's phone (Profile still dead)
+
+**Symptom**
+
+v25 router ke baad bhi user ne bola "Profile / Stock abhi bhi nahi chal raha,
+neeche wale menu button se". Dispatch code sahi tha — simulate karke dekha,
+dono screens render ho rahe the.
+
+**Root cause (asli wajah)**
+
+Reply keyboard **client-side** hota hai. Ek baar bhejne ke baad Telegram usko
+user ke phone par **rakhta hai** jab tak bot naya keyboard na bheje.
+`install_persistent_menu()` `is_menu_installed(uid)` DB flag dekh ke
+`return None` kar deta tha — matlab purana keyboard **hamesha** phone par
+pada raha.
+
+Purane build ka keyboard "letterlike symbols" block use karta tha:
+`ℙ` (U+2119), `ℂ` (U+2102), `ℝ`, `ℍ` — aur fullwidth forms. Ye block
+`_MENU_FOLD` me **tha hi nahi** (sirf mathematical alphanumeric blocks the),
+to:
+
+```
+"👤 ℙʀᴏғɪʟᴇ"  ->  folded "ℙrofile"  ->  key None  ->  button dead
+```
+
+Yahi wajah thi ki code fix karne ke baad bhi user ke phone se button kaam
+nahi karta tha — wo **purana label** bhej raha tha.
+
+**Fix**
+
+1. `utils/keyboards.py`
+   - `_EXTRA_FOLD`: phonetic extensions, super/subscripts, **letterlike
+     symbols (U+2100–U+214F)**, enclosed alphanumerics, ligatures, aur
+     **fullwidth ASCII (U+FF01–U+FF5F)** — sirf wahi characters jinka NFKC
+     plain ASCII alnum hai (isliye 🆘 = "SOS" expand nahi hota).
+   - `MENU_VERSION = 3` — keyboard layout ka version.
+2. `database.py`
+   - `users.menu_version` column + `get_menu_version()` / `set_menu_version()`.
+3. `plugins/start.py`
+   - `install_persistent_menu()` ab `get_menu_version(uid) < MENU_VERSION`
+     hone par keyboard **dobara bhejta hai**, aur install ke baad version
+     save karta hai. Isse purana keyboard automatically refresh ho jata hai.
+4. `tests/test_menu_router_dispatch.py` — 13 naye checks: legacy glyph labels
+   (`ℙʀᴏғɪʟᴇ`, `𝕊ᴛᴏᴄᴋ`, `Ｃｌｏｓｅ`, `ℂ𝕝𝕠𝕤𝕖`) canonical key par route hote hain,
+   🆘 "SOS" me expand nahi hota, aur version-refresh logic wired hai.
+5. `tests/test_persistent_menu.py` — updated for version-aware install.
+
+**Verify**
+
+- `ℙʀᴏғɪʟᴇ` → `profile` ✅, `𝕊ᴛᴏᴄᴋ` → `stock` ✅, `Ｃｌｏｓｅ` → `close` ✅
+- `Stockholm` / `US` abhi bhi match **nahi** (country search intact) ✅
+- `menu_label_router` handler index 1 (sabse pehle) ✅
+- 48/48 test files pass, `compileall` clean ✅
