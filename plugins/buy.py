@@ -819,7 +819,13 @@ async def process_purchase(event, mode, country, year, price_str):
             mode = parts[0].strip()
             
     uid, price = event.sender_id, int(price_str)
-    
+    try:
+        requested_year = int(year)
+    except (TypeError, ValueError):
+        requested_year = 2026
+    # The vintage 2019 button means "2019 and older", not only 2019.
+    year_sql = "account_year <= ?" if requested_year == 2019 else "account_year = ?"
+
     async with get_user_lock(uid):
         disc_row = cur.execute("SELECT discount, balance FROM users WHERE user_id=?", (uid,)).fetchone()
         if not disc_row: return await event.answer("❌ User not found!", alert=True)
@@ -834,15 +840,15 @@ async def process_purchase(event, mode, country, year, price_str):
         # a live LZT purchase.  This must not depend on BOT_MODE, otherwise a
         # 'manual' bot refuses every live purchase with "Out of stock".
         if mode == 'spam':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)='spam' LIMIT 1", (country, int(year))).fetchone()
+            local_row = cur.execute(f"SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND {year_sql} AND available=1 AND LOWER(category)='spam' LIMIT 1", (country, requested_year)).fetchone()
         elif mode == 'nonspam':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL LIMIT 1", (country, int(year))).fetchone()
+            local_row = cur.execute(f"SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND {year_sql} AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL LIMIT 1", (country, requested_year)).fetchone()
         elif mode == 'no_2fa':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
+            local_row = cur.execute(f"SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND {year_sql} AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, requested_year)).fetchone()
         elif mode == 'with_2fa':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, int(year))).fetchone()
+            local_row = cur.execute(f"SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND {year_sql} AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, requested_year)).fetchone()
         else:
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 LIMIT 1", (country, int(year))).fetchone()
+            local_row = cur.execute(f"SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND {year_sql} AND available=1 LIMIT 1", (country, requested_year)).fetchone()
 
         is_local = local_row is not None
 

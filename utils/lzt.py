@@ -1411,12 +1411,21 @@ class LZTClient:
                     # differs from the requested one.  Dropping items whose year
                     # is unknown (missing telegram_session_created_at) silently
                     # emptied whole searches.
-                    if (
-                        year is not None
-                        and parsed.get("year_known")
-                        and str(parsed["year"]) != str(year)
-                    ):
-                        continue
+                    if year is not None and parsed.get("year_known"):
+                        try:
+                            requested_year = int(year)
+                            parsed_year = int(parsed["year"])
+                        except (TypeError, ValueError):
+                            requested_year = parsed_year = None
+                        # The UI label for 2019 is "2019 & Older (Vintage)";
+                        # treat it as a range instead of accidentally hiding
+                        # 2018, 2017, and older accounts behind an exact-year
+                        # comparison.
+                        if requested_year == 2019:
+                            if parsed_year is not None and parsed_year > 2019:
+                                continue
+                        elif str(parsed["year"]) != str(year):
+                            continue
 
                     # Client-side safety for filters the API may not have
                     # applied.  IMPORTANT: only drop an item when we *know* its
