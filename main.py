@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # the hosting console immediately shows whether the container is running the
 # latest code.  If the console still prints an older tag, the container has
 # not pulled the new files yet.
-BUILD_TAG = "2026-10-30-safe-startup-v21"
+BUILD_TAG = "2026-10-31-terms-gate-per-product-v22"
 
 os.makedirs("sessions", exist_ok=True)
 
@@ -210,6 +210,11 @@ async def main():
     print("==================================================", flush=True)
     print("\U0001F680 NUMBOTT MODULAR (TELETHON) STARTED SUCCESSFULLY!", flush=True)
     print(f"\U0001F4E6 BUILD: {BUILD_TAG}", flush=True)
+    try:
+        from plugins.product_panels import TC_VERSION as _TCV
+        print(f"\U0001F4DC Terms gate: per-product, TC_VERSION={_TCV}", flush=True)
+    except Exception:
+        pass
     print("==================================================", flush=True)
 
     # 5b. Database self-check.  The "Cannot operate on a closed database"

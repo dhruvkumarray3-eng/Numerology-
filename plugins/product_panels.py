@@ -447,6 +447,15 @@ def _balance(uid):
 # twice for the same panel, even if the DB is read-only, locked or ephemeral.
 _TC_MEMORY = set()
 
+# Bump this whenever the terms gate wiring changes.  An acceptance stored by an
+# older version (e.g. the old global-flag era) is treated as *not accepted*, so
+# the "Agree & Continue" screen is guaranteed to appear once after an update.
+TC_VERSION = 2
+
+
+def _tc_value():
+    return str(TC_VERSION)
+
 
 def _terms_accepted(uid, key):
     """True if *uid* already accepted the T&C for this specific *key*.
@@ -457,13 +466,16 @@ def _terms_accepted(uid, key):
     (WhatsApp, TG Number Change, All Apps OTP, Good Quality / Cheap TG ...)
     to show its own "Agree & Continue" screen the first time it is opened,
     even if the user already accepted the generic /start terms.
+
+    The stored value must equal the current ``TC_VERSION``; an older value is
+    ignored so a code update re-shows the screen exactly once.
     """
     if (uid, key) in _TC_MEMORY:
         return True
     try:
         row = cur.execute("SELECT value FROM settings WHERE key=?",
                           (f"pp_tc_{uid}_{key}",)).fetchone()
-        if row and row[0] == "1":
+        if row and str(row[0]) == _tc_value():
             _TC_MEMORY.add((uid, key))
             return True
     except Exception as exc:  # noqa: BLE001 - never break the panel
@@ -485,9 +497,9 @@ def _accept_terms(uid, key):
     ok = False
     try:
         cur.execute(
-            "INSERT INTO settings (key, value) VALUES (?, '1') "
-            "ON CONFLICT(key) DO UPDATE SET value='1'",
-            (f"pp_tc_{uid}_{key}",),
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (f"pp_tc_{uid}_{key}", _tc_value()),
         )
         ok = True
     except Exception as exc:  # noqa: BLE001 - never break the panel

@@ -178,7 +178,16 @@ check("skips non-code files", "*) continue ;;" in sh)
 # ------------------------------------------------------------- 6. build tag
 print("\n[6] Build tag")
 main_src = read("main.py")
-check("BUILD_TAG bumped to v20", "2026-10-30-safe-startup-v21" in main_src)
+import re as _re
+_tag = _re.search(r'BUILD_TAG\s*=\s*"([^"]+)"', main_src)
+check("BUILD_TAG present", _tag is not None, main_src[:0])
+if _tag:
+    val = _tag.group(1)
+    # A real, dated build tag (never the ancient 'v13' stub), and at least the
+    # terms-gate release so a stale container is easy to spot in the console.
+    check("BUILD_TAG is a dated release", bool(_re.match(r"\d{4}-\d{2}-\d{2}-", val)), val)
+    _ver = _re.search(r"-v(\d+)$", val)
+    check("BUILD_TAG >= v22", bool(_ver) and int(_ver.group(1)) >= 22, val)
 
 print("\n" + "=" * 70)
 print(f" RESULT: {PASS} passed, {FAIL} failed")

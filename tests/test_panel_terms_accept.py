@@ -66,9 +66,9 @@ def test_accept_terms_persists():
 
     cur = P.db.cursor()
     cur.execute("SELECT value FROM settings WHERE key = ?",
-                ("pp_tc_424242_allotp",))
+                (f"pp_tc_424242_allotp",))
     row = cur.fetchone()
-    check("terms flag stored", row is not None and str(row[0]) == "1", row)
+    check("terms flag stored", row is not None and str(row[0]) == P._tc_value(), row)
 
     # Idempotent: a second tap must not raise.
     check("_accept_terms is idempotent", P._accept_terms(424242, "allotp") is True)
