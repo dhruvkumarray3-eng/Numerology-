@@ -12,7 +12,7 @@ Covers:
   3. extract_telethon_string_session derives the DC from loginData.raw,
      never from the 2FA password.
   4. _parse_item does not hard-code year=2026 and detects telegram_email.
-  5. search_items does not drop items whose year is unknown.
+  5. search_items strictly filters exact years and the 2019-and-older bucket.
 """
 import asyncio
 import base64
@@ -204,10 +204,14 @@ def test_parse_item_year_email_spam_stars():
     p2 = L.lzt_client._parse_item({"item_id": 2, "price": 5})
     assert p2["year"] == datetime.datetime.now().year, p2["year"]
     assert p2["year_known"] is False
+    p3 = L.lzt_client._parse_item(
+        {"item_id": 3, "telegram_register_date": "2018-06-30T12:00:00Z"}
+    )
+    assert p3["year"] == 2018 and p3["year_known"] is True, p3
     print("PASS _parse_item year/email/spam/stars")
 
 
-async def test_search_keeps_unknown_year_items():
+async def test_search_filters_exact_year_and_vintage():
     page = {
         "items": [
             {
@@ -217,6 +221,30 @@ async def test_search_keeps_unknown_year_items():
                 "telegram_session_created_at": 1600000000,
             },
             {"item_id": 2, "price": 11, "telegram_country": "IND"},
+            {
+                "item_id": 3,
+                "price": 12,
+                "telegram_country": "IND",
+                "telegram_session_created_at": int(
+                    datetime.datetime(2019, 1, 1).timestamp()
+                ),
+            },
+            {
+                "item_id": 4,
+                "price": 13,
+                "telegram_country": "IND",
+                "telegram_session_created_at": int(
+                    datetime.datetime(2018, 1, 1).timestamp()
+                ),
+            },
+            {
+                "item_id": 5,
+                "price": 14,
+                "telegram_country": "IND",
+                "telegram_session_created_at": int(
+                    datetime.datetime(2021, 1, 1).timestamp()
+                ),
+            },
         ],
         "hasNextPage": False,
         "nextCursor": None,
@@ -231,9 +259,14 @@ async def test_search_keeps_unknown_year_items():
         "India", year=2020, mode="bulk", limit=10
     )
     ids = {i["item_id"] for i in items}
-    assert 1 in ids, ids
-    assert 2 in ids, f"unknown-year item was dropped: {ids}"
-    print("PASS search_items keeps unknown-year item ->", ids)
+    assert ids == {1}, f"exact year 2020 returned wrong listings: {ids}"
+
+    vintage = await L.lzt_client.search_items(
+        "India", year=2019, mode="bulk", limit=10
+    )
+    vintage_ids = {i["item_id"] for i in vintage}
+    assert vintage_ids == {3, 4}, f"vintage must include 2019 and older only: {vintage_ids}"
+    print("PASS search_items exact-year and vintage filtering ->", ids, vintage_ids)
 
 
 def test_rank_results():
@@ -256,7 +289,7 @@ async def main():
     await test_otp_reads_codes_code()
     await test_fast_buy_retry_and_fields()
     test_parse_item_year_email_spam_stars()
-    await test_search_keeps_unknown_year_items()
+    await test_search_filters_exact_year_and_vintage()
     test_rank_results()
     print("\nALL TESTS PASSED")
 

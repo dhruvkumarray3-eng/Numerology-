@@ -765,6 +765,10 @@ async def show_years(event, mode, country):
             )
             years_grouped = {}
             for itm in items:
+                # Unknown dates cannot be assigned to a year without
+                # mislabeling the listing as the current year.
+                if not itm.get("year_known"):
+                    continue
                 y = itm['year']
                 if y not in years_grouped:
                     price = get_panel_price(country, y, itm['price_rub'], mode=mode)
@@ -827,9 +831,17 @@ async def _live_stock_count(country, year, mode):
     """Live stock for a country/year, from local DB first then the panel."""
     count = 0
     try:
+        selected_year = int(year) if year is not None else None
+        year_sql = (
+            " AND account_year <= ?" if selected_year == 2019
+            else " AND account_year = ?" if selected_year is not None
+            else ""
+        )
+        params = (country, selected_year) if selected_year is not None else (country,)
         rows = cur.execute(
-            "SELECT COUNT(*) FROM stock WHERE country_name=? AND available=1",
-            (country,),
+            "SELECT COUNT(*) FROM stock WHERE country_name=? AND available=1"
+            + year_sql,
+            params,
         ).fetchone()
         count = int(rows[0]) if rows and rows[0] is not None else 0
     except Exception:
@@ -841,10 +853,10 @@ async def _live_stock_count(country, year, mode):
                 country, year=year, mode=mode, limit=_ss_int("max_results", 50)
             )
             # Prefer the market's server-side totalItems over the number of
-            # items we happened to sample: sampling caps at `max_results` and
-            # used to make a 300-account country look like "50".
+            # items we happened to sample only for unfiltered searches. LZT's
+            # totalItems is not year-filtered because year is matched locally.
             server_total = int(getattr(lzt_client, "last_total", 0) or 0)
-            count = server_total or len(items)
+            count = (server_total if year is None else 0) or len(items)
         except Exception as exc:
             logger.debug(f"live stock lookup failed for {country}: {exc}")
     return count
@@ -975,8 +987,6 @@ async def process_purchase(event, mode, country, year, price_str):
         await event.edit(f"⚡ <b>𝐏𝐫𝐨𝐜𝐞𝐬𝐬𝐢𝐧𝐠 𝐲𝐨𝐮𝐫 𝐨𝐫𝐝𝐞𝐫...</b>\n𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭 𝐰𝐡𝐢𝐥𝐞 𝐰𝐞 𝐢𝐧𝐢𝐭𝐢𝐚𝐥𝐢𝐳𝐞 𝐭𝐡𝐞 𝐬𝐞𝐬𝐬𝐢𝐨𝐧.")
         try:
             items = await lzt_client.search_items(country, actual_year, mode=mode)
-            if not items:
-                items = await lzt_client.search_items(country, mode=mode)
             
             if not items:
                 async with get_user_lock(uid):

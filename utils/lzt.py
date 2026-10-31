@@ -1137,14 +1137,28 @@ class LZTClient:
             )
             # Never fabricate a specific year (the old code hard-coded 2026,
             # which mis-grouped every account whose creation date was absent).
-            # Use the real timestamp when present, otherwise fall back to the
-            # current year so the item is still shown under a sane bucket.
+            # Use the real timestamp when present; the current-year fallback
+            # only keeps undated items usable in unfiltered searches. The
+            # year_known flag prevents them from entering a year-specific list.
             item_year = datetime.datetime.now().year
             year_known = False
+            raw_created_ts = str(created_ts or "").strip()
             try:
                 created_ts = int(created_ts or 0)
             except (TypeError, ValueError):
                 created_ts = 0
+                # Some API responses use an ISO date instead of a Unix
+                # timestamp. Parse it so those listings can be placed in the
+                # correct year bucket rather than being treated as unknown.
+                try:
+                    iso_date = raw_created_ts.replace("Z", "+00:00")
+                    item_year = datetime.datetime.fromisoformat(iso_date).year
+                    year_known = True
+                except (TypeError, ValueError):
+                    pass
+            if created_ts >= 1000000000000:
+                # Accept millisecond Unix timestamps as well as seconds.
+                created_ts //= 1000
             if created_ts > 1000000:
                 try:
                     item_year = datetime.datetime.fromtimestamp(created_ts).year
@@ -1407,24 +1421,25 @@ class LZTClient:
                             if item_c not in {c2, (c3 or "").lower()}:
                                 continue
 
-                    # Only reject an item when we actually know its year and it
-                    # differs from the requested one.  Dropping items whose year
-                    # is unknown (missing telegram_session_created_at) silently
-                    # emptied whole searches.
-                    if year is not None and parsed.get("year_known"):
+                    # A selected year is a strict filter: listings without a
+                    # parseable creation date cannot be verified and must not
+                    # leak into every year bucket.
+                    if year is not None:
+                        if not parsed.get("year_known"):
+                            continue
                         try:
                             requested_year = int(year)
                             parsed_year = int(parsed["year"])
                         except (TypeError, ValueError):
-                            requested_year = parsed_year = None
+                            continue
                         # The UI label for 2019 is "2019 & Older (Vintage)";
                         # treat it as a range instead of accidentally hiding
                         # 2018, 2017, and older accounts behind an exact-year
                         # comparison.
                         if requested_year == 2019:
-                            if parsed_year is not None and parsed_year > 2019:
+                            if parsed_year > 2019:
                                 continue
-                        elif str(parsed["year"]) != str(year):
+                        elif parsed_year != requested_year:
                             continue
 
                     # Client-side safety for filters the API may not have
