@@ -619,7 +619,7 @@ async def show_countries_for_year(event, year, page):
         if _lzt_live():
             try:
                 items = await lzt_client.search_items(
-                    c_name, year=selected_year, mode="bulk", limit=1
+                    c_name, year=selected_year, mode="bulk", limit=1, max_pages=1
                 )
                 if items:
                     item = items[0]
@@ -634,7 +634,22 @@ async def show_countries_for_year(event, year, page):
                 logger.debug("aged country quote failed for %s/%s: %s", c_name, year, exc)
         return None
 
-    quotes = await asyncio.gather(*(_quote(c_name) for c_name, _ in countries))
+    # Do not let ten slow market requests hold a Telegram callback open. A
+    # bounded fan-out keeps the year buttons responsive; unavailable quotes
+    # are simply omitted instead of leaving the user on a spinning callback.
+    quote_gate = asyncio.Semaphore(3)
+
+    async def _bounded_quote(c_name):
+        async with quote_gate:
+            try:
+                return await asyncio.wait_for(_quote(c_name), timeout=8.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                return None
+            except Exception as exc:
+                logger.debug("bounded aged quote failed for %s/%s: %s", c_name, year, exc)
+                return None
+
+    quotes = await asyncio.gather(*(_bounded_quote(c_name) for c_name, _ in countries))
     btns = []
     for (c_name, fallback_count), quote in zip(countries, quotes):
         # A country with no year-specific quote must not receive a fabricated
@@ -1381,7 +1396,14 @@ async def cb_c_by_yr(event):
     r2 = event.pattern_match.group(2)
     year = r1.decode('utf-8') if isinstance(r1, bytes) else r1
     page = int(r2.decode('utf-8') if isinstance(r2, bytes) else r2)
-    await show_countries_for_year(event, year, page)
+    try:
+        await show_countries_for_year(event, year, page)
+    except Exception as exc:
+        logger.exception("aged account year button failed for %s/%s: %s", year, page, exc)
+        try:
+            await event.answer("⚠️ Stock is loading. Please tap the year again.", alert=True)
+        except Exception:
+            pass
 
 @bot.on(events.CallbackQuery(pattern=r"^pg_c\|([^|]+)\|(\d+)"))
 async def cb_pg_c(event):
