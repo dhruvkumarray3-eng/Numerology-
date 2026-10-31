@@ -9,7 +9,8 @@ from database import (
 from utils.keyboards import (get_persistent_menu, get_terms_buttons, get_join_buttons,
                              style_btn, style_url, MENU_VERSION)
 from utils.terms import get_terms_message
-from utils.helpers import check_channel_joined, to_small_caps, send_preview_on_top
+from utils.helpers import (check_channel_joined, to_small_caps, send_preview_on_top,
+                            safe_get_me)
 from config import (PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL,
                     QC_ID_PREFIX, logger, PE_LIGHTNING, PE_CROWN, PE_CHECK, PE_GIFT,
                     PE_ID, PE_USER, PE_TARGET, PE_TAG, PE_TROPHY, PE_CARD, PE_STAR,
@@ -83,14 +84,16 @@ async def install_persistent_menu(bot, event, uid, force=False):
 
 
 async def send_main_menu(bot, event, uid):
-    me = await bot.get_me()
-    bot_name = me.first_name or "Store Bot"
+    _me = await safe_get_me(bot)
+    bot_name = getattr(_me, "first_name", None) or "Store Bot"
     
     bal_row = cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()
     bal = float(bal_row[0]) if bal_row and bal_row[0] is not None else 0.0
     
     try:
         user_entity = await bot.get_entity(uid)
+        if user_entity is None:
+            raise ValueError("entity unavailable")
         first_name = user_entity.first_name or "User"
         username = f"@{user_entity.username}" if user_entity.username else "None"
     except Exception:
@@ -109,7 +112,8 @@ async def send_main_menu(bot, event, uid):
     styled_name = to_small_caps(bot_name)
     
     # RDX ID is derived from this bot's own id, so it always matches the bot.
-    rdx_id = f"{QC_ID_PREFIX}-{str(me.id)[-8:]}"
+    _bot_id = getattr(_me, "id", None) or 0
+    rdx_id = f"{QC_ID_PREFIX}-{str(_bot_id).zfill(8)[-8:]}"
 
     # VIP tier is computed LIVE from the user's lifetime deposits AND spending
     # (see utils.levels), so it reflects real activity instead of a balance that
