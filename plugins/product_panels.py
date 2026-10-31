@@ -45,6 +45,7 @@ from utils.markup import (
 from utils import mongo_store
 from utils import stickers as sticker_engine
 from utils import stock_details as stock_card
+from utils.purchase_logging import notify_purchase_channels
 from utils.states import get_user_lock
 PAGE_SIZE = 12
 CACHE_TTL = 240
@@ -1366,33 +1367,68 @@ async def buy(event, key, code):
 
     display_inr = _display_inr(real_price, cfg, key)
     profit = display_inr - float(real_price)
-    bal = _balance(uid)
-    if bal < display_inr:
+    # Reserve funds before calling the provider. The conditional UPDATE is the
+    # final authority, so parallel taps or another purchase flow cannot spend
+    # the same wallet balance twice.
+    async with get_user_lock(uid):
+        cur.execute(
+            "UPDATE users SET balance = balance - ? "
+            "WHERE user_id = ? AND balance >= ?",
+            (display_inr, uid, display_inr),
+        )
+        reserved = cur.rowcount == 1
+        if reserved:
+            db.commit()
+        else:
+            db.rollback()
+            bal = _balance(uid)
+            return await event.answer(
+                f"❌ Insufficient balance.\n"
+                f"Need {format_dual_from_inr(display_inr, uid=uid)}\n"
+                f"You have {format_dual_from_inr(bal, uid=uid)}",
+                alert=True,
+            )
+
+    try:
+        result = await temporasms.buy_number(_service_for(key, uid), code)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Panel number purchase failed for user %s/%s: %s", uid, key, exc)
+        result = {"ok": False, "error": str(exc)}
+    if not result.get("ok") or not result.get("order_id"):
+        async with get_user_lock(uid):
+            cur.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?",
+                        (display_inr, uid))
+            db.commit()
         return await event.answer(
-            f"❌ Insufficient balance.\n"
-            f"Need {format_dual_from_inr(display_inr, uid=uid)}\n"
-            f"You have {format_dual_from_inr(bal, uid=uid)}",
+            f"⚠️ Could not reserve a number: {result.get('error') or 'panel busy'}. "
+            "Your balance has been restored.",
             alert=True,
         )
-
-    # reserve the number first, only charge on success
-    result = await temporasms.buy_number(_service_for(key, uid), code)
-    if not result.get("ok"):
-        return await event.answer(
-            f"⚠️ Could not reserve a number: {result.get('error') or 'panel busy'}",
-            alert=True,
-        )
-
-    cur.execute("UPDATE users SET balance = balance - ? WHERE user_id=?", (display_inr, uid))
-    db.commit()
 
     order_id = result["order_id"]
     phone = result.get("phone") or "—"
-    _create_order(uid, key, code, phone, display_inr, float(real_price), profit, order_id)
+    try:
+        _create_order(uid, key, code, phone, display_inr, float(real_price), profit, order_id)
+    except Exception as exc:  # noqa: BLE001 - provider order is already live
+        logger.exception("Could not save panel order %s to SQLite: %s", order_id, exc)
     await mongo_store.log_panel_order(
         uid, panel=key, country=code, phone=phone, price=display_inr,
         real_price=float(real_price), profit=profit, order_id=order_id, status="pending",
+        app=_selected_app(uid) if PANELS[key].get("dynamic_apps") else None,
     )
+
+    product_name = PANELS[key]["title"]
+    if PANELS[key].get("dynamic_apps"):
+        selected_app = _selected_app(uid)
+        if selected_app:
+            product_name = f"{_app_label(selected_app)} OTP"
+    await notify_purchase_channels(
+        getattr(event, "client", None), user_id=uid, product=product_name,
+        country=code, phone=phone, price=display_inr, order_id=order_id,
+        provider="temporasms",
+    )
+    logger.info("Panel purchase completed: user=%s panel=%s order=%s price=%s",
+                uid, key, order_id, display_inr)
 
     panel_state.setdefault(uid, {}).update(
         {"panel": key, "country": code, "order_id": order_id,

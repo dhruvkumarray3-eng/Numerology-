@@ -20,8 +20,12 @@ from config import (
     P_INR,
     logger,
 )
-from database import cur, db, get_user_currency, update_balance
+from database import cur, db, ensure_user, get_user_currency
 from utils.keyboards import style_btn, pe, SEARCH_EMOJI_ID
+from utils.states import get_user_lock
+from utils.markup import apply_service_markup
+from utils import mongo_store
+from utils.purchase_logging import notify_purchase_channels
 
 # Per-app premium icon (custom emoji id).  Falls back to a generic phone icon.
 APP_ICONS = {
@@ -332,33 +336,118 @@ async def show_details(event, app_slug, country_iso):
         logger.debug(f"premium app emoji skipped: {_sk_ex}")
 
 
-async def do_buy(event, app_slug, country_iso):
+async def do_buy(event, app_slug, country_iso, bot_client=None):
     uid = event.sender_id
     if not provider_configured():
         return await event.answer(
             "⚠️ No OTP provider configured. Set it in Admin → 🔐 OTP / SMS Key (set it in Admin \u2192 \U0001F510 OTP / SMS Key).",
             alert=True,
         )
+
+    # Match the live price shown on the details card, and fail closed if the
+    # provider cannot supply a price. No number request is made without this.
+    try:
+        _stock, real_price, _quote_provider = await get_stock(app_slug, country_iso)
+        real_price = float(real_price)
+        if real_price <= 0:
+            raise ValueError("provider returned a non-positive price")
+        price = apply_service_markup(real_price, "allotp")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("All Apps purchase blocked: price unavailable for %s/%s: %s",
+                       app_slug, country_iso, exc)
+        return await event.answer(
+            "⚠️ Live price unavailable. Please refresh the stock card and try again.",
+            alert=True,
+        )
+
+    ensure_user(uid)
+    async with get_user_lock(uid):
+        cur.execute(
+            "UPDATE users SET balance = balance - ? "
+            "WHERE user_id = ? AND balance >= ?",
+            (price, uid, price),
+        )
+        reserved = cur.rowcount == 1
+        if reserved:
+            db.commit()
+        else:
+            db.rollback()
+            row = cur.execute(
+                "SELECT balance FROM users WHERE user_id = ?", (uid,)
+            ).fetchone()
+            balance = float(row[0]) if row and row[0] is not None else 0.0
+            return await event.answer(
+                f"❌ Insufficient balance. Required: {P_INR}{price:.0f}; "
+                f"available: {P_INR}{balance:.0f}.",
+                alert=True,
+            )
+
     await event.answer("⏳ Requesting number...")
-    result = await buy_number(app_slug, country_iso)
-    if not result.get("ok"):
+    try:
+        result = await buy_number(app_slug, country_iso)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("All Apps provider purchase failed for %s/%s: %s",
+                         app_slug, country_iso, exc)
+        result = {"ok": False, "error": str(exc)}
+
+    if not result.get("ok") or not result.get("order_id") or not result.get("phone"):
+        async with get_user_lock(uid):
+            cur.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?",
+                        (price, uid))
+            db.commit()
+        if result.get("ok"):
+            logger.error("OTP provider returned incomplete successful order for %s/%s: %r",
+                         app_slug, country_iso, result)
         return await event.edit(
-            f"<blockquote>❌ <b>Could not get a number.</b>\n<code>{html.escape(str(result.get('error')))}</code></blockquote>",
+            f"<blockquote>❌ <b>Could not get a number.</b>\n"
+            f"<code>{html.escape(str(result.get('error') or 'Provider returned an incomplete order'))}</code>\n\n"
+            f"Your {P_INR}{price:.0f} has been returned to your balance.</blockquote>",
             buttons=[[style_btn("🔙 Back", b"all_apps_menu", "primary", icon="back")]],
         )
+
+    order_id = str(result["order_id"])
+    phone = str(result["phone"])
+    app_label = dict(APP_CATALOG).get(app_slug, app_slug)
+    provider = result.get("provider") or "unknown"
+    # Keep the successful purchase in the existing panel-order history even
+    # when MongoDB is not configured.
+    try:
+        from plugins.product_panels import _create_order
+        _create_order(uid, f"allapps:{app_slug}", country_iso, phone, price,
+                      real_price, price - real_price, order_id)
+    except Exception as exc:  # noqa: BLE001 - provider order is already live
+        logger.exception("Could not save All Apps order %s to SQLite: %s", order_id, exc)
+    try:
+        await mongo_store.log_panel_order(
+            uid, panel=f"allapps:{app_slug}", app=app_slug,
+            country=country_iso, phone=phone, price=price,
+            real_price=real_price, profit=price - real_price,
+            order_id=order_id, provider=provider, status="pending",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Could not save All Apps order %s to MongoDB: %s", order_id, exc)
+
     otp_state[uid] = {
         "app": app_slug,
         "country": country_iso,
-        "order_id": result["order_id"],
-        "provider": result["provider"],
-        "phone": result["phone"],
+        "order_id": order_id,
+        "provider": provider,
+        "phone": phone,
+        "price": price,
     }
-    app_label = dict(APP_CATALOG).get(app_slug, app_slug)
+    await notify_purchase_channels(
+        bot_client or getattr(event, "client", None),
+        user_id=uid, product=f"{app_label} OTP", country=country_iso,
+        phone=phone, price=price, order_id=order_id, provider=provider,
+    )
+    logger.info("All Apps purchase completed: user=%s app=%s country=%s order=%s price=%s",
+                uid, app_slug, country_iso, order_id, price)
     msg = (
         f"<blockquote expandable>{PE_CHECK} <b>Number Ready!</b>\n\n"
         f"📱 <b>App:</b> {html.escape(app_label)}\n"
-        f"☎️ <b>Number:</b> <code>{html.escape(str(result['phone']))}</code>\n"
-        f"🆔 <b>Order:</b> <code>{html.escape(str(result['order_id']))}</code>\n\n"
+        f"☎️ <b>Number:</b> <code>{html.escape(phone)}</code>\n"
+        f"💰 <b>Paid:</b> {P_INR}{price:.0f}\n"
+        f"🆔 <b>Order:</b> <code>{html.escape(order_id)}</code>\n\n"
         f"<i>Use this number to sign up. Then tap <b>Get OTP</b> to fetch the code.</i></blockquote>"
     )
     btns = [
@@ -561,7 +650,7 @@ def register_all_apps(bot):
         c = e.pattern_match.group(2)
         app_slug = a.decode() if isinstance(a, bytes) else a
         country = c.decode() if isinstance(c, bytes) else c
-        await do_buy(e, app_slug, country)
+        await do_buy(e, app_slug, country, bot_client=bot)
 
     @bot.on(events.CallbackQuery(pattern=r"^aa_getotp$"))
     async def cb_aa_getotp(e):
