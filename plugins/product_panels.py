@@ -410,10 +410,37 @@ def _balance(uid):
     return float(row[0]) if row and row[0] is not None else 0.0
 
 
+# In-process cache of accepted terms.  The bot must never ask the same user
+# twice for the same panel, even if the DB is read-only, locked or ephemeral.
+_TC_MEMORY = set()
+
+
 def _terms_accepted(uid, key):
-    row = cur.execute("SELECT value FROM settings WHERE key=?",
-                      (f"pp_tc_{uid}_{key}",)).fetchone()
-    return bool(row and row[0] == "1")
+    """True if *uid* already accepted the T&C for *key*.
+
+    Three layers, cheapest first: in-process memory, the per-panel settings
+    row, then the global ``users.terms_accepted`` flag (so accepting once in
+    any panel stops the prompt everywhere).
+    """
+    if (uid, key) in _TC_MEMORY or (uid, "*") in _TC_MEMORY:
+        return True
+    try:
+        row = cur.execute("SELECT value FROM settings WHERE key=?",
+                          (f"pp_tc_{uid}_{key}",)).fetchone()
+        if row and row[0] == "1":
+            _TC_MEMORY.add((uid, key))
+            return True
+    except Exception as exc:  # noqa: BLE001 - never break the panel
+        logger.debug(f"terms read failed for {uid}/{key}: {exc}")
+    try:
+        row = cur.execute("SELECT terms_accepted FROM users WHERE user_id=?",
+                          (uid,)).fetchone()
+        if row and row[0]:
+            _TC_MEMORY.add((uid, key))
+            return True
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"terms flag read failed for {uid}: {exc}")
+    return False
 
 
 def _accept_terms(uid, key):
@@ -423,21 +450,44 @@ def _accept_terms(uid, key):
     Continue" button look dead).  We log, roll back and report failure so the
     caller can still move the user forward.
     """
+    # Memory first: this alone guarantees the user is never asked again in
+    # this process, whatever the DB does.
+    _TC_MEMORY.add((uid, key))
+    _TC_MEMORY.add((uid, "*"))
+    ok = False
     try:
         cur.execute(
             "INSERT INTO settings (key, value) VALUES (?, '1') "
             "ON CONFLICT(key) DO UPDATE SET value='1'",
             (f"pp_tc_{uid}_{key}",),
         )
-        db.commit()
-        return True
+        ok = True
     except Exception as exc:  # noqa: BLE001 - never break the panel
         logger.warning(f"Could not store terms acceptance for {uid}/{key}: {exc}")
         try:
             db.rollback()
         except Exception:
             pass
-        return False
+    try:
+        cur.execute("UPDATE users SET terms_accepted=1 WHERE user_id=?", (uid,))
+        if getattr(cur, "rowcount", 1) == 0:
+            # Brand-new user: make sure the row exists, then flag it.
+            try:
+                ensure_user(uid)
+            except Exception:
+                pass
+            cur.execute("UPDATE users SET terms_accepted=1 WHERE user_id=?", (uid,))
+        db.commit()
+        ok = True
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"terms flag write failed for {uid}: {exc}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    # The in-process flag is authoritative: the user has agreed, so report
+    # success even when the DB refused the write.
+    return True
 
 
 def _selected_app(uid):

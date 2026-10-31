@@ -102,7 +102,11 @@ def test_accept_terms_survives_db_failure():
     finally:
         P.cur, P.db = real_cur, real_db
 
-    check("_accept_terms returns False on DB failure", result is False, result)
+    # The in-process flag is authoritative, so a DB failure must NOT look like
+    # a dead button: the user has agreed and is moved forward regardless.
+    check("_accept_terms still succeeds on DB failure", result is True, result)
+    check("acceptance kept in memory after DB failure",
+          P._terms_accepted(1, "allotp") is True)
 
 
 # --------------------------------------------------------------------------- #
