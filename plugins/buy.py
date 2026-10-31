@@ -592,15 +592,61 @@ async def show_countries_for_year(event, year, page):
     countries_all = await get_countries_list(year=year)
     total = len(countries_all)
     countries = countries_all[offset:offset+limit]
-    
     if not countries:
         return await _no_stock_card(event)
 
+    async def _quote(c_name):
+        """Return (user_price, count) without ever inventing a ₹2 quote."""
+        try:
+            selected_year = int(year)
+        except (TypeError, ValueError):
+            selected_year = 2026
+        year_sql = "account_year <= ?" if selected_year == 2019 else "account_year = ?"
+
+        # Manual stock has a real base price in the stock table.
+        try:
+            row = cur.execute(
+                f"SELECT COUNT(*), MIN(price) FROM stock "
+                f"WHERE country_name=? AND {year_sql} AND available=1",
+                (c_name, selected_year),
+            ).fetchone()
+            if row and int(row[0] or 0) > 0 and row[1] is not None:
+                return int(round(apply_server_markup(float(row[1]), "bulk"))), int(row[0])
+        except Exception:
+            pass
+
+        # For live-only stock, use the actual item rate returned by the panel.
+        if _lzt_live():
+            try:
+                items = await lzt_client.search_items(
+                    c_name, year=selected_year, mode="bulk", limit=1
+                )
+                if items:
+                    item = items[0]
+                    raw_rub = item.get("price_rub")
+                    if raw_rub is not None:
+                        price = get_panel_price(
+                            c_name, selected_year, raw_rub, mode="bulk"
+                        )
+                        count = int(getattr(lzt_client, "last_total", 0) or 1)
+                        return int(price), count
+            except Exception as exc:
+                logger.debug("aged country quote failed for %s/%s: %s", c_name, year, exc)
+        return None
+
+    quotes = await asyncio.gather(*(_quote(c_name) for c_name, _ in countries))
     btns = []
-    for c_name, count in countries:
+    for (c_name, fallback_count), quote in zip(countries, quotes):
+        # A country with no year-specific quote must not receive a fabricated
+        # minimum price. It is omitted until stock can be quoted honestly.
+        if quote is None:
+            continue
+        price, count = quote
         flag = get_flag_by_country_name(c_name)
-        price = get_panel_price(c_name, year)
         btns.append(style_btn(f"{flag} {c_name} — {format_dual_from_inr(price, uid=event.sender_id)}", f"by|bulk|{c_name}|{year}|{price}", "primary", icon=6154249597532248059))
+
+    if not btns:
+        return await _no_stock_card(event, country=None, reason="No priced accounts are available for this year yet.")
         
     f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
     
