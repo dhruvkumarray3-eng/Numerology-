@@ -83,9 +83,19 @@ for label in REQUIRED:
 
 check("'buy account' is matched via matches_menu()",
       'matches_menu(e.raw_text, "buy account")' in plugin_src)
-for literal in ("Deposit", "Profile", "My Orders", "Balance", "Stock",
-                "Refer", "Support", "Admin Panel"):
-    check(f"handler regex mentions '{literal}'", literal in plugin_src)
+# Handlers must route on the canonical folded key (or, for the few that still
+# use a literal regex, mention the plain label).  This replaced the old
+# "handler regex mentions '<label>'" check, which broke as soon as the
+# glyph-mismatched Stock/Profile regexes were replaced by folding matchers.
+CANONICAL_LABELS = {
+    "Deposit": "deposit", "Profile": "profile", "My Orders": "my_orders",
+    "Balance": "balance", "Stock": "stock", "Refer": "refer",
+    "Support": "support", "Admin Panel": "admin_panel",
+}
+for literal, key in CANONICAL_LABELS.items():
+    check(f"handler routes '{literal}'",
+          f'menu_label_key(e.raw_text) == "{key}"' in plugin_src
+          or literal in plugin_src)
 
 # ---------------------------------------------------------------------------
 # 3. Admin-only button

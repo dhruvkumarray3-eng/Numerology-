@@ -602,11 +602,11 @@ async def _countries_for(key, uid=None, force=False):
     try:
         result = await asyncio.wait_for(temporasms.get_countries(service), timeout=20)
     except asyncio.TimeoutError:
-        logger.warning(f"Panel get_countries({service}) timed out")
+        logger.info(f"Panel get_countries({service}) timed out; using cached/fallback list")
         result = {"ok": False, "countries": [],
                   "error": "The panel did not answer in time."}
     except Exception as exc:
-        logger.warning(f"Panel get_countries({service}) failed: {exc}")
+        logger.info(f"Panel get_countries({service}) failed ({exc}); using cached/fallback list")
         result = {"ok": False, "countries": [], "error": str(exc)}
     if result.get("ok") and result.get("countries"):
         _cache[cache_key] = {"ts": time.time(), "countries": result["countries"]}
