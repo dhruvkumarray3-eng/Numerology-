@@ -170,6 +170,90 @@ PANELS = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Extra per-button terms pages.
+#
+# Two entry points had NO "Agree & Continue" screen at all, so tapping them
+# jumped straight into the catalogue:
+#
+#   * "Basic Telegram Accounts"  -> plugins/manual_accounts.py  (mtg_home)
+#   * "All Apps OTP"             -> plugins/all_apps.py        (all_apps_menu)
+#
+# They are not TemporaSMS country panels, so they cannot live in ``PANELS``
+# (that dict drives the country list).  They get their own text here and are
+# gated through the same ``_terms_accepted`` / ``pp_agree`` machinery, with the
+# follow-up screen carried by the existing pending-action queue.
+# ---------------------------------------------------------------------------
+EXTRA_TC = {
+    "mtg": {
+        "title": "Basic Telegram Accounts",
+        "short": "Basic Accounts",
+        "icon": "\U0001F4F1",
+        "tc_title": "Basic Telegram Accounts \u2014 Terms & Conditions",
+        "tc_body": (
+            "These are <b>ready-made Telegram accounts</b> supplied by our "
+            "manual stock \u2014 you receive the phone number, the 2FA "
+            "password and the session string right here in this chat.\n\n"
+            "Because the account is already registered, the login code may "
+            "arrive on the number itself instead of by SMS. In that case use "
+            "the session string we deliver to sign in with a Telethon client.\n\n"
+            "Please log in and change the password as soon as you receive the "
+            "account. Read the guide below, then tap "
+            "<b>Agree & Continue</b>."
+        ),
+        "guide": (
+            "<b>How to use a Basic Telegram Account</b>\n\n"
+            "1\ufe0f\u20e3 Pick a country from the list.\n"
+            "2\ufe0f\u20e3 Tap an account to see its price and details.\n"
+            "3\ufe0f\u20e3 Tap <b>Pay & Buy</b> \u2014 the balance is "
+            "deducted instantly.\n"
+            "4\ufe0f\u20e3 You receive the phone number, 2FA password and a "
+            "session file in this chat.\n"
+            "5\ufe0f\u20e3 Log in, then change the password and enable 2FA.\n\n"
+            "<i>Tip: keep the session file private \u2014 it is a full login.</i>"
+        ),
+    },
+    "allapps": {
+        "title": "All Apps OTP",
+        "short": "All Apps OTP",
+        "icon": "\U0001F9E9",
+        "tc_title": "All Apps OTP \u2014 Terms & Conditions",
+        "tc_body": (
+            "This panel gives you a <b>temporary number</b> for any app in the "
+            "catalogue \u2014 Telegram, WhatsApp, Instagram, ChatGPT and many "
+            "more. You pick the app, we reserve a number, and the OTP arrives "
+            "in this chat.\n\n"
+            "Not every app accepts virtual numbers. If a code never arrives, "
+            "cancel the order to get an automatic refund and try another app "
+            "or country.\n\n"
+            "Read the guide below, then tap <b>Agree & Continue</b>."
+        ),
+        "guide": (
+            "<b>How to use All Apps OTP</b>\n\n"
+            "1\ufe0f\u20e3 Pick an app from the list (or use "
+            "<b>Search App</b>).\n"
+            "2\ufe0f\u20e3 Choose a country and tap it \u2014 a number is "
+            "reserved for you.\n"
+            "3\ufe0f\u20e3 Enter that number in the app and request the code.\n"
+            "4\ufe0f\u20e3 Tap <b>Get OTP</b> here \u2014 the code appears in "
+            "this chat.\n"
+            "5\ufe0f\u20e3 No code? Tap <b>Cancel & Refund</b> and retry.\n\n"
+            "<i>Tip: some apps block virtual numbers \u2014 try a different "
+            "country.</i>"
+        ),
+    },
+}
+
+
+def _tc_page(key):
+    """Terms page for *key*, from ``PANELS`` or the extra per-button pages."""
+    return PANELS.get(key) or EXTRA_TC.get(key)
+
+
+def is_terms_key(key):
+    """True when *key* has a terms page (and therefore an Agree button)."""
+    return key in PANELS or key in EXTRA_TC
+
 # --------------------------------------------------------------------------
 # All Apps catalogue (used by the All Apps OTP panel)
 # slug = TemporaSMS service code, label = what the user sees
@@ -450,7 +534,11 @@ _TC_MEMORY = set()
 # Bump this whenever the terms gate wiring changes.  An acceptance stored by an
 # older version (e.g. the old global-flag era) is treated as *not accepted*, so
 # the "Agree & Continue" screen is guaranteed to appear once after an update.
-TC_VERSION = 2
+#
+# v3: Basic Telegram Accounts and All Apps OTP gained their own terms pages.
+#     Bumping the version re-shows the gate once for EVERY panel, so a user who
+#     had already accepted under v2 still sees the new screens.
+TC_VERSION = 3
 
 
 def _tc_value():
@@ -559,6 +647,12 @@ async def _run_pending(event, action):
             return await _buy.show_filters_catalog(event, int(action.get("page", 1)))
         if fn == "years":
             return await _buy.show_years_catalog(event)
+        if fn == "mtg":
+            from plugins.manual_accounts import show_home as _mtg_home
+            return await _mtg_home(event, int(action.get("page", 1)))
+        if fn == "all_apps":
+            from plugins.all_apps import show_all_apps as _aa_home
+            return await _aa_home(event)
         return await _buy.show_buy_menu(event)
     except Exception as exc:  # noqa: BLE001 - never leave a dead button
         logger.warning(f"pending action dispatch failed ({action}): {exc}")
@@ -739,7 +833,9 @@ async def show_panel_hub(event):
 
 
 async def show_terms(event, key, country=None):
-    p = PANELS[key]
+    p = _tc_page(key)
+    if p is None:
+        return None
     uid = event.sender_id
     panel_state.setdefault(uid, {})["panel"] = key
     header = ""
@@ -785,7 +881,9 @@ async def show_accounts_terms(event, action=None):
 
 
 async def show_guide(event, key):
-    p = PANELS[key]
+    p = _tc_page(key)
+    if p is None:
+        return None
     msg = f"<blockquote expandable>{pe('doc', chr(0x1F4D6))} <b>{p['title']} — Guide</b>\n\n{p['guide']}</blockquote>"
     btns = [
         [style_btn("✅ Agree & Continue", f"pp_agree|{key}", "success", icon=5408995930416362034)],
@@ -1535,7 +1633,7 @@ def register_product_panels(bot):
     @bot.on(events.CallbackQuery(pattern=r"^pp_open\|(\w+)$"))
     async def cb_open(e):
         key = e.pattern_match.group(1).decode()
-        if key not in PANELS:
+        if not is_terms_key(key):
             return await e.answer("Unknown panel", alert=True)
         uid = e.sender_id
         # The account catalogue is not a TemporaSMS panel: route it through its
@@ -1543,6 +1641,13 @@ def register_product_panels(bot):
         if key == "accounts":
             if not _terms_accepted(uid, "accounts"):
                 return await show_accounts_terms(e)
+            return await _run_pending(e, _pop_pending(uid))
+        # Basic Telegram Accounts / All Apps OTP are not country panels, so
+        # they have no country list to fall through to - the pending queue
+        # carries whatever screen the user originally asked for.
+        if key in EXTRA_TC:
+            if not _terms_accepted(uid, key):
+                return await show_terms(e, key)
             return await _run_pending(e, _pop_pending(uid))
         panel_state.setdefault(uid, {})["panel"] = key
         if not _terms_accepted(uid, key):
@@ -1558,7 +1663,7 @@ def register_product_panels(bot):
     @bot.on(events.CallbackQuery(pattern=r"^pp_agree\|(\w+)$"))
     async def cb_agree(e):
         key = e.pattern_match.group(1).decode()
-        if key not in PANELS:
+        if not is_terms_key(key):
             return await e.answer("Unknown panel", alert=True)
         # Stop the button spinner immediately so a slow provider call later
         # cannot make the button look unresponsive.
@@ -1571,7 +1676,7 @@ def register_product_panels(bot):
             await mongo_store.log_event(e.sender_id, "panel_terms_accepted", panel=key)
         except Exception:
             pass
-        if key == "accounts":
+        if key == "accounts" or key in EXTRA_TC:
             return await _run_pending(e, _pop_pending(e.sender_id))
         if PANELS[key].get("dynamic_apps"):
             return await show_allotp_hub(e)

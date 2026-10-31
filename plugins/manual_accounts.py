@@ -539,6 +539,12 @@ def register_manual_accounts(bot):
         uid = e.sender_id
         ensure_user(uid)
         if data == "mtg_home":
+            # Every product entry point must show its own "Agree & Continue"
+            # screen first.  This one used to jump straight into the catalogue.
+            from plugins.product_panels import _terms_accepted, show_terms, _set_pending
+            if not _terms_accepted(uid, "mtg"):
+                _set_pending(uid, {"fn": "mtg", "page": 1})
+                return await show_terms(e, "mtg")
             return await show_home(e, 1)
         if data == "mtg_search":
             mtg_search_state[uid] = True

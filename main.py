@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # the hosting console immediately shows whether the container is running the
 # latest code.  If the console still prints an older tag, the container has
 # not pulled the new files yet.
-BUILD_TAG = "2026-10-31-menu-refresh-v27"
+BUILD_TAG = "2026-10-31-terms-fsub-v28"
 
 os.makedirs("sessions", exist_ok=True)
 
@@ -190,6 +190,19 @@ async def main():
 
     # 4. Register all plugin handlers (start, buy, admin, callbacks, etc.)
     set_bot_instance(bot)  # lets background tasks (OTP poller) send messages
+
+    # 4a0. Force-subscribe guard.  Registered before everything else so the
+    # bot re-verifies channel membership on EVERY interaction: a user who
+    # leaves the channel is asked to rejoin on the very next tap, and a user
+    # who stays gets every button working.  `/start` and the `verify_join`
+    # button are skipped so the join flow itself can never deadlock.
+    try:
+        from plugins.fsub_guard import register_fsub_guard
+        register_fsub_guard(bot)
+    except asyncio.CancelledError:
+        raise
+    except BaseException as e:  # noqa: BLE001
+        logger.exception("\u26a0\ufe0f Force-subscribe guard failed to install: %s. Continuing...", e)
 
     # 4a. Highest-priority reply-keyboard router.  Must be registered BEFORE
     # every plugin so a catch-all (country search, OTP text input, ...) can
