@@ -15,7 +15,7 @@ from config import logger
 _ALLOWED_DETAILS = {
     "target_user_id", "order_id", "deposit_id", "amount", "currency",
     "method", "product", "status", "command", "callback", "message_type",
-    "length", "reason",
+    "length", "reason", "user_name", "username",
 }
 _TASKS = set()
 
@@ -43,6 +43,24 @@ def _safe_detail(key, value):
         except (TypeError, ValueError):
             return "unknown"
     return html.escape(str(value or "—")[:100])
+
+
+async def _actor_details(client, actor_id):
+    """Resolve display identity without reading message text or callback payloads."""
+    details = {"user_name": "unknown", "username": "unknown"}
+    try:
+        entity = await client.get_entity(int(actor_id))
+        first = str(getattr(entity, "first_name", "") or "").strip()
+        last = str(getattr(entity, "last_name", "") or "").strip()
+        name = " ".join(part for part in (first, last) if part).strip()
+        username = str(getattr(entity, "username", "") or "").strip()
+        details["user_name"] = name[:100] if name else "unknown"
+        details["username"] = f"@{username[:99]}" if username else "unknown"
+    except Exception:
+        # Fallback/test clients may not implement entity lookup; auditing must
+        # never delay or break the user's interaction in that case.
+        pass
+    return details
 
 
 async def log_admin_action(client, *, actor_id, action, details=None):
@@ -73,10 +91,13 @@ async def log_admin_action(client, *, actor_id, action, details=None):
         actor = str(int(actor_id))
     except (TypeError, ValueError):
         actor = "unknown"
+    identity = await _actor_details(client, actor)
     lines = [
         "<blockquote><b>BOT ACTIVITY</b>",
         f"<b>Time:</b> <code>{stamp}</code>",
-        f"<b>User:</b> <code>{actor}</code>",
+        f"<b>Name:</b> <code>{_safe_detail('user_name', identity['user_name'])}</code>",
+        f"<b>Username:</b> <code>{_safe_detail('username', identity['username'])}</code>",
+        f"<b>User ID:</b> <code>{actor}</code>",
         f"<b>Action:</b> <code>{html.escape(_safe_action(action))}</code>",
     ]
     for key, value in (details or {}).items():
