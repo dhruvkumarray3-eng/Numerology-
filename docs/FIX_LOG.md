@@ -51,6 +51,24 @@ tha.
 > acceptance ka matlab hai "is service ki shartein maani". Dono alag rakho,
 > warna product ka terms screen kabhi nahi dikhega.
 
+**Follow-up (v22) — "abhi bhi nahi aaya"**
+
+Do cheezein add ki gayi taaki update ke baad screen **pakka** dikhe:
+
+1. `TC_VERSION = 2` — `_terms_accepted()` ab sirf wahi acceptance maanta hai
+   jiski value current version ke barabar ho. Purani version ki stored value
+   (jaise `'1'`) automatically invalid ho jati hai, isliye ek baar terms
+   screen dobara aata hai. `_accept_terms()` versioned value (`'2'`) store
+   karta hai.
+2. `main.py` ka `BUILD_TAG` bump → `2026-10-31-terms-gate-per-product-v22`,
+   aur boot par `📜 Terms gate: per-product, TC_VERSION=2` print hota hai.
+   Console me ye line na dikhe to container purana code chala raha hai —
+   tab `bash scripts/update_from_github.sh` chalao (ya redeploy karo).
+
+> **Note:** Ye repo ka code sahi hai; agar bot phir bhi purana behaviour
+> dikhaye to hosting container purane files chala raha hai. Panel shell me
+> `bash scripts/update_from_github.sh` chala kar restart karo.
+
 ---
 
 ## 1. `MediaCaptionTooLongError` — Terms page join ke baad nahi aata tha
