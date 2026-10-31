@@ -645,14 +645,62 @@ async def show_guide(event, key):
     await _safe_edit(event, msg, btns)
 
 
+async def _live_app_search(query):
+    """Ask the panel which apps match *query* (real, live catalogue).
+
+    Returns ``(services, error)`` where ``services`` is a list of
+    ``{"slug","name","operator"}``.  Never raises and never blocks the UI for
+    more than a few seconds.
+    """
+    try:
+        from utils import temporasms
+        res = await asyncio.wait_for(temporasms.search_services(query, limit=24),
+                                     timeout=25)
+    except Exception as exc:  # noqa: BLE001 - search must never break the panel
+        logger.debug(f"live app search failed: {exc}")
+        return [], "The panel is taking too long to answer. Try again."
+    if not res.get("ok"):
+        return [], res.get("error") or "Panel unavailable"
+    return res.get("services") or [], None
+
+
 async def show_allotp_hub(event, page=1, query=None):
-    """All Apps OTP panel: browse / search every app, then pick a country."""
+    """All Apps OTP panel: browse / search every app, then pick a country.
+
+    When the user searches, the bot queries the panel's live catalogue and
+    merges those results with the local list, so *any* app the panel really
+    sells is findable -- not just the ones in the built-in list.
+    """
     uid = event.sender_id
     panel_state.setdefault(uid, {})["panel"] = "allotp"
     panel_state[uid].pop("app", None)
     panel_state[uid].pop("mode", None)
 
+    live_error = None
+    live_hits = []
+    if query and str(query).strip():
+        live_hits, live_error = await _live_app_search(query)
+
     apps = _filter_apps(query)
+    if live_hits:
+        # Panel results first (they are the real, buyable services), then any
+        # local matches the panel did not return.
+        seen = set()
+        merged = []
+        for hit in live_hits:
+            slug = str(hit.get("slug") or "").strip().lower()
+            if not slug or slug in seen:
+                continue
+            seen.add(slug)
+            label = hit.get("name") or slug
+            APP_LABELS.setdefault(slug, f"\U0001F50D {label}")
+            merged.append((slug, label))
+        for slug, label in apps:
+            if slug not in seen:
+                seen.add(slug)
+                merged.append((slug, label))
+        apps = merged
+
     total = len(apps)
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(1, min(page, total_pages))
@@ -660,9 +708,14 @@ async def show_allotp_hub(event, page=1, query=None):
     chunk = apps[start:start + PAGE_SIZE]
 
     if not chunk:
+        reason = live_error or (
+            "The panel does not sell this app right now."
+            if query else "No apps available."
+        )
         msg = (
             "<blockquote expandable>\U0001F9E9 <b>All Apps OTP</b>\n\n"
             f"\U0001F615 No app matched <b>{html.escape(query or '')}</b>.\n"
+            f"<i>{html.escape(str(reason))}</i>\n\n"
             "Try another name, or tap <b>Browse All Apps</b>.</blockquote>"
         )
         btns = [
@@ -703,6 +756,17 @@ async def show_allotp_hub(event, page=1, query=None):
 
     status = (pe("check", chr(0x2705)) + " Live") if temporasms.configured() else (pe("warning", chr(0x26A0) + chr(0xFE0F)) + " OTP key missing (Admin → 🔐 OTP / SMS Key)")
     search_line = f"\n{pe('find', chr(0x1F50E))} Filter: <b>{html.escape(query)}</b>" if query else ""
+    live_line = ""
+    if query:
+        if live_hits:
+            live_line = (f"\n{pe('check', chr(0x2705))} <b>Panel:</b> found "
+                         f"{len(live_hits)} matching app"
+                         f"{'s' if len(live_hits) != 1 else ''} \u2014 tap one to see live numbers.")
+        elif live_error:
+            live_line = f"\n{pe('warning', chr(0x26A0) + chr(0xFE0F))} <b>Panel:</b> {html.escape(str(live_error))}"
+        else:
+            live_line = (f"\n{pe('warning', chr(0x26A0) + chr(0xFE0F))} <b>Panel:</b> "
+                         "this app is not sold right now.")
     i_apps = pe("apps", chr(0x1F4F1))
     i_globe = pe("globe", chr(0x1F30D))
     i_chart = pe("chart", chr(0x1F4CA))
@@ -715,7 +779,7 @@ async def show_allotp_hub(event, page=1, query=None):
         f"{i_globe} Numbers from many countries\n"
         f"{i_chart} Live stock &amp; prices\n"
         f"{i_money} Auto refund if no SMS arrives\n"
-        f"{i_lock} <b>Panel status:</b> {status}{search_line}\n\n"
+        f"{i_lock} <b>Panel status:</b> {status}{search_line}{live_line}\n\n"
         f"<i>Page {page}/{total_pages} \u00b7 {total} apps</i></blockquote>"
     )
     await _safe_edit(event, msg, btns)

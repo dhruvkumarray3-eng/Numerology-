@@ -645,6 +645,61 @@ async def get_balance():
             "balance": 0.0, "currency": "RUB"}
 
 
+async def search_services(query, limit: int = 20):
+    """Search the LIVE panel catalogue by app name.
+
+    This is what powers the All Apps OTP search: instead of only matching a
+    hard-coded local list, the bot asks the panel itself which services exist
+    and returns the real ones (with the route they are sold on).
+
+    Returns ``{"ok": bool, "services": [{"slug","name","operator","score"}],
+    "error": str|None}``.  Never raises.
+    """
+    q = str(query or "").strip().lower()
+    if not q:
+        return {"ok": True, "services": [], "error": None}
+    try:
+        catalogue = await asyncio.wait_for(_catalogue(), timeout=20)
+    except Exception as exc:  # noqa: BLE001 - never break the panel
+        return {"ok": False, "services": [],
+                "error": f"Could not reach the panel: {exc}"}
+    if not catalogue:
+        return {"ok": False, "services": [], "error": "Panel catalogue unavailable"}
+
+    q_tokens = set(_name_tokens(q))
+    hits = []
+    for code, entry in catalogue.items():
+        name = entry.get("name") or code
+        score = _score_name(q, name)
+        if not score:
+            # Token overlap: "chat gpt" -> "ChatGPT", "tik tok" -> "TikTok".
+            # Only tokens of 3+ chars count, so a service literally named "A"
+            # can never match an unrelated query.
+            n_tokens = {t for t in _name_tokens(name) if len(t) >= 3}
+            q_long = {t for t in q_tokens if len(t) >= 3}
+            overlap = len(q_long & n_tokens)
+            if overlap:
+                score = 40 + overlap * 10
+            else:
+                # Compact comparison ignores spaces/punctuation.  Both sides
+                # must be at least 3 chars, otherwise short names like "A"
+                # would be a substring of every query.
+                compact_q = re.sub(r"[^a-z0-9]", "", q)
+                compact_n = re.sub(r"[^a-z0-9]", "", str(name).lower())
+                if not compact_q or min(len(compact_q), len(compact_n)) < 5:
+                    score = 0
+                elif compact_q == compact_n:
+                    score = 95
+                elif compact_q in compact_n or compact_n in compact_q:
+                    score = 50
+        if score:
+            hits.append({"slug": str(code), "name": str(name),
+                         "operator": entry.get("operator"), "score": score})
+
+    hits.sort(key=lambda h: (-h["score"], h["name"].lower()))
+    return {"ok": True, "services": hits[:limit], "error": None}
+
+
 async def get_services():
     """Provider catalogue as ``[{'slug','name','operator'}]``."""
     catalogue = await _catalogue()
