@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # the hosting console immediately shows whether the container is running the
 # latest code.  If the console still prints an older tag, the container has
 # not pulled the new files yet.
-BUILD_TAG = "2026-10-31-terms-fsub-v28"
+BUILD_TAG = "2026-10-31-admin-audit-v29"
 
 os.makedirs("sessions", exist_ok=True)
 
@@ -191,7 +191,18 @@ async def main():
     # 4. Register all plugin handlers (start, buy, admin, callbacks, etc.)
     set_bot_instance(bot)  # lets background tasks (OTP poller) send messages
 
-    # 4a0. Force-subscribe guard.  Registered before everything else so the
+    # 4a. Live private-chat activity audit. This only records action metadata;
+    #     message text and callback payload parameters are deliberately omitted.
+    try:
+        from utils.audit_logger import register_audit_handlers
+        register_audit_handlers(bot)
+        logger.info("✅ Private admin audit handlers registered.")
+    except asyncio.CancelledError:
+        raise
+    except BaseException as e:  # noqa: BLE001
+        logger.exception("⚠️ Admin audit logger could not be installed: %s", e)
+
+    # 4a0. Force-subscribe guard.  Registered before business handlers so the
     # bot re-verifies channel membership on EVERY interaction: a user who
     # leaves the channel is asked to rejoin on the very next tap, and a user
     # who stays gets every button working.  `/start` and the `verify_join`

@@ -123,10 +123,19 @@ MAIN_CHANNEL_URL = os.getenv("MAIN_CHANNEL_URL", "").strip() or "https://t.me/RD
 MAIN_CHANNEL_USERNAME = "@RDXnetworkinghub"
 
 # CHANNELS
-# Logger channel id (log channel for all bot events)
+# Existing operational log channels (deposits, purchases, and admin notices).
 LOG_CHANNEL_ID = env_int("LOG_CHANNEL_ID", -1004451890857)
 LOG_CHANNEL_ID_2 = env_int("LOG_CHANNEL_ID_2", 0)
 LOG_CHANNELS = [ch for ch in [LOG_CHANNEL_ID, LOG_CHANNEL_ID_2] if ch]
+# Optional private owner channel for live activity and financial audit logs.
+# This channel is included in get_log_channels_db() even when channels are
+# managed from the database / Telegram admin panel.
+ADMIN_LOG_CHANNEL_ID = env_int("ADMIN_LOG_CHANNEL_ID", 0)
+_ADMIN_LOG_CHANNEL_RAW = os.getenv("ADMIN_LOG_CHANNEL_ID", "").strip()
+if _ADMIN_LOG_CHANNEL_RAW and ADMIN_LOG_CHANNEL_ID == 0:
+    logger.warning("ADMIN_LOG_CHANNEL_ID is invalid; use the numeric -100... channel ID.")
+elif ADMIN_LOG_CHANNEL_ID > 0:
+    logger.warning("ADMIN_LOG_CHANNEL_ID should be a negative Telegram channel ID (-100...).")
 
 # Force-join: single main network channel
 CHECK_CHANNELS = env_list("CHECK_CHANNELS", "") or ["@RDXnetworkinghub"]

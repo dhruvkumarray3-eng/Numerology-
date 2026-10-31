@@ -12,6 +12,7 @@ from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_
 from utils.keyboards import style_btn
 from utils.markup import format_user_amount
 from utils.states import deposit_input, waiting_proof, admin_dep_state, custom_dep_amt, get_user_lock
+from utils.audit_logger import schedule_admin_log
 
 async def deposit_menu(event):
     """Deposit / Recharge screen - UPI (auto-verify) + USDT (BEP-20)."""
@@ -490,6 +491,12 @@ def register_deposit(bot):
                 cur.execute("UPDATE deposits SET status='approved', amount=? WHERE id=?", (amt, dep_id))
                 cur.execute("UPDATE users SET total_deposited = total_deposited + ? WHERE user_id=?", (amt, t_uid))
                 db.commit()
+
+            schedule_admin_log(
+                bot, actor_id=admin_uid, action="deposit_approved",
+                details={"target_user_id": t_uid, "deposit_id": dep_id,
+                         "amount": amt, "method": method, "status": "approved"},
+            )
             
             await process_referral_bonus(t_uid, amt)
             
@@ -528,6 +535,11 @@ def register_deposit(bot):
         
         cur.execute("UPDATE deposits SET status='rejected' WHERE id=?", (dep_id,))
         db.commit()
+        schedule_admin_log(
+            bot, actor_id=admin_uid, action="deposit_rejected",
+            details={"target_user_id": t_uid, "deposit_id": dep_id,
+                     "amount": row[1], "method": row[2], "status": "rejected"},
+        )
         
         try:
             await bot.send_message(int(t_uid), f"<blockquote>{P_NO} <b>❌ 𝐃ᴇᴘᴏsɪᴛ 𝐑ᴇᴊᴇᴄᴛᴇᴅ!</b>\n\n𝐘ᴏᴜʀ ᴅᴇᴘᴏsɪᴛ ʀᴇǫᴜᴇsᴛ ᴏғ <b>{P_INR}{row[1]}</b> ᴡᴀs ʀᴇᴊᴇᴄᴛᴇᴅ ʙʏ ᴀᴅᴍɪɴ.\n𝐈ғ ʏᴏᴜ ᴀʟʀᴇᴀᴅʏ ᴘᴀɪᴅ, ᴘʟᴇᴀsᴇ ᴄᴏɴᴛᴀᴄᴛ <b>𝐒ᴜᴘᴘᴏʀᴛ</b> ᴡɪᴛʜ ʏᴏᴜʀ ᴘᴀʏᴍᴇɴᴛ ᴘʀᴏᴏғ.</blockquote>")
@@ -580,7 +592,13 @@ def register_deposit(bot):
                 cur.execute("UPDATE deposits SET status='approved', amount=? WHERE id=?", (amt, dep_id))
                 cur.execute("UPDATE users SET total_deposited = total_deposited + ? WHERE user_id=?", (amt, t_uid))
                 db.commit()
-                
+
+            schedule_admin_log(
+                bot, actor_id=uid, action="deposit_custom_amount_approved",
+                details={"target_user_id": t_uid, "deposit_id": dep_id,
+                         "amount": amt, "method": method, "status": "approved"},
+            )
+
             await process_referral_bonus(t_uid, amt)
             conf_text = (f"<blockquote>{PE_CHECK} <b>✅ 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴘᴘʀᴏᴠᴇᴅ (𝐂ᴜsᴛᴏᴍ)!</b>\n\n"
                          f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{t_uid}</code>\n"

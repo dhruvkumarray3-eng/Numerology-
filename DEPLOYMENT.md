@@ -123,6 +123,7 @@ API_ID=1234567
 API_HASH=a1b2c3d4e5f6...
 BOT_TOKEN=123456:ABC-DEF...
 ADMIN_ID=123456789
+ADMIN_LOG_CHANNEL_ID=-1001234567890
 TEMPORASMS_API_KEY=
 GRABMAIL_API_KEY=
 ```
@@ -221,3 +222,35 @@ jayega aur env/default wapas lag jayega.
 | `unknown_domain` | `GRABMAIL_DOMAIN` free domain hi rakho (`grabmail.io`). |
 | Panel me "older version" error | Fix ho chuka hai; bot restart karke naya panel kholo. |
 | Bot start hi nahi ho raha | `API_ID`, `API_HASH`, `BOT_TOKEN`, `ADMIN_ID` check karo. |
+
+---
+
+## 11. Private personal admin logger channel
+
+1. Telegram me ek **private channel** banao aur apne bot ko admin banao, jise
+   messages post karne ki permission ho. Apne admin account ko bhi channel me
+   rakho.
+2. Channel ka numeric chat ID lo (format aam taur par `-100...` hota hai).
+   Kisi trusted Telegram channel-ID lookup tool ya apne deployment ke Telegram
+   update/debug view se ID verify karo; `@channelusername` ko yahan mat daalo.
+3. Railway me service → **Variables** → **+ New Variable** par jao; Render me
+   service → **Environment** → **Add Environment Variable** par jao. Variable
+   name `ADMIN_LOG_CHANNEL_ID`, value channel ka `-100...` ID rakho, phir save
+   karke redeploy/restart karo. `.env`/Docker/VPS me bhi isi naam se set karo.
+4. Bot ko channel me post karne ki permission milne ke baad, private bot chat me
+   koi command ya button use karke test karo. `BOT ACTIVITY` log channel me aana
+   chahiye. Purchase/deposit logs isi channel ko bhi bheje jayenge; existing
+   `LOG_CHANNEL_ID` aur admin-panel log channels continue karenge.
+
+`ADMIN_LOG_CHANNEL_ID` set hone par generic action metadata sirf isi personal
+channel me jata hai; purchase/deposit records is channel ke saath existing
+operational channels par bhi jaate rahenge. Variable unset ho to generic logs
+legacy log-channel configuration par fallback karte hain.
+
+Generic activity logs me bot ke private chat ke user ID, UTC time, command/button
+name, message type aur text length jaise metadata aate hain (group chats nahi);
+**raw messages, OTPs, passwords, API
+keys, session strings, ya callback payload ke private parameters log nahi hote**.
+Deposit proof approval aur financial transaction logs apne existing operational
+flow ke mutabik channel me aa sakte hain. Private channel ko sirf trusted admins
+ke saath share karo.

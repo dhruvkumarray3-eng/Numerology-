@@ -22,6 +22,7 @@ from database import (
 from config import *
 from utils.keyboards import style_btn, style_url, SEARCH_EMOJI_ID
 from utils.states import admin_state
+from utils.audit_logger import schedule_admin_log
 from utils.lzt import lzt_client, validate_token_format, token_fingerprint
 from plugins.admin import admin_panel_handler
 
@@ -1399,6 +1400,11 @@ async def admin_actions(event):
                 t_uid = int((await get_reply(f"{P_ACC} <b>User ID:</b>")).text)
                 amt = int((await get_reply(f"{P_MONEY} <b>Amount (Negative to deduct):</b>")).text)
                 update_balance(t_uid, amt)
+                schedule_admin_log(
+                    bot, actor_id=uid, action="admin_balance_adjustment",
+                    details={"target_user_id": t_uid, "amount": amt,
+                             "status": "credit" if amt >= 0 else "deduction"},
+                )
                 await conv.send_message(f"{P_YES} Added {P_INR}{amt} to {t_uid}.")
                 
             elif action_data == "discount" and has_perm(uid, 'p_settings'):

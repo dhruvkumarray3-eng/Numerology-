@@ -820,16 +820,25 @@ def get_log_channels_db():
     res = cur.execute("SELECT value FROM settings WHERE key='log_channels'").fetchone()
     if res and res[0] is not None:
         val = res[0].strip()
-        if not val: return []
-        out = []
+        configured = []
         for c in val.split(","):
             c = c.strip()
             if c:
-                try: out.append(int(c))
-                except: out.append(c)
-        return out
-    from config import LOG_CHANNELS
-    return LOG_CHANNELS
+                try: configured.append(int(c))
+                except: configured.append(c)
+    else:
+        from config import LOG_CHANNELS
+        configured = list(LOG_CHANNELS)
+
+    from config import ADMIN_LOG_CHANNEL_ID
+    # Put the private personal logger first so flows that intentionally deliver
+    # to one channel (for example deposit-proof approval) prioritize the owner.
+    channels = ([ADMIN_LOG_CHANNEL_ID] if ADMIN_LOG_CHANNEL_ID else []) + configured
+    deduped = []
+    for channel in channels:
+        if channel not in deduped:
+            deduped.append(channel)
+    return deduped
 
 def set_log_channels_db(channels_list):
     ch_str = ",".join([str(c).strip() for c in channels_list if str(c).strip()])
