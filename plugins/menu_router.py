@@ -163,6 +163,20 @@ def register_menu_router(bot):
         uid = event.sender_id
         _clear_pending(uid)
         logger.info("Menu route: %r -> %s", event.raw_text, key)
+
+        # The keyboard lives on the user's phone, so a stale layout keeps
+        # sending old glyphs until we replace it.  Refresh it on the very first
+        # tap instead of waiting for /start, so the fix reaches users who never
+        # reopen the bot explicitly.
+        try:
+            from database import get_menu_version
+            from utils.keyboards import MENU_VERSION
+            if get_menu_version(uid) < MENU_VERSION:
+                from plugins.start import install_persistent_menu
+                await install_persistent_menu(bot, event, uid, force=True)
+                logger.info("Refreshed reply keyboard for %s to v%s", uid, MENU_VERSION)
+        except Exception as exc:  # noqa: BLE001 - never block the screen
+            logger.debug("Keyboard refresh skipped for %s: %s", uid, exc)
         try:
             handled = await _dispatch(bot, event, key)
         except events.StopPropagation:
