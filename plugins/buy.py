@@ -261,12 +261,13 @@ async def _live_country_counts():
     return counts
 
 
-async def get_countries_list():
+async def get_countries_list(year=None):
     """Every country the bot can sell, with an honest live/local count.
 
     The list is always populated (all 198 ISO countries) so country search
-    never dead-ends just because one mode/panel has no stock right now.  The
-    count next to each country is the real number available (0 = none).
+    never dead-ends just because one mode/panel has no stock right now. When
+    ``year`` is supplied, local stock counts are restricted to that selected
+    year; 2019 means 2019 and older, matching the Vintage button.
     """
     # Canonical country names (deduplicated, no aliases).
     try:
@@ -275,12 +276,20 @@ async def get_countries_list():
     except Exception:
         base_names = sorted(set(COUNTRY_TO_LZT.keys()))
 
-    # Local (manual) stock is always merged in, whatever the mode.
+    # Local (manual) stock is always merged in, whatever the mode. Keep the
+    # age predicate in this picker in sync with process_purchase so the UI
+    # cannot advertise a local country outside the selected year.
     local_counts = {}
     try:
+        year_filter = ""
+        year_params = ()
+        if year is not None:
+            selected_year = int(year)
+            year_filter = " AND account_year <= ?" if selected_year == 2019 else " AND account_year = ?"
+            year_params = (selected_year,)
         for c_name, count in cur.execute(
             "SELECT country_name, COUNT(*) FROM stock WHERE available=1 "
-            "GROUP BY country_name"
+            + year_filter + " GROUP BY country_name", year_params
         ).fetchall():
             if c_name:
                 local_counts[c_name] = int(count or 0)
@@ -580,7 +589,7 @@ async def _lzt_access_card(event, country=None, mode=None, detail=None):
 async def show_countries_for_year(event, year, page):
     limit = 10
     offset = (page - 1) * limit
-    countries_all = await get_countries_list()
+    countries_all = await get_countries_list(year=year)
     total = len(countries_all)
     countries = countries_all[offset:offset+limit]
     
