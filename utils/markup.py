@@ -345,7 +345,7 @@ SERVICES = {
     "numchange": "TG Number Change",
     "allotp": "All Apps OTP",
     "smm": "SMM Services",
-    "lzt": "LZT TG Accounts",
+    "lzt": "Panel TG Accounts",
 }
 
 SERVICE_ORDER = ("whatsapp", "numchange", "allotp", "smm", "lzt")

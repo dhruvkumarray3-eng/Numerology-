@@ -18,7 +18,7 @@ async def admin_panel_handler(event):
     
     status_text = "🟢 Bot is ON" if is_bot_online() else "🔴 Bot is OFF"
     current_mode = get_bot_mode()
-    mode_text = "📂 Manual" if current_mode == 'manual' else ("🌐 Panel (LZT)" if current_mode == 'panel' else "⚡ Hybrid")
+    mode_text = "📂 Manual" if current_mode == 'manual' else ("🌐 Panel" if current_mode == 'panel' else "⚡ Hybrid")
     total_users = cur.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     total_stock = cur.execute("SELECT COUNT(*) FROM stock WHERE available=1").fetchone()[0]
     pending_deposits = cur.execute("SELECT COUNT(*) FROM deposits WHERE status='pending'").fetchone()[0]
@@ -71,7 +71,7 @@ async def admin_panel_handler(event):
         r5.extend([style_btn("Discount", "adm_discount", "primary", icon=5409098988156629257), style_btn("Ref %", "adm_refpct", "primary", icon=5409098988156629257)])
         btns.append(r5)
         btns.append([style_btn("📢 Channels & FSub", "adm_channels_mgr", "success", icon=6129627894349045589), style_btn("Support URL", "adm_supporturl", "primary", icon=5409098988156629257)])
-        btns.append([style_btn("💳 Auto-UPI / IMAP", "adm_autoupi", "success", icon=5409271925014801629), style_btn("🌐 LZT Panel Settings", "adm_lzt_settings", "primary", icon=5409166771330494453)])
+        btns.append([style_btn("💳 Auto-UPI / IMAP", "adm_autoupi", "success", icon=5409271925014801629), style_btn("🌐 Panel Settings", "adm_lzt_settings", "primary", icon=5409166771330494453)])
         btns.append([style_btn("⚙️ Search & Quality Settings", "adm_search_settings", "success", icon=SEARCH_EMOJI_ID)])
         btns.append([style_btn("📧 Temp Mail (API)", "adm_tempmail", "primary", icon=5796209712009581332), style_btn("🔐 OTP / SMS Key", "adm_otp", "success", icon=5796209712009581332)])
         btns.append([style_btn("💰 Trust Wallet / USDT", "adm_trustwallet", "success", icon=5409271925014801629), style_btn("🏦 UPI Settings", "adm_upi", "primary", icon=5409098988156629257)])
@@ -356,7 +356,7 @@ def register_admin(bot):
         status_txt = ("\u2705 Configured" if temporasms.configured()
                       else "\u274c Not configured")
         lines = [
-            "<blockquote expandable>\U0001F510 <b>OTP / SMS PROVIDER \u2014 TemporaSMS</b>\n\n",
+            "<blockquote expandable>\U0001F510 <b>OTP / SMS PROVIDER \u2014 Panel</b>\n\n",
             f"\U0001F511 <b>API Key:</b> <code>{html.escape(runtime_config.mask(key))}</code>",
             f" <i>({html.escape(cfg.get('source') or 'env')})</i>\n",
             f"\U0001F310 <b>Base URL:</b> <code>{html.escape(str(temporasms._base_url()))}</code>\n",
@@ -397,7 +397,7 @@ def register_admin(bot):
         await e.answer()
         async with bot.conversation(chat, timeout=300) as conv:
             await conv.send_message(
-                "<blockquote>\U0001F511 <b>Send the TemporaSMS API key</b>\n\n"
+                "<blockquote>\U0001F511 <b>Send the panel API key</b>\n\n"
                 "Dashboard \u2192 API \u2192 copy the key.\n"
                 "It powers WhatsApp Accounts, TG Number Change and All Apps OTP.\n\n"
                 "<i>Type /cancel to abort.</i></blockquote>")
@@ -409,7 +409,7 @@ def register_admin(bot):
                 await conv.send_message("\u274c That looks too short for an API key. Nothing changed.")
             else:
                 runtime_config.set("temporasms_api_key", raw)
-                await conv.send_message("\u2705 TemporaSMS key updated. The three OTP panels "
+                await conv.send_message("\u2705 Panel key updated. The three OTP panels "
                                         "will use it immediately.")
         text = await _otp_panel_text()
         try:
@@ -426,8 +426,8 @@ def register_admin(bot):
         await e.answer()
         async with bot.conversation(chat, timeout=300) as conv:
             await conv.send_message(
-                "<blockquote>\U0001F310 <b>Send the TemporaSMS base URL</b>\n\n"
-                "Default: <code>https://api.temporasms.com</code>\n\n"
+                "<blockquote>\U0001F310 <b>Send the panel base URL</b>\n\n"
+                "Leave empty to use the built-in default.\n\n"
                 "<i>Type /cancel to abort.</i></blockquote>")
             resp = await conv.get_response()
             raw = (resp.text or "").strip()
@@ -486,7 +486,7 @@ def register_admin(bot):
         amount_text = e.pattern_match.group(1)
         if amount_text is None:
             return await e.reply(
-                f"Current LZT markup: ₹{get_lzt_margin():g} per item.\n"
+                f"Current panel markup: ₹{get_lzt_margin():g} per item.\n"
                 "Usage: /lztmargin 25"
             )
 
@@ -494,9 +494,9 @@ def register_admin(bot):
             set_lzt_margin(float(amount_text))
         except (TypeError, ValueError, OverflowError):
             return await e.reply(
-                "Enter a finite, non-negative INR amount. Example: /lztmargin 25"
+                "Enter a finite, non-negative INR amount, e.g. 25."
             )
 
         return await e.reply(
-            f"✅ LZT markup set to ₹{get_lzt_margin():g} per item."
+            f"✅ Panel markup set to ₹{get_lzt_margin():g} per item."
         )

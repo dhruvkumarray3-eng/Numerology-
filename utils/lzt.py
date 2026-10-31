@@ -172,7 +172,7 @@ def classify_lzt_error(status, body):
         )
 
     if status == 400:
-        return "bad", f"LZT rejected the search parameters (HTTP 400): {body[:200]}"
+        return "bad", f"Panel rejected the search parameters (HTTP 400): {body[:200]}"
 
     if status and 500 <= int(status) < 600:
         return "server", (
@@ -180,7 +180,7 @@ def classify_lzt_error(status, body):
             "few seconds."
         )
 
-    return "unknown", f"LZT /telegram returned {status}: {body[:180]}"
+    return "unknown", f"Panel /telegram returned {status}: {body[:180]}"
 
 
 # Comprehensive Country Name to ISO 3166-1 alpha-2 mapping with all aliases
@@ -433,7 +433,7 @@ DC_IPS = {
 }
 
 def extract_telethon_string_session(item_dict):
-    """Robustly extracts Telethon StringSession from any LZT item representation."""
+    """Robustly extracts Telethon StringSession from any Panel item representation."""
     if not isinstance(item_dict, dict):
         return None
     try:
@@ -491,7 +491,7 @@ def extract_telethon_string_session(item_dict):
         return None
 
 def lzt_raw_to_string_session(raw_str):
-    """Convert LZT auth key string (hex:dc_id) into a valid Telethon StringSession."""
+    """Convert Panel auth key string (hex:dc_id) into a valid Telethon StringSession."""
     return extract_telethon_string_session({'raw': raw_str})
 
 
@@ -512,7 +512,7 @@ def friendly_buy_error(status, errors):
     if "retry_request" in low:
         return "The market is busy right now. Please try again in a moment."
     if any(k in low for k in ("not enough", "insufficient", "balance", "money")):
-        return "The shop's LZT balance is too low to buy this account. Please top up the market wallet."
+        return "The shop's Panel balance is too low to buy this account. Please top up the market wallet."
     if "more than" in low and "errors" in low and "validation" in low:
         # LZT ran its pre-sale account check and the listing failed it.
         return "This listing failed the market's account check. Trying another account."
@@ -541,7 +541,7 @@ def friendly_buy_error(status, errors):
     if "deleted" in low or "not found" in low or status == 404:
         return "This listing no longer exists. Please search again."
     if status == 401 or any(k in low for k in ("unauthorized", "invalid token", "token")):
-        return "The LZT API key is invalid or expired. Please update it in the admin panel."
+        return "The Panel API key is invalid or expired. Please update it in the admin panel."
     if status == 403:
         return "The market refused this purchase (forbidden). Please try another account."
     if status == 429:
@@ -760,7 +760,7 @@ class LZTClient:
                 "The API can be slow; please press Test again."
             )
         except Exception as e:
-            logger.error(f"LZT check connection error: {e}")
+            logger.error(f"Panel check connection error: {e}")
             return False, (
                 f"\u274c <b>Network error connecting to LZT:</b> "
                 f"{html_escape(str(e))}"
@@ -785,7 +785,7 @@ class LZTClient:
                                 country_counts[c_name] = country_counts.get(c_name, 0) + 1
                         return country_counts
         except Exception as e:
-            logger.error(f"LZT get countries error: {e}")
+            logger.error(f"Panel get countries error: {e}")
         return {}
     async def get_country_counts(self, max_pages=2):
         """Aggregate live item counts per country from the global cheap list.
@@ -941,7 +941,7 @@ class LZTClient:
                         pass
                     self.last_status = resp.status
                     logger.error(
-                        f"LZT profile endpoint returned HTTP {resp.status}: {body[:200]}"
+                        f"Panel profile endpoint returned HTTP {resp.status}: {body[:200]}"
                     )
                     if self._balance_fetched:
                         return (
@@ -952,7 +952,7 @@ class LZTClient:
                     return None, 0.0, 0.0
 
         except Exception as e:
-            logger.error(f"LZT balance info error: {e}")
+            logger.error(f"Panel balance info error: {e}")
             if self._balance_fetched:
                 return self._balance_id, self._balance_rub, self._balance_usd
             return None, 0.0, 0.0
@@ -1001,7 +1001,7 @@ class LZTClient:
                                 delay = float(retry_after) if retry_after else 5.0 * (attempt + 1)
                             except (TypeError, ValueError):
                                 delay = 5.0 * (attempt + 1)
-                            logger.warning(f"LZT rate limit (429), sleeping {delay:.0f}s")
+                            logger.warning(f"Panel rate limit (429), sleeping {delay:.0f}s")
                             await asyncio.sleep(delay)
                             continue
                         if resp.status == 200:
@@ -1040,19 +1040,19 @@ class LZTClient:
                         self.last_error_kind = kind
                         self.last_error = message
                         logger.error(
-                            f"LZT /telegram {resp.status} [{kind}]: {body[:300]}"
+                            f"Panel /telegram {resp.status} [{kind}]: {body[:300]}"
                         )
                         if 400 <= resp.status < 500:
                             return None
             except asyncio.TimeoutError:
-                logger.warning(f"LZT /telegram timeout (attempt {attempt + 1})")
+                logger.warning(f"Panel /telegram timeout (attempt {attempt + 1})")
             except Exception as e:
-                logger.error(f"LZT /telegram error: {e}")
+                logger.error(f"Panel /telegram error: {e}")
             await asyncio.sleep(2)
         return None
 
     def _parse_item(self, item, balance_id=None):
-        """Normalise a raw LZT item into the dict the bot uses."""
+        """Normalise a raw Panel item into the dict the bot uses."""
         if not isinstance(item, dict):
             return None
         try:
@@ -1176,7 +1176,7 @@ class LZTClient:
                 "country": (item.get("telegram_country") or item.get("country") or ""),
             }
         except Exception as e:
-            logger.debug(f"LZT parse item failed: {e}")
+            logger.debug(f"Panel parse item failed: {e}")
             return None
 
     @staticmethod
@@ -1255,7 +1255,7 @@ class LZTClient:
                 "LZT API key is not configured. Set it in the admin panel "
                 "(LZT API Key) or as the LZT_API_KEY environment variable."
             )
-            logger.error("LZT search aborted: no API key")
+            logger.error("Panel search aborted: no API key")
             return []
 
         # The API's `country[]` filter wants ISO-2 UPPERCASE (US / IR / ID).
@@ -1471,7 +1471,7 @@ class LZTClient:
                 "LZT search timed out. Please try again, or lower the number "
                 "of pages in Admin > Search & Quality Settings."
             )
-            logger.warning(f"LZT search_items hard timeout ({budget}s)")
+            logger.warning(f"Panel search_items hard timeout ({budget}s)")
             return []
 
         # ------------------------------------------------------------------
@@ -1499,7 +1499,7 @@ class LZTClient:
                         f"{len(results)} item(s) for '{country_name}'"
                     )
             except asyncio.TimeoutError:
-                logger.warning("LZT country-filter fallback timeout")
+                logger.warning("Panel country-filter fallback timeout")
                 results = []
 
         # ------------------------------------------------------------------
@@ -1532,7 +1532,7 @@ class LZTClient:
                 if results:
                     self.last_fallback = True
             except asyncio.TimeoutError:
-                logger.warning("LZT search_items fallback timeout")
+                logger.warning("Panel search_items fallback timeout")
                 results = []
 
         # Quality-aware final ordering: make Good Quality genuinely good and
@@ -1735,13 +1735,13 @@ class LZTClient:
 
             return False, friendly_buy_error(429, last_err)
         except asyncio.TimeoutError:
-            logger.error(f"LZT fast_buy timeout for {item_id}")
+            logger.error(f"Panel fast_buy timeout for {item_id}")
             return False, "The market took too long to answer. Please try again."
         except Exception as e:
             # `str(e)` is empty for many aiohttp errors, which used to surface
             # as "Network error during purchase: " with no reason at all.
             detail = str(e) or type(e).__name__
-            logger.error(f"LZT fast_buy error for {item_id}: {detail}")
+            logger.error(f"Panel fast_buy error for {item_id}: {detail}")
             return False, f"Network error during purchase: {detail}"
 
     async def get_otp_code(self, item_id, since=None):
@@ -1810,11 +1810,11 @@ class LZTClient:
                     # HTTP 200 without a code simply means "no new SMS yet"
                     # while the bot is polling -- not an error.
                     log = logger.debug if resp.status == 200 else logger.error
-                    log(f"LZT OTP {resp.status}: {str(data)[:200]}")
+                    log(f"Panel OTP {resp.status}: {str(data)[:200]}")
 
         except Exception as e:
             logger.error(
-                f"LZT OTP request error for {item_id}: {e}"
+                f"Panel OTP request error for {item_id}: {e}"
             )
 
         return None
@@ -1843,7 +1843,7 @@ class LZTClient:
           * 404 - item id not specified / not found
         """
         if not item_id:
-            return False, "This order has no LZT item id, so the market reset is unavailable."
+            return False, "This order has no Panel item id, so the market reset is unavailable."
 
         url = f"{LZT_BASE_URL}/{item_id}/telegram-reset-authorizations"
 
@@ -1868,7 +1868,7 @@ class LZTClient:
                         # an explicit error as success.
                         if isinstance(data, dict) and data.get("error"):
                             err = str(data.get("error"))
-                            return False, f"LZT could not reset sessions: {err}"
+                            return False, f"Panel could not reset sessions: {err}"
                         return True, (
                             "✅ LZT Market reset all Telegram authorizations for "
                             "this account. Log in again on your phone."
@@ -1901,7 +1901,7 @@ class LZTClient:
                                 "this API key or the item is no longer owned by you."
                             )
                         return False, (
-                            f"❌ LZT refused the reset (HTTP 403): {raw[:200]}"
+                            f"❌ Panel refused the reset (HTTP 403): {raw[:200]}"
                         )
 
                     if resp.status == 404:
@@ -1916,11 +1916,11 @@ class LZTClient:
                             "again."
                         )
 
-                    return False, f"❌ LZT reset failed (HTTP {resp.status}): {raw[:200]}"
+                    return False, f"❌ Panel reset failed (HTTP {resp.status}): {raw[:200]}"
 
         except Exception as e:
-            logger.error(f"LZT telegram-reset-authorizations error for {item_id}: {e}")
-            return False, f"❌ Could not reach LZT to reset sessions: {e}"
+            logger.error(f"Panel telegram-reset-authorizations error for {item_id}: {e}")
+            return False, f"❌ Could not reach Panel to reset sessions: {e}"
 
 
 lzt_client = LZTClient()
@@ -2168,8 +2168,8 @@ class LZTSearchModule:
                             
                         return processed_items
                     else:
-                        logger.error(f"Failed to fetch LZT items. Status: {response.status}")
+                        logger.error(f"Failed to fetch Panel items. Status: {response.status}")
                         return []
             except Exception as e:
-                logger.error(f"LZT Search Module Exception: {e}")
+                logger.error(f"Panel Search Module Exception: {e}")
                 return []

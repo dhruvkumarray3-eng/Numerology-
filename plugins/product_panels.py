@@ -1,7 +1,7 @@
 """Dedicated product panels — each button runs its own panel.
 
-    💬 WhatsApp Account panel      -> TemporaSMS (service = TEMPORASMS_SERVICE_WHATSAPP)
-    🔁 TG Number Change panel      -> TemporaSMS (service = TEMPORASMS_SERVICE_NUMCHANGE)
+    💬 WhatsApp Account panel      -> live panel (service = TEMPORASMS_SERVICE_WHATSAPP)
+    🔁 TG Number Change panel      -> live panel (service = TEMPORASMS_SERVICE_NUMCHANGE)
     🧩 All Apps OTP panel         -> TemporaSMS (service = selected app slug)
 
 Every panel has the exact flow from the reference screenshots:
@@ -474,11 +474,11 @@ async def _countries_for(key, uid=None, force=False):
     try:
         result = await asyncio.wait_for(temporasms.get_countries(service), timeout=20)
     except asyncio.TimeoutError:
-        logger.warning(f"TemporaSMS get_countries({service}) timed out")
+        logger.warning(f"Panel get_countries({service}) timed out")
         result = {"ok": False, "countries": [],
                   "error": "The panel did not answer in time."}
     except Exception as exc:
-        logger.warning(f"TemporaSMS get_countries({service}) failed: {exc}")
+        logger.warning(f"Panel get_countries({service}) failed: {exc}")
         result = {"ok": False, "countries": [], "error": str(exc)}
     if result.get("ok") and result.get("countries"):
         _cache[cache_key] = {"ts": time.time(), "countries": result["countries"]}

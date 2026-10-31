@@ -37,16 +37,16 @@ SERVER_ICONS = {
 # One-line explanation under each server name on the Servers screen.
 SERVER_BLURBS = {
     "bulk": "Live Telegram accounts, standard stock.",
-    "nonspam": "LZT.market connected \u2014 Good Quality TG accounts.",
-    "numchange": "TemporaSMS Telegram filter \u2014 live numbers for TG number change.",
+    "nonspam": "Panel connected \u2014 Good Quality TG accounts.",
+    "numchange": "Panel \u2014 live numbers for TG number change.",
     "spam": "Cheap Telegram accounts from live stock.",
-    "whatsapp": "TemporaSMS WhatsApp filter \u2014 live numbers for WhatsApp accounts.",
+    "whatsapp": "Panel \u2014 live numbers for WhatsApp accounts.",
     "allotp": "Every app on the OTP panel.",
 }
 
 
 def _lzt_ready():
-    """True when an LZT API key is configured (Server-2 is 'connected')."""
+    """True when a Panel API key is configured (Server-2 is 'connected')."""
     try:
         from database import get_lzt_key
         return bool(get_lzt_key())
@@ -55,7 +55,7 @@ def _lzt_ready():
 
 
 def _otp_ready():
-    """True when the TemporaSMS key is configured (Server-3/4 are live)."""
+    """True when the Panel key is configured (Server-3/4 are live)."""
     try:
         from utils import temporasms
         return bool(temporasms.configured())
@@ -152,15 +152,15 @@ async def show_servers(event):
     lzt_badge = (PE_CHECK + " Connected") if lzt_ok else ("\u26A0\uFE0F Key missing")
     otp_badge = (PE_CHECK + " Live") if otp_ok else ("\u26A0\uFE0F Key missing")
     status_lines = [
-        f"\U0001F6D2 <b>LZT.market:</b> {lzt_badge}",
-        f"\U0001F4F1 <b>TemporaSMS:</b> {otp_badge}",
+        f"\U0001F6D2 <b>Accounts Panel:</b> {lzt_badge}",
+        f"\U0001F4F1 <b>Numbers Panel:</b> {otp_badge}",
     ]
 
     msg = (
         f"<blockquote expandable>{PE_LOCATION} <b>\U0001F5A5 Servers</b>\n\n"
         + "\n".join(lines)
         + "\n\n" + "\n".join(status_lines)
-        + "\n\n<i>Server-3 and Server-4 use the live TemporaSMS panel "
+        + "\n\n<i>Server-3 and Server-4 use the live panel "
           "(Telegram / WhatsApp filters).</i></blockquote>"
     )
     btns.append([style_btn("\U0001F504 Refresh", b"servers_menu", "primary",
@@ -188,11 +188,11 @@ async def show_num_change(event):
     configured = temporasms.configured()
     status = "✅ Configured" if configured else "⚠️ Not configured (Admin → OTP / SMS Key)"
     msg = (
-        f"<blockquote expandable>🔁 <b>TG Number Change (TemporaSMS)</b>\n\n"
+        f"<blockquote expandable>🔁 <b>TG Number Change</b>\n\n"
         f"🔑 <b>API Status:</b> {status}\n\n"
         f"Send the <b>phone number</b> you want to migrate to, in international format "
         f"(e.g. <code>+919876543210</code>).\n\n"
-        f"<i>We will request a temporary number from TemporaSMS and start the Telegram "
+        f"<i>We will request a temporary number from the panel and start the Telegram "
         f"login-code flow. Add it in Admin → 🔐 OTP / SMS Key, or set TEMPORASMS_API_KEY in your host variables.</i></blockquote>"
     )
     btns = [[style_btn("🔙 Back", b"servers_menu", "danger", icon=6129812419028982717)]]

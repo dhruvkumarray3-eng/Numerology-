@@ -267,9 +267,9 @@ def friendly_error(text):
         "BAD_OPERATOR": "The panel route is unavailable. Please try again.",
         "NO_NUMBERS": "No number is available for this app/country. Try another country.",
         "NO_NUMBER": "No number is available for this app/country. Try another country.",
-        "BAD_KEY": "The TemporaSMS API key is invalid. Ask the admin to update it.",
+        "BAD_KEY": "The Panel API key is invalid. Ask the admin to update it.",
         "BAD_ACTION": "The panel rejected the request. Please try again.",
-        "USER_BANNED": "The TemporaSMS account is banned. Contact the panel.",
+        "USER_BANNED": "The Panel account is banned. Contact the panel.",
         "TOO_MANY_REQUESTS": "The panel is rate-limiting us. Please wait a moment.",
         "UNDER_DEVELOPMENT": "This panel feature is under maintenance.",
         "WRONG_MAX_PRICE": "No number within the allowed price. Try another country.",
@@ -281,7 +281,7 @@ def friendly_error(text):
 async def _call(action, operator=None, **params):
     """GET ``handler_api.php?action=...``. Returns ``(text, error)``."""
     if not configured():
-        return None, "TEMPORASMS_API_KEY is not configured (set it in Admin → OTP Providers, or as an env var)"
+        return None, "The panel API key is not configured (set it in Admin → OTP Providers, or as an env var)"
     url = f"{_base_url()}/stubs/handler_api.php"
     query = {"api_key": api_key(), "action": action}
     if operator is not None:
@@ -300,7 +300,7 @@ async def _call(action, operator=None, **params):
                     return None, f"HTTP {resp.status}: {text[:160]}"
                 return text, None
     except Exception as exc:
-        logger.warning(f"TemporaSMS {action} failed: {exc}")
+        logger.warning(f"Panel {action} failed: {exc}")
         return None, str(exc) or type(exc).__name__
 
 
@@ -597,7 +597,7 @@ async def _prices_for(service):
             continue
         try:
             if not await _probe_code(code, operator):
-                logger.info(f"TemporaSMS route {code}/{operator} not sold for {service}")
+                logger.info(f"Panel route {code}/{operator} not sold for {service}")
                 continue
             found = await _sweep_prices(code, operator)
         except Exception as exc:  # noqa: BLE001 - a slow panel is not fatal
@@ -617,7 +617,7 @@ async def _prices_for(service):
     # Serve stale data rather than an empty list: a country with yesterday's
     # price is far more useful than "no stock" caused by one slow request.
     if cached and cached.get("data"):
-        logger.warning(f"TemporaSMS using stale prices for {service}")
+        logger.warning(f"Panel using stale prices for {service}")
         return cached["data"], cached.get("code"), cached.get("operator")
     return {}, chosen[0], chosen[1]
 
@@ -665,7 +665,7 @@ async def get_countries(service: str):
     flow can round-trip it) and ``id`` is the provider's numeric country id.
     """
     if not configured():
-        return {"ok": False, "error": "TEMPORASMS_API_KEY is not configured",
+        return {"ok": False, "error": "The panel API key is not configured",
                 "countries": []}
 
     code, operator = await resolve_service(service)
@@ -684,14 +684,14 @@ async def get_countries(service: str):
     try:
         result = await asyncio.wait_for(_gather(), timeout=_COUNTRIES_BUDGET)
     except asyncio.TimeoutError:
-        logger.warning(f"TemporaSMS get_countries({service}) exceeded budget")
+        logger.warning(f"Panel get_countries({service}) exceeded budget")
         cached_prices = (_PRICES_CACHE.get(_norm_service(service)) or {}).get("data")
         prices = cached_prices or {}
         names = (_COUNTRIES_CACHE.get(operator) or {}).get("data") or {}
     else:
         prices_res, names = result
         if isinstance(prices_res, Exception):
-            logger.warning(f"TemporaSMS prices failed for {service}: {prices_res}")
+            logger.warning(f"Panel prices failed for {service}: {prices_res}")
             cached = _PRICES_CACHE.get(_norm_service(service)) or {}
             prices = cached.get("data") or {}
             if cached.get("code"):
@@ -705,9 +705,8 @@ async def get_countries(service: str):
         return {
             "ok": False,
             "unavailable": True,
-            "error": (f"TemporaSMS has no live numbers for '{service}' right "
-                      f"now (service {code or '?'}, route {operator or '?'}). "
-                      f"Pick another app or try again in a few minutes."),
+            "error": ("Panel has no live numbers for this app right now. "
+                      "Pick another app or try again in a few minutes."),
             "countries": [],
         }
 
@@ -852,7 +851,7 @@ async def resolve_country_route(service, country):
 async def buy_number(service: str, country: str):
     """Request a number. Returns ``{ok, order_id, phone, provider, error}``."""
     if not configured():
-        return {"ok": False, "error": "TEMPORASMS_API_KEY is not configured",
+        return {"ok": False, "error": "The panel API key is not configured",
                 "order_id": None, "phone": None}
 
     pid, operator, code = await resolve_country_route(service, country)
@@ -961,7 +960,7 @@ async def wait_for_otp(order_id: str, attempts: int = 20, delay: int = 6):
 async def check_connection():
     """Admin helper: verify the key and show the panel balance."""
     if not configured():
-        return False, "TEMPORASMS_API_KEY is not configured."
+        return False, "The panel API key is not configured."
     bal = await get_balance()
     if not bal.get("ok"):
         return False, f"Panel rejected the key: {bal.get('error')}"

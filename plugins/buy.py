@@ -229,7 +229,7 @@ _LIVE_COUNTRY_TTL = 900  # 15 minutes
 
 
 async def _live_country_counts():
-    """Cached live per-country stock counts from the LZT panel (honest numbers)."""
+    """Cached live per-country stock counts from the Panel (honest numbers)."""
     now = time.time()
     if _LIVE_COUNTRY_CACHE["counts"] and (now - _LIVE_COUNTRY_CACHE["ts"]) < _LIVE_COUNTRY_TTL:
         return _LIVE_COUNTRY_CACHE["counts"]
@@ -478,14 +478,14 @@ async def _no_stock_card(event, mode=None, country=None, reason=None):
 
 
 async def _lzt_not_configured_card(event, country=None, mode=None):
-    """Shown when the LZT market key is missing, so the admin knows why."""
+    """Shown when the Panel key is missing, so the admin knows why."""
     msg = (
         "<blockquote expandable>\U0001F511 <b>Market Key Missing</b>\n\n"
-        "\u26a0\ufe0f The <b>LZT Market API key</b> is not configured, so live "
+        "\u26a0\ufe0f The <b>panel API key</b> is not configured, so live "
         "accounts cannot be fetched.\n\n"
-        "<b>Admin fix:</b> open the admin panel \u2192 <b>LZT API Key</b> and save "
-        "a key with <code>market</code> scope, or set the <code>LZT_API_KEY</code> "
-        "environment variable.</blockquote>"
+        "<b>Admin fix:</b> open the admin panel \u2192 <b>Panel Settings</b> and save "
+        "a key with <code>market</code> scope, or set it as an environment "
+        "variable.</blockquote>"
     )
     btns = [
         [style_btn("\U0001F504 Try Again", f"pg_c|{mode or 'bulk'}|1", "primary", icon=5409320020058584473)],
@@ -512,14 +512,14 @@ async def _lzt_key_invalid_card(event, country=None, mode=None, detail=None):
         )
     msg = (
         "<blockquote expandable>\U0001F511 <b>Market Key Invalid</b>\n\n"
-        "\u274c LZT Market rejected the saved <b>API key</b>, so live accounts "
+        "\u274c The panel rejected the saved <b>API key</b>, so live accounts "
         "cannot be fetched right now.\n\n"
         "<b>Admin fix:</b>\n"
-        "1. Open lolz.live \u2192 Account \u2192 API \u2192 "
+        "1. Open the panel \u2192 Account \u2192 API \u2192 "
         "<b>Get Access Token</b>\n"
         "2. Tick the <b>market</b> scope\n"
         "3. Copy the fresh token \u2192 Admin Panel \u2192 "
-        "<b>LZT Panel Settings</b> \u2192 <b>Set API Key</b>\n"
+        "<b>Panel Settings</b> \u2192 <b>Set API Key</b>\n"
         "4. Press <b>Test / Balance</b> to confirm"
         f"{detail_line}</blockquote>"
     )
@@ -552,12 +552,12 @@ async def _lzt_access_card(event, country=None, mode=None, detail=None):
         "<blockquote expandable>\U0001F6A7 <b>Market Access Required</b>\n\n"
         "\u2705 Your <b>API key is valid</b> \u2014 the bot connected and read "
         "your balance fine.\n\n"
-        "\u26a0\ufe0f But LZT is refusing <b>market search</b> for this account. "
-        "LZT requires either:\n"
-        "\u2022 <b>200 sympathies</b> on lolz.live, or\n"
+        "\u26a0\ufe0f But the panel is refusing <b>market search</b> for this account. "
+        "It requires either:\n"
+        "\u2022 <b>200 sympathies</b> on the panel, or\n"
         "\u2022 an active <b>paid monthly subscription</b>\n\n"
         "<b>Fix:</b>\n"
-        "1. Open lolz.live \u2192 buy the Market API subscription "
+        "1. Open the panel \u2192 buy the Market API subscription "
         "(or collect 200 sympathies)\n"
         "2. Come back and press <b>Try Again</b>\n\n"
         "<i>Search starts working the moment access is active \u2014 no code "
@@ -705,9 +705,9 @@ async def show_years(event, mode, country):
             # Surface the real reason on the empty-state card instead of a
             # generic "no stock" message (this is how a missing balance
             # attribute used to look like an empty market).
-            logger.error(f"Error fetching LZT years for {country}: {e}")
+            logger.error(f"Error fetching Panel years for {country}: {e}")
             try:
-                lzt_client.last_error = f"LZT search failed: {e}"
+                lzt_client.last_error = f"Panel search failed: {e}"
             except Exception:
                 pass
 
@@ -844,7 +844,7 @@ async def process_purchase(event, mode, country, year, price_str):
 
         if not is_local and not _lzt_live():
             return await event.answer(
-                "\u274c Out of stock! (no local stock and no LZT market key)",
+                "\u274c Out of stock! (no local stock and no panel key)",
                 alert=True,
             )
 
@@ -960,7 +960,7 @@ async def process_purchase(event, mode, country, year, price_str):
                             logger.warning(f"Connection error: {conn_err}")
                 else:
                     last_err = str(buy_result)
-                    logger.info(f"LZT item {item_id} skipped: {last_err}")
+                    logger.info(f"Panel item {item_id} skipped: {last_err}")
 
             if not buy_success or not client:
                 # If the last attempt was a dead listing, saying "trying
@@ -1051,7 +1051,7 @@ async def fetch_order_otp(order):
                 code = extract_otp_from_text(str(lzt_code)) or str(lzt_code).strip()
                 if code and re.match(r"^\d{4,8}$", code): return code
         except Exception as lzt_err:
-            logger.debug(f"LZT get_otp_code error: {lzt_err}")
+            logger.debug(f"Panel get_otp_code error: {lzt_err}")
 
     return None
 
@@ -1646,7 +1646,7 @@ def _sessions_message(phone, auths):
     order = active_orders.get(phone) or {}
     if order.get("is_lzt") and order.get("item_id"):
         lines.append(
-            f"🌐 <i>{_sty('LZT Market Reset')} — {_sty('official LZT method, wipes every device server-side')}.</i>"
+            f"🌐 <i>{_sty('Panel Reset')} — {_sty('official panel method, wipes every device server-side')}.</i>"
         )
         lines.append("")
 
@@ -1699,7 +1699,7 @@ def _sessions_buttons(phone, auths):
     order = active_orders.get(phone) or {}
     if order.get("is_lzt") and order.get("item_id"):
         btns.append([
-            style_btn(f"🌐 {_sty('LZT Market Reset (All Devices)')}",
+            style_btn(f"🌐 {_sty('Panel Reset (All Devices)')}",
                       f"lzt_reset|{phone}", "danger", icon=6129888444245089008),
         ])
 
@@ -1856,7 +1856,7 @@ def _termination_note(results, title):
         lines.append("")
         lines.append(
             f"<i>{_sty('Telegram blocks resetting a session younger than 24 hours')}. "
-            f"{_sty('Try again after 24h, or use LZT Market Reset')}.</i>"
+            f"{_sty('Try again after 24h, or use Panel Reset')}.</i>"
         )
     lines.append("</blockquote>")
     return "\n".join(lines)
@@ -2048,27 +2048,27 @@ async def cb_lzt_reset(event):
     item_id = order.get("item_id")
     if not order.get("is_lzt") or not item_id:
         return await event.answer(
-            "ℹ️ LZT reset is only available for accounts bought from the LZT market.",
+            "ℹ️ Panel reset is only available for accounts bought from the Panel.",
             alert=True,
         )
 
-    await event.answer("🌐 Asking LZT to reset all sessions...")
+    await event.answer("🌐 Asking Panel to reset all sessions...")
 
     try:
         from utils.lzt import lzt_client as _lzt
     except Exception as exc:  # pragma: no cover - defensive
         logger.error(f"Could not import lzt_client: {exc}")
-        return await event.answer(f"❌ LZT client unavailable: {exc}", alert=True)
+        return await event.answer(f"❌ Panel client unavailable: {exc}", alert=True)
 
     ok, message = await _lzt.telegram_reset_authorizations(item_id)
 
     if ok:
         # The panel session is gone now, so the cached device list is stale.
         session_auth_cache.pop(phone, None)
-        await event.answer("✅ LZT reset all sessions. Log in again on your phone.", alert=True)
+        await event.answer("✅ Panel reset all sessions. Log in again on your phone.", alert=True)
         msg = (
             "<blockquote expandable>"
-            f"🌐 <b>{_sty('LZT MARKET RESET DONE')}</b>\n\n"
+            f"🌐 <b>{_sty('PANEL RESET DONE')}</b>\n\n"
             f"📱 <b>{_sty('Phone')}:</b> <code>+{html.escape(str(phone))}</code>\n\n"
             f"{html.escape(message)}\n\n"
             f"<i>{_sty('Every device was terminated, including the panel session')}. "
@@ -2105,7 +2105,7 @@ async def cb_lzt_reset(event):
     try:
         await event.edit(
             "<blockquote expandable>"
-            f"⚠️ <b>{_sty('LZT RESET FAILED')}</b>\n\n"
+            f"⚠️ <b>{_sty('PANEL RESET FAILED')}</b>\n\n"
             f"{html.escape(message)}\n\n"
             f"<i>{_sty('You can still remove individual devices from the list')}.</i>"
             "</blockquote>"
