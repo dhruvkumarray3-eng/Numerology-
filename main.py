@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # the hosting console immediately shows whether the container is running the
 # latest code.  If the console still prints an older tag, the container has
 # not pulled the new files yet.
-BUILD_TAG = "2026-10-31-terms-gate-per-product-v22"
+BUILD_TAG = "2026-10-31-lzt-reset-verified-v23"
 
 os.makedirs("sessions", exist_ok=True)
 
