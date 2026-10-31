@@ -283,3 +283,52 @@ def matches_menu(value, *keys) -> bool:
     """True when `value` (a button label) contains any of the given keys."""
     norm = normalise_menu_text(value)
     return any(normalise_menu_text(k) in norm for k in keys)
+
+
+# ---------------------------------------------------------------------------
+# Canonical reply-keyboard label registry
+#
+# Every bottom keyboard button is declared here exactly once.  Handlers match
+# against the *canonical key* instead of re-typing the stylised glyphs, which
+# is what previously broke the Stock and Profile buttons: the regex in the
+# handler used a different Unicode block (double-struck "𝕊"/"ℙ") than the
+# keyboard actually sends (mathematical bold "𝐒"/"𝐏").
+# ---------------------------------------------------------------------------
+_MENU_LABEL_KEYS = {
+    "buyaccount": "buy_account",
+    "deposit": "deposit",
+    "profile": "profile",
+    "mystats": "my_stats",
+    "myorders": "my_orders",
+    "balance": "balance",
+    "stock": "stock",
+    "refer": "refer",
+    "referearn": "refer",
+    "support": "support",
+    "start": "start",
+    "menu": "start",
+    "close": "close",
+    "hide": "close",
+    "help": "help",
+    "helpcommands": "help",
+    "adminpanel": "admin_panel",
+    "settings": "settings",
+    "servers": "servers",
+    "freetempmail": "tempmail",
+    "recharge": "recharge",
+}
+
+
+def menu_label_key(value):
+    """Return the canonical key for a reply-keyboard label, or ``None``.
+
+    Matching is *exact* after folding (emoji and punctuation are stripped), so
+    a genuine country query such as ``"Stockholm"`` is never mistaken for the
+    ``Stock`` button.
+    """
+    return _MENU_LABEL_KEYS.get(normalise_menu_text(value))
+
+
+def is_menu_label(value) -> bool:
+    """True when ``value`` is one of the known reply-keyboard labels."""
+    return menu_label_key(value) is not None

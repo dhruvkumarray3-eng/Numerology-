@@ -166,7 +166,63 @@ def install_edit_safety(bot, event_cls=None):
 
     original = Event.edit
 
+    async def _resend_plain(self, text, buttons, parse_mode, reason):
+        """Delete the media message and deliver the text as a normal message."""
+        if text is None:
+            logger.error(f"\u26a0\ufe0f edit failed with no text to resend: {reason}")
+            return None
+
+        logger.info(
+            "\u2139\ufe0f %s on a media message; resending as plain text "
+            "(the media caption limit is %d chars).",
+            reason, MEDIA_CAPTION_LIMIT,
+        )
+
+        if isinstance(text, str) and len(text) > TEXT_MESSAGE_LIMIT:
+            text = text[: TEXT_MESSAGE_LIMIT - 20] + "\n\n\u2026 (truncated)"
+
+        try:
+            await self.delete()
+        except Exception:
+            pass
+
+        try:
+            return await self.client.send_message(
+                self.chat_id, text, buttons=buttons, parse_mode=parse_mode
+            )
+        except Exception as send_exc:  # noqa: BLE001
+            logger.info(
+                "\u2139\ufe0f resend after caption overflow failed (%s); "
+                "retrying without buttons.", send_exc,
+            )
+            try:
+                return await self.client.send_message(
+                    self.chat_id, text, parse_mode=parse_mode
+                )
+            except Exception as final_exc:  # noqa: BLE001
+                logger.error(f"\u26a0\ufe0f resend failed entirely: {final_exc}")
+                return None
+
     async def safe_edit(self, *args, **kwargs):
+        text = kwargs.get("text", kwargs.get("message"))
+        if text is None and args:
+            text = args[0]
+
+        # Proactive guard: Telegram caps media captions at 1024 chars.  If the
+        # message being edited carries media and the new text is longer, the
+        # edit is guaranteed to fail, so go straight to delete + resend instead
+        # of logging a MediaCaptionTooLongError on every single render.
+        try:
+            _msg = getattr(self, "message", None)
+            if (_msg is not None and getattr(_msg, "media", None)
+                    and isinstance(text, str) and len(text) > MEDIA_CAPTION_LIMIT):
+                return await _resend_plain(
+                    self, text, kwargs.get("buttons"),
+                    kwargs.get("parse_mode", "html"), "media caption limit",
+                )
+        except Exception:
+            pass
+
         try:
             return await original(self, *args, **kwargs)
         except MessageNotModifiedError:
@@ -189,45 +245,10 @@ def install_edit_safety(bot, event_cls=None):
                 logger.error(f"\u26a0\ufe0f retry after unicode error failed: {exc}")
                 return None
         except (MediaCaptionTooLongError, MessageTooLongError) as exc:
-            text = kwargs.get("text", kwargs.get("message"))
-            if text is None and args:
-                text = args[0]
-            if text is None:
-                logger.error(f"\u26a0\ufe0f edit failed with no text to resend: {exc}")
-                return None
-
-            logger.warning(
-                "\u26a0\ufe0f %s on a media message; resending as plain text "
-                "(the photo caption limit is %d chars).",
-                type(exc).__name__, MEDIA_CAPTION_LIMIT,
+            return await _resend_plain(
+                self, text, kwargs.get("buttons"),
+                kwargs.get("parse_mode", "html"), type(exc).__name__,
             )
-
-            buttons = kwargs.get("buttons")
-            parse_mode = kwargs.get("parse_mode", "html")
-            if isinstance(text, str) and len(text) > TEXT_MESSAGE_LIMIT:
-                text = text[: TEXT_MESSAGE_LIMIT - 20] + "\n\n\u2026 (truncated)"
-
-            try:
-                await self.delete()
-            except Exception:
-                pass
-
-            try:
-                return await self.client.send_message(
-                    self.chat_id, text, buttons=buttons, parse_mode=parse_mode
-                )
-            except Exception as send_exc:  # noqa: BLE001
-                logger.error(
-                    "\u26a0\ufe0f resend after caption error failed (%s); "
-                    "retrying without buttons.", send_exc,
-                )
-                try:
-                    return await self.client.send_message(
-                        self.chat_id, text, parse_mode=parse_mode
-                    )
-                except Exception as final_exc:  # noqa: BLE001
-                    logger.error(f"\u26a0\ufe0f resend failed entirely: {final_exc}")
-                    return None
 
     Event.edit = safe_edit
     Event._edit_safety_installed = True

@@ -7,8 +7,28 @@ from utils.states import session_buy_state, deposit_input, active_orders, waitin
 from plugins.start import send_main_menu
 from utils.terms import get_terms_message
 from utils.helpers import check_channel_joined
-from utils.keyboards import style_btn, style_url, SEARCH_EMOJI_ID
+from utils.keyboards import (
+    style_btn, style_url, SEARCH_EMOJI_ID,
+    menu_label_key, is_menu_label,
+)
 from utils.lzt import COUNTRY_TO_LZT
+
+
+def _clear_buy_state(uid):
+    """Drop a half-finished country search before showing a menu screen.
+
+    Without this, tapping a reply-keyboard button while the Buy flow is
+    waiting for a country made the catch-all text handler in ``plugins/buy.py``
+    treat the button label as a country query and answer "No country found".
+    """
+    try:
+        from plugins.buy import search_state, user_states
+        search_state.pop(uid, None)
+        if user_states.get(uid) in (None, "AWAITING_COUNTRY"):
+            user_states.pop(uid, None)
+    except Exception:
+        pass
+
 
 async def send_stock_page(event, page=1):
     """Live stock list with REAL counts (never a fake "40+").
@@ -132,18 +152,24 @@ def register_callbacks(bot):
     async def cb_view_referrals(e):
         await show_refer_menu(bot, e)
 
-    @bot.on(events.NewMessage(pattern=r"(?i)^(🎁 𝐑ᴇғᴇʀ|🎁 Refer|🎁 Refer & Earn)$"))
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
+                              and menu_label_key(e.raw_text) == "refer"))
     async def msg_refer(e):
+        _clear_buy_state(e.sender_id)
         await show_refer_menu(bot, e)
+        raise events.StopPropagation
 
     @bot.on(events.CallbackQuery(pattern=r"^stk_pg\|(\d+)$"))
     async def cb_stk_pg(e):
         page = int(e.pattern_match.group(1).decode())
         await send_stock_page(e, page)
 
-    @bot.on(events.NewMessage(pattern=r"(?i)^(📊 𝐒ᴛᴏᴄᴋ|📊 Stock)$"))
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
+                              and menu_label_key(e.raw_text) == "stock"))
     async def msg_stock(e):
+        _clear_buy_state(e.sender_id)
         await send_stock_page(e, 1)
+        raise events.StopPropagation
 
     @bot.on(events.CallbackQuery(pattern=b"^tc_accept$"))
     async def cb_tc_accept(e):
@@ -223,8 +249,10 @@ def register_callbacks(bot):
 
     # ── Keyboard Button Handlers ──
 
-    @bot.on(events.NewMessage(pattern=r"(?i)^(📦 𝐌ʏ 𝐎ʀᴅᴇʀs|📦 My Orders)$"))
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
+                              and menu_label_key(e.raw_text) == "my_orders"))
     async def msg_my_orders(e):
+        _clear_buy_state(e.sender_id)
         uid = e.sender_id
         rows = cur.execute("SELECT phone, country, price, date FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 10", (uid,)).fetchall()
         if not rows:
@@ -235,8 +263,10 @@ def register_callbacks(bot):
             msg += f"<blockquote>{flag} {cn} | <code>{ph}</code>\n{P_MONEY} {P_INR}{pr} | 📅 {dt[:10]}</blockquote>\n"
         await e.respond(msg)
 
-    @bot.on(events.NewMessage(pattern=r"(?i)^(💰 𝐁ᴀʟᴀɴᴄᴇ|💰 Balance)$"))
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
+                              and menu_label_key(e.raw_text) == "balance"))
     async def msg_balance(e):
+        _clear_buy_state(e.sender_id)
         uid = e.sender_id
         row = cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()
         bal = row[0] if row else 0
@@ -245,8 +275,10 @@ def register_callbacks(bot):
                f"💲 <b>𝐔𝐒𝐃:</b> <code>${to_usd(bal):.2f}</code></blockquote>")
         await e.respond(msg)
 
-    @bot.on(events.NewMessage(pattern=r"(?i)^(📩 𝐒ᴜᴘᴘᴏʀᴛ|📩 Support)$"))
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
+                              and menu_label_key(e.raw_text) == "support"))
     async def msg_support(e):
+        _clear_buy_state(e.sender_id)
         url = get_support_url()
         from config import OWNER_URL, OWNER_USERNAME, SUPPORT_USERNAME
         msg = (f"<blockquote>\U0001F4E9 <b>𝐒\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b</b></blockquote>\n\n"

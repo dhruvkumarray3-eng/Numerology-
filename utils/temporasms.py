@@ -601,7 +601,7 @@ async def _prices_for(service):
                 continue
             found = await _sweep_prices(code, operator)
         except Exception as exc:  # noqa: BLE001 - a slow panel is not fatal
-            logger.warning(f"TemporaSMS price sweep failed for {service} on "
+            logger.info(f"TemporaSMS price sweep unavailable for {service} on "
                            f"{code}/{operator}: {exc}")
             found = {}
         if found:
@@ -739,14 +739,14 @@ async def get_countries(service: str):
     try:
         result = await asyncio.wait_for(_gather(), timeout=_COUNTRIES_BUDGET)
     except asyncio.TimeoutError:
-        logger.warning(f"Panel get_countries({service}) exceeded budget")
+        logger.info(f"Panel get_countries({service}) exceeded budget; using cached data")
         cached_prices = (_PRICES_CACHE.get(_norm_service(service)) or {}).get("data")
         prices = cached_prices or {}
         names = (_COUNTRIES_CACHE.get(operator) or {}).get("data") or {}
     else:
         prices_res, names = result
         if isinstance(prices_res, Exception):
-            logger.warning(f"Panel prices failed for {service}: {prices_res}")
+            logger.info(f"Panel prices unavailable for {service} ({prices_res}); using cache")
             cached = _PRICES_CACHE.get(_norm_service(service)) or {}
             prices = cached.get("data") or {}
             if cached.get("code"):

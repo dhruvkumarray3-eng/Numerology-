@@ -7,7 +7,7 @@ from datetime import datetime
 from utils.markup import format_user_amount
 from utils.levels import compute_level, tier_label
 from utils.i18n import t
-from utils.keyboards import style_btn
+from utils.keyboards import style_btn, menu_label_key
 
 
 async def profile_handler(bot, event):
@@ -110,9 +110,11 @@ async def send_purchase_page(event, uid, page):
 
 
 def register_profile(bot):
-    @bot.on(events.NewMessage(pattern=r"(?i)^(👤 ℙ𝕣𝕠𝕗𝕚𝕝𝕖|👤 Profile)$"))
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
+                              and menu_label_key(e.raw_text) == "profile"))
     async def msg_profile(e):
         await profile_handler(bot, e)
+        raise events.StopPropagation
 
     @bot.on(events.CallbackQuery(pattern=b"^profile_stats$"))
     async def cb_profile_stats(e):

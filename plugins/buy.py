@@ -29,7 +29,7 @@ from config import (
     P_NO, P_YES, P_INR, P_TIME, P_FLAG, P_OTP, P_2FA, P_PHONE, AUTO_CANCEL_SECONDS,
     OTP_REGEX, bot, logger, API_ID, API_HASH, LZT_API_KEY, USDT_TO_INR
 )
-from utils.keyboards import style_btn, style_url, matches_menu, SEARCH_EMOJI_ID
+from utils.keyboards import style_btn, style_url, matches_menu, is_menu_label, SEARCH_EMOJI_ID
 from utils.livecount import register_live, unregister_live
 from utils.markup import format_dual_from_inr, format_dual_price
 from utils.states import active_orders, session_buy_state, get_user_lock
@@ -1207,6 +1207,16 @@ async def process_combined_text_input(event):
         return
 
     uid = event.sender_id
+
+    # Ignore every reply-keyboard label so it can never be treated as a
+    # country query.  Previously only "buy account" was skipped, so tapping
+    # Stock / Profile / Balance while a search was pending answered
+    # "No country found matching '📊 𝐒ᴛᴏᴄᴋ'".
+    if is_menu_label(event.text):
+        search_state.pop(uid, None)
+        if user_states.get(uid) == "AWAITING_COUNTRY":
+            user_states.pop(uid, None)
+        return
 
     # Ignore menu triggers so they don't get treated as a country query.
     lowered = event.text.strip().lower()

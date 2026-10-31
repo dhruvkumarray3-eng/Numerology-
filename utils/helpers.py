@@ -409,17 +409,24 @@ async def safe_edit_or_resend(event, text, buttons=None, parse_mode="html", rese
     """
     buttons = normalise_buttons(buttons)
 
-    try:
-        await event.edit(text, buttons=buttons, parse_mode=parse_mode)
-        return True
-    except MessageNotModifiedError:
-        # The message already shows exactly this text — that is success.
-        return True
-    except Exception as ex:
-        logger.warning(
-            f"safe_edit_or_resend: edit failed ({type(ex).__name__}: {ex}); "
-            f"falling back to delete + resend"
-        )
+    # Telegram caps media captions at 1024 chars while a plain text message
+    # allows 4096.  If the message we are editing carries media and the new
+    # text is longer, the edit is guaranteed to fail — skip it and go straight
+    # to delete + resend so the log is not spammed with MediaCaptionTooLongError.
+    _msg = getattr(event, "message", None)
+    _has_media = bool(getattr(_msg, "media", None)) if _msg is not None else False
+    if not (_has_media and isinstance(text, str) and len(text) > 1024):
+        try:
+            await event.edit(text, buttons=buttons, parse_mode=parse_mode)
+            return True
+        except MessageNotModifiedError:
+            # The message already shows exactly this text — that is success.
+            return True
+        except Exception as ex:
+            logger.info(
+                f"safe_edit_or_resend: edit failed ({type(ex).__name__}: {ex}); "
+                f"falling back to delete + resend"
+            )
 
     if not resend:
         return False

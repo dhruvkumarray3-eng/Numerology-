@@ -386,3 +386,96 @@ tha — sirf HTTP client (`utils/lzt.py`) ka contract test tha. Handler ke andar
 Jab handler ke andar **lazy import** ho, test me usi module ka object patch
 karo jahan se import hota hai. Warna test asli network call kar ke galat
 result de sakta hai.
+
+---
+
+## 2. Stock / Profile reply-keyboard buttons did not work ("circle wala")
+
+**Symptom**
+
+Owner ne screenshot circle karke bataya ki **Stock** button dabane par live
+stock page nahi khulta. Server log me isi tap ke against ye line thi:
+
+```
+Country search query from 6434479497: '📊 𝐒ᴛᴏᴄᴋ'
+```
+
+matlab button label ko **country search query** samajh liya gaya aur bot ne
+"No country found matching '📊 𝐒ᴛᴏᴄᴋ'" reply kiya. Isi tarah **Profile**
+button bhi dead tha.
+
+**Root cause**
+
+Do alag-alag galtiyan:
+
+1. **Glyph mismatch.** Reply keyboard labels mathematical-bold / small-cap
+   Unicode glyphs me render hote hain (`𝐒ᴛᴏᴄᴋ`, `𝐏ʀᴏꜰɪʟᴇ`). Handlers ne
+   wahi glyphs regex me dobara type kiye the, par **galat Unicode block** —
+   `𝕊` (U+1D54A double-struck) vs `𝐒` (U+1D412 bold), aur `ℙ` (U+2119) vs
+   `𝐏` (U+1D40F). Regex kabhi match hi nahi hua, isliye `msg_stock` /
+   `msg_profile` chale hi nahi.
+2. **No `StopPropagation` + stale state.** `plugins/buy.py` ka catch-all
+   `process_combined_text_input` sirf `"buy account"` ko skip karta tha. Agar
+   user ka pichla country search pending tha (`AWAITING_COUNTRY`), to Stock
+   tap us handler me chala jata tha aur country search bana deta tha.
+
+**Fix**
+
+- `utils/keyboards.py` me **canonical label registry**:
+  `menu_label_key()` / `is_menu_label()`. Ye label ko fold karke exact key
+  (`stock`, `profile`, `my_orders`, ...) deta hai — emoji/punctuation strip,
+  aur exact match, taaki `"Stockholm"` galti se Stock na bane.
+- `plugins/callbacks.py` ke Stock / Refer / My Orders / Balance / Support
+  handlers ab `menu_label_key(e.raw_text)` par route karte hain aur
+  `raise events.StopPropagation` karte hain.
+- `plugins/profile.py` ka Profile handler bhi folding matcher par shift.
+- `plugins/buy.py` catch-all ab **har** keyboard label ko ignore karta hai
+  (`is_menu_label`) aur pending `search_state` / `AWAITING_COUNTRY` clear
+  karta hai.
+- Naya regression test `tests/test_menu_label_routing.py` (51 checks) har
+  keyboard label ka routing lock karta hai.
+
+**Lesson (shiksha)**
+
+Stylised Unicode label ko **kabhi bhi handler me dobara type mat karo**.
+Ek hi source of truth (keyboard definition) se canonical key nikalo aur usi
+par route karo. Aur har keyboard handler ko `StopPropagation` dena chahiye,
+warna catch-all text handler use country query bana dega.
+
+---
+
+## 3. Log noise: `MediaCaptionTooLongError`, panel timeouts, "not sold"
+
+**Symptom**
+
+Server log me baar-baar:
+
+```
+MediaCaptionTooLongError on a media message; resending as plain text
+Panel get_countries(telegram) timed out
+Panel get_countries(whatsapp) exceeded budget
+Panel route wqp/13 not sold for whatsapp
+```
+
+**Root cause**
+
+- Terms / join screen ek **photo** message hai; Telegram media caption limit
+  **1024** chars hai jabki text 4096. Har render par edit pehle fail hota tha,
+  phir fallback chalta tha — kaam sahi tha, par har baar warning log hoti thi.
+- Panel timeouts aur "route not sold" **expected** hain (provider slow / key
+  par route available nahi). Code already cached/fallback list use karta tha,
+  par `warning` level par log karta tha, jisse console error-jaisa lagta tha.
+
+**Fix**
+
+- `utils/button_safety.py` aur `utils/helpers.py::safe_edit_or_resend` ab
+  **pehle** check karte hain ki message me media hai aur text > 1024 hai —
+  seedha delete + plain-text resend, bina exception ke. Log `info` level par.
+- Panel timeout / budget / "not sold" / price-sweep logs `info` level par
+  downgrade — graceful fallback ab normal operation hai, error nahi.
+
+**Lesson (shiksha)**
+
+Telegram ki hard limits (media caption 1024, text 4096) ko **pehle** check
+karo, exception ka intezaar mat karo. Aur expected fallback ko `warning` mat
+banao — warna asli errors log me dab jate hain.
