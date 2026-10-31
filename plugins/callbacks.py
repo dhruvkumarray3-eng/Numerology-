@@ -143,6 +143,45 @@ async def show_refer_menu(bot, event):
     else:
         await event.respond(msg, buttons=btns)
 
+async def send_my_orders(event):
+    """My Orders screen (shared by the reply keyboard and the menu router)."""
+    uid = event.sender_id
+    rows = cur.execute("SELECT phone, country, price, date FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 10", (uid,)).fetchall()
+    if not rows:
+        return await event.respond(f"<blockquote>{PE_GIFT} <b>\U0001D40C\U0001D432 \U0001D40E\U0001D42B\U0001D41D\U0001D41E\U0001D42B\U0001D42C</b></blockquote>\n\n<blockquote>\U0001D40D\u1d0f \u1d0f\u0280\u1d05\u1d07\u0280s \u028f\u1d07\u1d1b. \U0001D401\u1d1c\u028f \u028f\u1d0f\u1d1c\u0280 \u0493\u026a\u0280s\u1d1b \u1d00\u1d04\u1d04\u1d0f\u1d1c\u0274\u1d1b!</blockquote>")
+    msg = f"<blockquote>{PE_GIFT} <b>\U0001D40C\U0001D432 \U0001D40E\U0001D42B\U0001D41D\U0001D41E\U0001D42B\U0001D42C</b> (\U0001D40B\u1d00s\u1d1b 10)</blockquote>\n\n"
+    for ph, cn, pr, dt in rows:
+        flag = get_flag_by_country_name(cn)
+        msg += f"<blockquote>{flag} {cn} | <code>{ph}</code>\n{P_MONEY} {P_INR}{pr} | \U0001F4C5 {dt[:10]}</blockquote>\n"
+    await event.respond(msg)
+
+
+async def send_balance(event):
+    """Balance screen (shared by the reply keyboard and the menu router)."""
+    uid = event.sender_id
+    row = cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()
+    bal = row[0] if row else 0
+    msg = (f"<blockquote>{PE_CROWN} <b>\U0001D418\u1d0f\u1d1c\u0280 \U0001D401\u1d00\u029f\u1d00\u0274\u1d04\u1d07</b></blockquote>\n\n"
+           f"<blockquote>{P_MONEY} <b>\U0001D401\u1d00\u029f\u1d00\u0274\u1d04\u1d07:</b> <code>{P_INR}{bal}</code>\n"
+           f"\U0001F4B2 <b>\U0001D414\U0001D412\U0001D403:</b> <code>${to_usd(bal):.2f}</code></blockquote>")
+    await event.respond(msg)
+
+
+async def send_support(event):
+    """Support screen (shared by the reply keyboard and the menu router)."""
+    url = get_support_url()
+    from config import OWNER_URL, OWNER_USERNAME, SUPPORT_USERNAME
+    msg = (f"<blockquote>\U0001F4E9 <b>\U0001D412\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b</b></blockquote>\n\n"
+           f"<blockquote>\U0001D405\u1d0f\u0280 \u1d00\u0274\u028f \u026ass\u1d1c\u1d07s \u1d0f\u0280 \u01eb\u1d1c\u1d07s\u1d1b\u026a\u1d0f\u0274s, \u1d04\u1d0f\u0274\u1d1b\u1d00\u1d04\u1d1b \u1d0f\u1d1c\u0280 s\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b:\n\n"
+           f"\U0001F465 <b>Support Group:</b> {SUPPORT_USERNAME}\n"
+           f"\U0001F451 <b>Owner:</b> {OWNER_USERNAME}</blockquote>")
+    btns = [
+        [style_url("\U0001F465 Support Group", url, "success", icon=6129732880529628243)],
+        [style_url("\U0001F451 Owner", OWNER_URL, "danger", icon=5409166771330494453)],
+    ]
+    await event.respond(msg, buttons=btns)
+
+
 def register_callbacks(bot):
     @bot.on(events.CallbackQuery(pattern=b"^more_menu$"))
     async def cb_more_menu(e):
@@ -253,40 +292,19 @@ def register_callbacks(bot):
                               and menu_label_key(e.raw_text) == "my_orders"))
     async def msg_my_orders(e):
         _clear_buy_state(e.sender_id)
-        uid = e.sender_id
-        rows = cur.execute("SELECT phone, country, price, date FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 10", (uid,)).fetchall()
-        if not rows:
-            return await e.respond(f"<blockquote>{PE_GIFT} <b>𝐌ʏ 𝐎ʀᴅᴇʀs</b></blockquote>\n\n<blockquote>𝐍ᴏ ᴏʀᴅᴇʀs ʏᴇᴛ. 𝐁ᴜʏ ʏᴏᴜʀ ғɪʀsᴛ ᴀᴄᴄᴏᴜɴᴛ!</blockquote>")
-        msg = f"<blockquote>{PE_GIFT} <b>𝐌ʏ 𝐎ʀᴅᴇʀs</b> (𝐋ᴀsᴛ 10)</blockquote>\n\n"
-        for ph, cn, pr, dt in rows:
-            flag = get_flag_by_country_name(cn)
-            msg += f"<blockquote>{flag} {cn} | <code>{ph}</code>\n{P_MONEY} {P_INR}{pr} | 📅 {dt[:10]}</blockquote>\n"
-        await e.respond(msg)
+        await send_my_orders(e)
+        raise events.StopPropagation
 
     @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
                               and menu_label_key(e.raw_text) == "balance"))
     async def msg_balance(e):
         _clear_buy_state(e.sender_id)
-        uid = e.sender_id
-        row = cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()
-        bal = row[0] if row else 0
-        msg = (f"<blockquote>{PE_CROWN} <b>𝐘ᴏᴜʀ 𝐁ᴀʟᴀɴᴄᴇ</b></blockquote>\n\n"
-               f"<blockquote>{P_MONEY} <b>𝐁ᴀʟᴀɴᴄᴇ:</b> <code>{P_INR}{bal}</code>\n"
-               f"💲 <b>𝐔𝐒𝐃:</b> <code>${to_usd(bal):.2f}</code></blockquote>")
-        await e.respond(msg)
+        await send_balance(e)
+        raise events.StopPropagation
 
     @bot.on(events.NewMessage(func=lambda e: e.is_private and not e.out
                               and menu_label_key(e.raw_text) == "support"))
     async def msg_support(e):
         _clear_buy_state(e.sender_id)
-        url = get_support_url()
-        from config import OWNER_URL, OWNER_USERNAME, SUPPORT_USERNAME
-        msg = (f"<blockquote>\U0001F4E9 <b>𝐒\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b</b></blockquote>\n\n"
-               f"<blockquote>𝐅\u1d0f\u0280 \u1d00\u0274\u028f \u026ass\u1d1c\u1d07s \u1d0f\u0280 \u01eb\u1d1c\u1d07s\u1d1b\u026a\u1d0f\u0274s, \u1d04\u1d0f\u0274\u1d1b\u1d00\u1d04\u1d1b \u1d0f\u1d1c\u0280 s\u1d1c\u1d18\u1d18\u1d0f\u0280\u1d1b:\n\n"
-               f"\U0001F465 <b>Support Group:</b> {SUPPORT_USERNAME}\n"
-               f"\U0001F451 <b>Owner:</b> {OWNER_USERNAME}</blockquote>")
-        btns = [
-            [style_url("\U0001F465 Support Group", url, "success", icon=6129732880529628243)],
-            [style_url("\U0001F451 Owner", OWNER_URL, "danger", icon=5409166771330494453)],
-        ]
-        await e.respond(msg, buttons=btns)
+        await send_support(e)
+        raise events.StopPropagation

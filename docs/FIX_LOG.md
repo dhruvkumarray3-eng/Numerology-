@@ -479,3 +479,49 @@ Panel route wqp/13 not sold for whatsapp
 Telegram ki hard limits (media caption 1024, text 4096) ko **pehle** check
 karo, exception ka intezaar mat karo. Aur expected fallback ko `warning` mat
 banao — warna asli errors log me dab jate hain.
+
+---
+
+## 4. v25 — Bulletproof reply-keyboard router (Profile / Stock still dead)
+
+**Symptom**
+
+v24 ne har plugin ke andar glyph-safe matcher laga diya tha, par user ne
+phir bhi report kiya ki **Profile** aur **Stock** buttons kaam nahi kar rahe.
+Matlab routing abhi bhi plugin **import/registration order** par depend kar
+rahi thi: `plugins.buy` ka catch-all country-search handler agar pehle
+register ho jaye to button tap usi ke paas chala jata tha aur bot
+`No country found matching '📊 𝐒ᴛᴏᴄᴋ'` bol deta tha.
+
+**Root cause**
+
+Telethon me handler priority = **registration order**. Per-plugin handlers
+apni jagah sahi the, par unke aage koi bhi broad `NewMessage` handler
+(country search, OTP text input, SMM search) match kar leta tha. Isliye fix
+ko "har plugin me" nahi, balki **sabse pehle ek single router** me karna
+tha jo har keyboard label ko canonical key se pakde aur `StopPropagation`
+raise kare.
+
+**Fix**
+
+- Naya `plugins/menu_router.py`: `menu_label_router` **sabse pehle**
+  register hota hai (`main.py` me `register_all_handlers` se pehle).
+  - `menu_label_key()` se exact folded match — sirf real keyboard labels.
+  - `_clear_pending(uid)` — adhure country/OTP state clear.
+  - `_dispatch()` har key ko sahi screen par bhejta hai.
+  - **Hamesha** `events.StopPropagation` — koi catch-all hijack nahi kar sakta.
+  - Log: `Menu route: '<label>' -> <key>` — server log se proof milta hai.
+- `plugins/callbacks.py`: `send_my_orders`, `send_balance`, `send_support`
+  module-level screen functions banaye taaki router aur inner handlers dono
+  same code call karein.
+- `main.py`: router registration + boot self-test
+  (`✅ Menu routing self-test: 12/12 labels mapped`) + `BUILD_TAG` v25.
+- Naya test `tests/test_menu_router_dispatch.py` (81 checks): real keyboard
+  ke **saare** labels router se match hote hain, normal text (US, Stockholm,
+  12345...) match **nahi** hota, har `_dispatch` target ka naam + signature
+  sahi hai, aur `main.py` router ko sabse pehle register karta hai.
+
+**Verify**
+
+- `12/12` keyboard labels router se match.
+- `48/48` test files pass, `compileall` clean.

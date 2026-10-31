@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # the hosting console immediately shows whether the container is running the
 # latest code.  If the console still prints an older tag, the container has
 # not pulled the new files yet.
-BUILD_TAG = "2026-10-31-menu-label-routing-v24"
+BUILD_TAG = "2026-10-31-menu-router-v25"
 
 os.makedirs("sessions", exist_ok=True)
 
@@ -190,6 +190,24 @@ async def main():
 
     # 4. Register all plugin handlers (start, buy, admin, callbacks, etc.)
     set_bot_instance(bot)  # lets background tasks (OTP poller) send messages
+
+    # 4a. Highest-priority reply-keyboard router.  Must be registered BEFORE
+    # every plugin so a catch-all (country search, OTP text input, ...) can
+    # never hijack a bottom-menu button tap like "Stock" or "Profile".
+    try:
+        from plugins.menu_router import register_menu_router, self_test as _menu_self_test
+        register_menu_router(bot)
+        _mapped, _total, _missing = _menu_self_test()
+        if _missing:
+            logger.warning("\u26a0\ufe0f Menu routing self-test: %s/%s labels mapped; unmapped=%s",
+                           _mapped, _total, _missing)
+        else:
+            logger.info("\u2705 Menu routing self-test: %s/%s labels mapped", _mapped, _total)
+    except asyncio.CancelledError:
+        raise
+    except BaseException as e:  # noqa: BLE001
+        logger.exception("\u26a0\ufe0f Menu router registration failed: %s. Continuing startup...", e)
+
     try:
         summary = register_all_handlers(bot)
         if isinstance(summary, dict) and summary.get("failed"):
