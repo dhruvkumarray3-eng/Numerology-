@@ -7,6 +7,7 @@ from datetime import datetime
 from utils.markup import format_user_amount
 from utils.levels import compute_level, tier_label
 from utils.i18n import t
+from utils.helpers import get_bot_username
 from utils.keyboards import style_btn, menu_label_key
 
 
@@ -18,8 +19,7 @@ async def profile_handler(bot, event):
     bal, dep, date, discount = row
     ref_count_row = cur.execute("SELECT COUNT(*) FROM users WHERE referred_by=?", (uid,)).fetchone()
     ref_count = ref_count_row[0] if ref_count_row else 0
-    me = await bot.get_me()
-    bot_username = me.username or ""
+    bot_username = await get_bot_username(bot)
     ref_link = f"https://t.me/{bot_username}?start=ref_{uid}" if bot_username else None
     disc_msg = f"\n{P_GIFT} Active Discount: <b>{discount}% OFF</b>" if discount > 0 else ""
     ref_block = (f"{P_USERS} <b>{t(uid, 'referral_link')}:</b>\n<code>{ref_link}</code>\n\n"

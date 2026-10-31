@@ -6,7 +6,7 @@ from config import P_NO, P_MONEY, P_INR, P_GIFT, P_USERS, PE_LOCATION, PE_GIFT, 
 from utils.states import session_buy_state, deposit_input, active_orders, waiting_proof
 from plugins.start import send_main_menu
 from utils.terms import get_terms_message
-from utils.helpers import check_channel_joined
+from utils.helpers import check_channel_joined, get_bot_username
 from utils.keyboards import (
     style_btn, style_url, SEARCH_EMOJI_ID,
     menu_label_key, is_menu_label,
@@ -119,8 +119,7 @@ async def show_more_menu(event):
 async def show_refer_menu(bot, event):
     import urllib.parse
     uid = event.sender_id
-    me = await bot.get_me()
-    bot_username = me.username or ""
+    bot_username = await get_bot_username(bot)
     ref_link = f"https://t.me/{bot_username}?start=ref_{uid}"
     ref_count = cur.execute("SELECT COUNT(*) FROM users WHERE referred_by=?", (uid,)).fetchone()[0]
     pct_row = cur.execute("SELECT value FROM settings WHERE key='ref_percent'").fetchone()

@@ -294,6 +294,35 @@ SMALL_CAPS_MAP = {
     'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ғ', 'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 's', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ'
 }
 
+async def safe_get_me(bot):
+    """Return the bot's own ``User``, or ``None`` — never raises.
+
+    ``bot.get_me()`` raises (or returns ``None``) whenever the session is
+    momentarily degraded: a reconnect in progress, a revoked token, a flood
+    wait.  Screens that merely want the bot's @username for a referral link
+    must not die because of that, so every caller goes through here.
+    """
+    try:
+        me = await bot.get_me()
+    except Exception as exc:  # noqa: BLE001 - a missing username is not fatal
+        logger.warning("get_me() unavailable: %s", exc)
+        return None
+    return me
+
+
+async def get_bot_username(bot):
+    """Public @username of the bot, or ``""`` when it has none/is unavailable."""
+    me = await safe_get_me(bot)
+    return (getattr(me, "username", None) or "") if me is not None else ""
+
+
+async def get_bot_display_name(bot, default="Store Bot"):
+    """Human-friendly bot name, falling back to ``default``."""
+    me = await safe_get_me(bot)
+    name = getattr(me, "first_name", None) if me is not None else None
+    return name or default
+
+
 def to_small_caps(text):
     if not text: return ""
     return "".join(SMALL_CAPS_MAP.get(c, c) for c in str(text))

@@ -581,3 +581,32 @@ nahi karta tha — wo **purana label** bhej raha tha.
 - `Stockholm` / `US` abhi bhi match **nahi** (country search intact) ✅
 - `menu_label_router` handler index 1 (sabse pehle) ✅
 - 48/48 test files pass, `compileall` clean ✅
+
+### 6. v27 — reply-keyboard screens no longer die when `get_me()` fails
+
+**Symptom:** tapping **Profile**, **Refer** or **Start** in the bottom reply
+keyboard could do nothing at all. The router's safety net caught the exception
+and answered "temporarily unavailable", so the button looked dead.
+
+**Root cause:** three screens dereferenced the result of `bot.get_me()` without
+a guard:
+
+* `plugins/profile.py` → `me = await bot.get_me()` then `me.username`
+* `plugins/callbacks.py` → same, in `show_refer_menu`
+* `plugins/start.py` → `me.first_name` **and** `me.id` (for the RDX ID)
+
+`get_me()` raises (or returns `None`) whenever the session is momentarily
+degraded — a reconnect in progress, a revoked token, a flood wait. Any of those
+turned a harmless "no referral link" case into an `AttributeError`.
+
+**Fix:** new `utils/helpers.py` wrappers `safe_get_me()`,
+`get_bot_username()` and `get_bot_display_name()`. They never raise: they log a
+warning and return `None` / `""` / a default name. All three screens now go
+through them, `start.py` falls back to a zero-padded bot id when `id` is
+missing, and a `None` entity from `get_entity()` is treated as "unavailable"
+instead of crashing.
+
+**Verify:** `tests/test_safe_get_me.py` (18 checks) plus an offline harness that
+invokes `menu_router._dispatch` for all **12** reply-keyboard labels with a
+deliberately broken `get_me()` — all 12 render. Full suite 49/49, button audit
+ALL CLEAN, boot log shows `✅ Menu routing self-test: 12/12 labels mapped`.
