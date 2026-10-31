@@ -349,3 +349,40 @@ Callback handler register hi nahi tha, aur config sirf env se aata tha.
 9. Har fix ke saath **regression test**.
 10. Deploy ke baad `BUILD_TAG` console me verify karo — warna stale code
     chal raha hota hai aur purane line numbers dikhte hain.
+
+---
+
+## 1. "Panel Reset (All Devices)" — lzt.market terminate session verified
+
+**Symptom**
+
+Buyer ke device list me `Panel Reset (All Devices)` button tha, par owner ko
+shak tha ki ye **asli me kaam karta hai ya nahi** — kyunki button render hona
+aur callback actually chalna do alag cheezein hain (pehle "Terminate Other
+Sessions" button bina handler ke render ho raha tha).
+
+**Root cause / verification**
+
+Kuch toota nahi tha, par koi test **handler** ko end-to-end cover nahi karta
+tha — sirf HTTP client (`utils/lzt.py`) ka contract test tha. Handler ke andar
+`from utils.lzt import lzt_client` **lazy import** hota hai, isliye
+`plugins.buy._lzt` patch karne se test silently asli API hit kar deta tha
+(401 aata tha) aur galat cheez "pass" ho sakti thi.
+
+**Fix (verification + hardening)**
+
+- Naya `tests/test_lzt_reset_handler.py` (25 checks): handler registered +
+  pattern-bound, button sirf `is_lzt` orders par, 200 → success card +
+  cache clear, 403 "Too new authorization" → reason + **live device list**,
+  manual order aur stale order par API call **nahi**.
+- Test `utils.lzt.lzt_client.telegram_reset_authorizations` ko patch karta hai
+  (jahan handler asli me import karta hai), `plugins.buy._lzt` ko nahi.
+- Endpoint docs se cross-check: `POST /{item_id}/telegram-reset-authorizations`
+  with 200 / 401 / 403 (NoPermission, TelegramFreshAuthorization) / 404 —
+  bilkul wahi jo `utils/lzt.py` handle karta hai.
+
+**Lesson**
+
+Jab handler ke andar **lazy import** ho, test me usi module ka object patch
+karo jahan se import hota hai. Warna test asli network call kar ke galat
+result de sakta hai.
