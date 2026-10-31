@@ -236,7 +236,7 @@ async def main():
         if not key:
             logger.warning(
                 "\u26a0\ufe0f LZT_API_KEY is not set \u2014 live market search "
-                "will return nothing. Set it in Admin \u2192 LZT Panel Settings "
+                "will return nothing. Set it in Admin \u2192 Panel Settings "
                 "or as the LZT_API_KEY env var."
             )
         else:

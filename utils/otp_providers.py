@@ -88,12 +88,12 @@ def _service(app_slug, provider):
 
 
 async def _tempora_countries(service):
-    """Live TemporaSMS country list for a service, bounded by a timeout."""
+    """Live Panel country list for a service, bounded by a timeout."""
     try:
         return await asyncio.wait_for(temporasms.get_countries(service),
                                       timeout=_CALL_TIMEOUT)
     except Exception as ex:
-        logger.warning(f"TemporaSMS country lookup failed for {service}: {ex}")
+        logger.warning(f"Panel country lookup failed for {service}: {ex}")
         return {"ok": False, "countries": [], "error": str(ex)}
 
 
@@ -243,7 +243,7 @@ async def buy_number(app_slug, country_iso="any"):
     # --- 5SIM (optional fallback) --------------------------------------------
     service = _service(app_slug, "5sim")
     if not FIVESIM_API_KEY:
-        return {"ok": False, "error": "No OTP provider configured. Set it in Admin → 🔐 OTP / SMS Key, or add TEMPORASMS_API_KEY (or FIVESIM_API_KEY) in your host variables."}
+        return {"ok": False, "error": "No OTP provider configured. Set it in Admin → 🔐 OTP / SMS Key, or set the panel API key in your host variables."}
     url = f"https://5sim.net/v1/user/buy/activation/{country_iso if country_iso != 'any' else 'russia'}/any/{service}"
     headers = {"Authorization": f"Bearer {FIVESIM_API_KEY}", "Accept": "application/json"}
     try:
@@ -272,7 +272,7 @@ async def get_otp(provider, order_id):
             if result.get("otp"):
                 return str(result["otp"])
         except Exception as ex:
-            logger.warning(f"TemporaSMS OTP poll failed: {ex}")
+            logger.warning(f"Panel OTP poll failed: {ex}")
         return None
 
     if provider == "5sim" and FIVESIM_API_KEY:

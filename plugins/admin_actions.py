@@ -122,7 +122,7 @@ async def render_search_settings(event):
                    icon=5409320020058584473),
          style_btn("♻️ Reset Defaults", "adm_ss_reset", "danger",
                    icon=6129888444245089008)],
-        [style_btn("🌐 LZT Panel Settings", "adm_lzt_settings", "primary",
+        [style_btn("🌐 Panel Settings", "adm_lzt_settings", "primary",
                    icon=5409166771330494453),
          style_btn("🔙 Back to Admin", "adm_adminmain", "danger",
                    icon=6129888444245089008)],
@@ -452,7 +452,7 @@ async def admin_actions(event):
         curr = get_bot_mode()
         nxt = 'panel' if curr == 'manual' else ('hybrid' if curr == 'panel' else 'manual')
         set_bot_mode(nxt)
-        mode_names = {'manual': '📂 Manual Mode', 'panel': '🌐 Panel (LZT) Mode', 'hybrid': '⚡ Hybrid Mode'}
+        mode_names = {'manual': '📂 Manual Mode', 'panel': '🌐 Panel Mode', 'hybrid': '⚡ Hybrid Mode'}
         await event.answer(f"Switched to {mode_names[nxt]}", alert=True)
         class FakeEvent: chat_id = chat; sender_id = uid
         await admin_panel_handler(FakeEvent())
@@ -560,7 +560,7 @@ async def admin_actions(event):
                f"🔑 <b>𝐋𝐙𝐓 𝐀𝐏𝐈 𝐊ᴇʏ:</b> <code>{masked_key}</code>\n"
                f"💹 <b>𝐑𝐔𝐁 𝐭𝐨 𝐈𝐍𝐑 𝐑ᴀᴛᴇ:</b> ₹{rub}\n"
                f"💰 <b>𝐏ʀᴏғɪᴛ 𝐌ᴀʀɢɪɴ (𝐈𝐍𝐑):</b> {_mk_desc}\n\n"
-               f"<i>💡 In Panel/Hybrid mode, stock is fetched from LZT Market in real-time.</i></blockquote>")
+               f"<i>💡 In Panel/Hybrid mode, stock is fetched from the panel in real-time.</i></blockquote>")
                
         btns = [
             [style_btn("🔑 Set API Key", "adm_setlztkey", "primary", icon=5409098988156629257),
@@ -573,7 +573,7 @@ async def admin_actions(event):
         return await event.edit(msg, buttons=btns)
         
     elif action_data == "lzttest" and has_perm(uid, 'p_settings'):
-        await event.answer("Connecting to LZT...", alert=False)
+        await event.answer("Connecting to Panel...", alert=False)
         ok, res_msg = await lzt_client.check_connection()
 
         # Also run a real market search so the admin can see whether live
@@ -593,7 +593,7 @@ async def admin_actions(event):
                 "access": "\U0001F6A7 market access required",
                 "rate": "\u23F1\uFE0F rate limited",
                 "bad": "\u26A0\uFE0F bad parameters",
-                "server": "\U0001F6A7 LZT server error",
+                "server": "\U0001F6A7 Panel server error",
             }.get(kind, "")
             if items:
                 cheapest = min(float(it.get("price_rub") or 0) for it in items)
@@ -617,7 +617,7 @@ async def admin_actions(event):
                          f"<i>HTTP {status} \u00B7 totalItems={total}</i>")
         except asyncio.TimeoutError:
             extra = ("\n\n\U0001F50E <b>Market Search Test:</b> "
-                     "\u23f1\ufe0f timed out \u2014 LZT is slow right now, "
+                     "\u23f1\ufe0f timed out \u2014 the panel is slow right now, "
                      "please retry.")
         except Exception as exc:
             extra = (f"\n\n\U0001F50E <b>Market Search Test:</b> "
@@ -1422,8 +1422,8 @@ async def admin_actions(event):
 
             elif action_data == "setlztkey" and has_perm(uid, 'p_settings'):
                 resp = await get_reply(
-                    "🔑 <b>Enter LZT Access Token:</b>\n\n"
-                    "<i>lolz.live → Account → API → open your "
+                    "🔑 <b>Enter Panel Access Token:</b>\n\n"
+                    "<i>the panel → Account → API → open your "
                     "client → <b>Get Access Token</b> → tick the "
                     "<b>market</b> scope → copy the long token "
                     "(it starts with <code>eyJ</code> and has two dots).</i>\n\n"
@@ -1440,7 +1440,7 @@ async def admin_actions(event):
                         f"{P_NO} <b>That is not an Access Token.</b>\n\n"
                         f"{fmt_reason}\n\n"
                         "<b>Where to get it:</b>\n"
-                        "1. Open <b>lolz.live/account/api</b>\n"
+                        "1. Open the panel \u2192 Account \u2192 API\n"
                         "2. Click your client (e.g. <i>Mystic</i>)\n"
                         "3. Press <b>Get Access Token</b>\n"
                         "4. Tick <b>Market: search, view, purchase, put up for "
@@ -1464,7 +1464,7 @@ async def admin_actions(event):
                     verdict = f"\n\n⚠️ Could not verify the key: {html.escape(str(exc))}"
 
                 await conv.send_message(
-                    f"{P_YES} <b>LZT API Key saved.</b>{verdict}"
+                    f"{P_YES} <b>Panel API Key saved.</b>{verdict}"
                 )
 
             elif action_data == "setrubrate" and has_perm(uid, 'p_settings'):

@@ -257,11 +257,11 @@ async def cmd_panelbalance(e):
     result = await temporasms.get_balance()
     if not result.get("ok"):
         return await e.reply(
-            "⚠️ <b>TemporaSMS balance unavailable</b>\n\n"
+            "⚠️ <b>Panel balance unavailable</b>\n\n"
             f"<code>{html.escape(str(result.get('error')))}</code>\n\n"
             "Check Admin → 🔐 OTP / SMS Key (or <code>TEMPORASMS_API_KEY</code> / <code>TEMPORASMS_BASE_URL</code>).")
     await e.reply(
-        "<blockquote expandable>💼 <b>TemporaSMS Wallet</b>\n\n"
+        "<blockquote expandable>💼 <b>Panel Wallet</b>\n\n"
         f"💰 Balance: <b>{result['currency']} {result['balance']:,.2f}</b>\n"
         f"🔑 Key: <b>{'configured ✅' if temporasms.configured() else 'missing ❌'}</b></blockquote>"
     )

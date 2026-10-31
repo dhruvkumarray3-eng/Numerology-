@@ -143,7 +143,7 @@ def _admin_help_text():
         "⚙️ <b>ꜱᴇᴛᴛɪɴɢꜱ</b>\n"
         "/admin — ғᴜʟʟ ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ (ꜱᴛᴏᴄᴋ, ʙᴀɴ, ʙᴀʟᴀɴᴄᴇ, ʙʀᴏᴀᴅᴄᴀꜱᴛ, ʟᴇғᴛ...)\n"
         "/setchangefee <n> — ɴᴜᴍʙᴇʀ ᴄʜᴀɴɢᴇ ғᴇᴇ\n"
-        "/lztmargin <n> • /setlztmargin <n> — ʟᴢᴛ ᴍᴀʀᴋᴜᴘ ᴘᴇʀ ɪᴛᴇᴍ\n"
+        "/lztmargin <n> • /setlztmargin <n> — panel markup per item\n"
         "/setsticker — ꜱᴇᴛ ᴛʜᴇ ꜱᴛᴀʀᴛ ꜱᴛɪᴄᴋᴇʀ\n"
         "/setpack flags|apps|misc [pack-link] — learn a premium emoji pack per role\n"
         "/packsync [flags|apps|misc] — re-sync one or all emoji packs\n"

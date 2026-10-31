@@ -3,7 +3,7 @@
 The owner specified exactly four servers on the Servers screen:
 
     Server-1  Basic TG Account      (mode: bulk)
-    Server-2  LZT Connected         (mode: nonspam)
+    Server-2  Panel                 (mode: nonspam)
     Server-3  TG Number Change      (mode: numchange)
     Server-4  Buy WhatsApp Account  (mode: whatsapp)
 
@@ -34,7 +34,7 @@ PASS = 0
 
 EXPECTED = [
     ("Server-1 (Basic TG Account)", "bulk"),
-    ("Server-2 (LZT Connected)", "nonspam"),
+    ("Server-2 (Panel)", "nonspam"),
     ("Server-3 (TG Number Change)", "numchange"),
     ("Server-4 (Buy WhatsApp Account)", "whatsapp"),
 ]
