@@ -504,6 +504,16 @@ def register_smm(bot):
                 return await e.answer(f"❌ Insufficient Balance! Required: ₹{total_price}, Balance: ₹{bal_row[0] if bal_row else 0}", alert=True)
                 
             cur.execute("UPDATE users SET balance = balance - ? WHERE user_id=? AND balance >= ?", (total_price, uid, total_price))
+            if cur.rowcount != 1:
+                db.rollback()
+                current = cur.execute(
+                    "SELECT balance FROM users WHERE user_id=?", (uid,)
+                ).fetchone()
+                return await e.answer(
+                    f"❌ Insufficient Balance! Required: ₹{total_price}, "
+                    f"Balance: ₹{current[0] if current else 0}",
+                    alert=True,
+                )
             db.commit()
             
         loading = await e.reply("⏳ <i>Submitting order to SMM Server...</i>")

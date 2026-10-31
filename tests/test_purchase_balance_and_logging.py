@@ -215,6 +215,19 @@ def test_product_panel_debit_is_conditional_and_before_provider_call():
     assert "UPDATE users SET balance = balance + ? WHERE user_id = ?" in source[provider:provider + 700]
 
 
+def test_manual_and_smm_purchase_debits_are_checked():
+    manual = (ROOT / "utils" / "manual_stock.py").read_text(encoding="utf-8")
+    manual_debit = manual.index("UPDATE users SET balance = balance - ?")
+    assert "WHERE user_id=? AND balance >= ?" in manual[manual_debit:manual_debit + 180]
+    assert "if charged.rowcount != 1" in manual[manual_debit:manual_debit + 500]
+
+    smm = (ROOT / "plugins" / "smm.py").read_text(encoding="utf-8")
+    smm_debit = smm.index("UPDATE users SET balance = balance - ?")
+    provider = smm.index("create_smm_order(service_id, link, qty, server)")
+    assert "if cur.rowcount != 1" in smm[smm_debit:provider]
+    assert smm_debit < provider
+
+
 if __name__ == "__main__":
     tests = [
         test_zero_balance_never_calls_provider,
@@ -222,6 +235,7 @@ if __name__ == "__main__":
         test_success_debits_and_records_order_and_log,
         test_purchase_logger_continues_after_channel_failure_and_masks_phone,
         test_product_panel_debit_is_conditional_and_before_provider_call,
+        test_manual_and_smm_purchase_debits_are_checked,
     ]
     for test in tests:
         test()

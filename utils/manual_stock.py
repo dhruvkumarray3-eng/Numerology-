@@ -184,10 +184,19 @@ def purchase_manual_account(uid, account_id):
             db.rollback()
             return {"ok": False, "error": "race"}
 
-        db.execute(
-            "UPDATE users SET balance = balance - ? WHERE user_id=?",
-            (price, uid),
+        charged = db.execute(
+            "UPDATE users SET balance = balance - ? "
+            "WHERE user_id=? AND balance >= ?",
+            (price, uid, price),
         )
+        if charged.rowcount != 1:
+            db.rollback()
+            latest = db.execute(
+                "SELECT balance FROM users WHERE user_id=?", (uid,)
+            ).fetchone()
+            current_balance = float(latest[0]) if latest and latest[0] is not None else 0.0
+            return {"ok": False, "error": "insufficient", "balance": current_balance,
+                    "price": price}
         db.commit()
     except Exception as exc:  # pragma: no cover - defensive
         db.rollback()
