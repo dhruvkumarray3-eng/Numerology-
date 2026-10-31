@@ -131,8 +131,13 @@ check("no visible 'menu ready' notice is sent",
       "use the buttons below the message box" not in start_src)
 check("install does not leave a visible caption",
       "\u2328\ufe0f <b>" not in start_src)
-check("install is skipped when already installed",
-      "if not force and (uid in _menu_installed or is_menu_installed(uid)):" in start_src)
+# The keyboard lives on the user's phone, so a stale layout must be replaced.
+# Install is skipped only when the user already holds the *current* version.
+check("install is skipped when already installed at current version",
+      "if not force and not stale and (uid in _menu_installed or is_menu_installed(uid)):"
+      in start_src)
+check("install re-sends a stale keyboard",
+      "get_menu_version(uid) < MENU_VERSION" in start_src)
 check("install remembers the keyboard per user in the DB",
       "set_menu_installed(uid, 1)" in start_src)
 check("close handler forgets the install",

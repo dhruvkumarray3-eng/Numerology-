@@ -4,8 +4,10 @@ from telethon.errors import MessageNotModifiedError
 from database import (
     cur, db, ensure_user, is_user_banned, is_bot_online, is_admin,
     get_support_url, get_start_image_url, is_menu_installed, set_menu_installed,
+    get_menu_version, set_menu_version,
 )
-from utils.keyboards import get_persistent_menu, get_terms_buttons, get_join_buttons, style_btn, style_url
+from utils.keyboards import (get_persistent_menu, get_terms_buttons, get_join_buttons,
+                             style_btn, style_url, MENU_VERSION)
 from utils.terms import get_terms_message
 from utils.helpers import check_channel_joined, to_small_caps, send_preview_on_top
 from config import (PE_FLOWER, PE_LOCATION, P_OFF, P_INR, TERMS_URL, UPDATES_URL,
@@ -42,7 +44,15 @@ async def install_persistent_menu(bot, event, uid, force=False):
     when they want to type.  We deliberately do *not* pin it with
     ``persistent=True`` - that would stop the user from ever hiding it.
     """
-    if not force and (uid in _menu_installed or is_menu_installed(uid)):
+    # A reply keyboard lives on the *client*, so a user who installed an older
+    # layout keeps tapping the old labels until we send a new one.  Re-install
+    # whenever the stored layout version is behind MENU_VERSION - that is what
+    # finally refreshes a stale "\u2119\u0280\u1d0f\u0493\u026a\u029f\u1d07" keyboard.
+    try:
+        stale = get_menu_version(uid) < MENU_VERSION
+    except Exception:
+        stale = False
+    if not force and not stale and (uid in _menu_installed or is_menu_installed(uid)):
         return None
 
     chat = getattr(event, "chat_id", None) if event is not None else None
@@ -65,6 +75,10 @@ async def install_persistent_menu(bot, event, uid, force=False):
 
     _menu_installed.add(uid)
     set_menu_installed(uid, 1)
+    try:
+        set_menu_version(uid, MENU_VERSION)
+    except Exception:
+        pass
     return carrier
 
 

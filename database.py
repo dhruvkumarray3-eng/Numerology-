@@ -407,6 +407,21 @@ def _migrate_user_prefs():
     except Exception as e:
         logger.warning(f"User prefs migration skipped: {e}")
 
+    # Reply-keyboard version.  Telegram keeps the old keyboard on the user's
+    # screen until the bot sends a new one, so we must be able to tell when a
+    # user is still holding a stale layout (that is what kept "Profile" dead:
+    # the old label used U+2119 which the fold map did not recognise).
+    try:
+        cur.execute("SELECT menu_version FROM users LIMIT 1")
+    except Exception:
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN menu_version INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        db.commit()
+    except Exception as e:
+        logger.warning(f"User prefs migration skipped: {e}")
+
 _migrate_user_prefs()
 
 def is_menu_installed(uid):
@@ -424,6 +439,24 @@ def set_menu_installed(uid, flag=1):
         db.commit()
     except Exception as e:
         logger.warning(f"Could not persist menu_installed for {uid}: {e}")
+
+def get_menu_version(uid):
+    """Stored reply-keyboard version for this user (0 = never installed)."""
+    try:
+        row = cur.execute("SELECT menu_version FROM users WHERE user_id=?", (uid,)).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+    except Exception:
+        return 0
+
+
+def set_menu_version(uid, version):
+    """Remember which keyboard layout version this user is holding."""
+    try:
+        cur.execute("UPDATE users SET menu_version=? WHERE user_id=?", (int(version), uid))
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Could not persist menu_version for {uid}: {e}")
+
 
 def get_user_currency(uid):
     try:
