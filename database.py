@@ -698,7 +698,7 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
     if mode == 'nonspam':
         row = cur.execute("SELECT price FROM spamfree_prices WHERE country=?", (country,)).fetchone()
         if row and row[0] and row[0] > 0:
-            return int(row[0]) + add_amount
+            return int(round(_apply_owner_margin(int(row[0]) + add_amount, mode)))
 
     # 2. SPAM / USED MODE:
     # Retain the previous cheap pricing from base auto_prices table
@@ -710,7 +710,8 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
         if row and row[0] and row[0] > 0:
             base = int(row[0])
             total = base + add_amount
-            return max(int(total * 0.55), 15)
+            discounted = max(int(total * 0.55), 15)
+            return int(round(_apply_owner_margin(discounted, mode)))
         
         # Dynamic fallback if no auto_price row.
         # Spam accounts are already the cheapest items on LZT, so we do NOT
@@ -723,7 +724,7 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
     row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (country, str(year))).fetchone()
     if row and row[0] and row[0] > 0:
         base = int(row[0])
-        return adjust_price_by_mode(base, mode)
+        return int(round(_apply_owner_margin(adjust_price_by_mode(base, mode), mode)))
     
     # 4. Get base country price (set with year='Common' or 'ALL')
     row_all = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year IN ('Common', 'ALL')", (country,)).fetchone()
@@ -731,7 +732,7 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
 
     if base_price is not None:
         total = base_price + add_amount
-        return adjust_price_by_mode(total, mode)
+        return int(round(_apply_owner_margin(adjust_price_by_mode(total, mode), mode)))
         
     # 5. Dynamic calculation from LZT RUB price if no base price is found.
     # The owner markup is applied exactly ONCE here:

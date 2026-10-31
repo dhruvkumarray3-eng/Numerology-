@@ -31,7 +31,7 @@ from config import (
 )
 from utils.keyboards import style_btn, style_url, matches_menu, is_menu_label, SEARCH_EMOJI_ID
 from utils.livecount import register_live, unregister_live
-from utils.markup import format_dual_from_inr, format_dual_price
+from utils.markup import apply_server_markup, format_dual_from_inr, format_dual_price
 from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT, get_lzt_code, post_buy_spam_ok
 from utils import stock_details as stock_card
@@ -676,7 +676,11 @@ async def show_years(event, mode, country):
 
     for y, count, price in rows:
         year_options.append({
-            'year': y, 'count': count, 'price': price, 'source': 'local'
+            # Manual stock price is treated as the panel/base rate too. The
+            # same server markup used by live LZT prices must be applied so a
+            # configured fixed profit is never bypassed for local stock.
+            'year': y, 'count': count,
+            'price': int(round(apply_server_markup(price, mode))), 'source': 'local'
         })
 
     lzt_used = False
