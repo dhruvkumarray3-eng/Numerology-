@@ -14,8 +14,8 @@ Covered:
   1. The handler is registered on the bot.
   2. The button only appears for orders bought from the Panel (is_lzt+item_id).
   3. Success (200) edits the card, clears the cached device list, no crash.
-  4. Failure (403 "Too new authorization") shows the reason AND the live
-     device list, so the buyer can still terminate per-device.
+  4. Failure shows a generic customer-safe message AND the live device list,
+     so the buyer can still terminate per-device without raw API details.
   5. A non-Panel order is refused politely instead of calling the API.
   6. A stale/inactive order is refused without touching the network.
 """
@@ -228,7 +228,7 @@ def test_success():
 
 
 # ---------------------------------------------------------------------------
-# 4. 403 "Too new authorization" -> reason + live device list
+# 4. 403 "Too new authorization" -> generic error + live device list
 # ---------------------------------------------------------------------------
 def test_fresh_authorization_failure():
     setup_order()
@@ -250,8 +250,11 @@ def test_fresh_authorization_failure():
     asyncio.run(buy.cb_lzt_reset(ev))
 
     check("failure raises an alert", bool(ev.answers), ev.answers)
-    check("alert carries the 24h reason",
-          any("24 hours" in (t or "") for t, _ in ev.answers), ev.answers)
+    check("alert uses generic Panel wording",
+          any("The Panel could not reset sessions" in (t or "")
+              for t, _ in ev.answers), ev.answers)
+    check("alert hides the raw API reason",
+          all("24 hours" not in (t or "") for t, _ in ev.answers), ev.answers)
     check("failure edits the card", ev.edited, ev.text[:80])
     check("failure card mentions reset failed",
           "PANEL RESET FAILED" in _plain(ev.text), ev.text[:200])

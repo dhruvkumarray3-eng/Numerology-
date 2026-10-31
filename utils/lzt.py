@@ -546,9 +546,7 @@ def friendly_buy_error(status, errors):
         return "The market refused this purchase (forbidden). Please try another account."
     if status == 429:
         return "Too many requests to the market. Please wait a few seconds and try again."
-    if raw:
-        return raw
-    return f"Purchase failed (HTTP {status})."
+    return "The Panel could not complete this purchase. Please try again later."
 
 
 def post_buy_spam_ok(mode, post_sb):

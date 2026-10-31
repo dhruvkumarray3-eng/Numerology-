@@ -34,6 +34,15 @@ SERVER_ICONS = {
     "allotp": "\U0001F9E9",
 }
 
+PUBLIC_SERVER_LABELS = {
+    "bulk": "Accounts Panel",
+    "nonspam": "Accounts Panel",
+    "spam": "Accounts Panel",
+    "numchange": "TG Number Change",
+    "whatsapp": "WhatsApp Numbers",
+    "allotp": "All Apps OTP",
+}
+
 # One-line explanation under each server name on the Servers screen.
 SERVER_BLURBS = {
     "bulk": "Live Telegram accounts, standard stock.",
@@ -133,20 +142,21 @@ async def show_servers(event):
 
     for idx, srv in enumerate(servers, start=1):
         mode = srv["mode"]
+        display_name = PUBLIC_SERVER_LABELS.get(mode, "Panel")
         icon = SERVER_ICONS.get(mode, "\U0001F4E6")
         blurb = SERVER_BLURBS.get(mode, "")
         if srv["status"] == "on":
-            lines.append(f"{icon} <b>{html.escape(srv['name'])}</b> \u2014 <b>ONLINE</b>")
+            lines.append(f"{icon} <b>{html.escape(display_name)}</b> \u2014 <b>ONLINE</b>")
             if blurb:
                 lines.append(f"   <i>{html.escape(blurb)}</i>")
-            btns.append([style_btn(f"{icon} {srv['name']}",
+            btns.append([style_btn(f"{icon} {display_name}",
                                    f"srv_open|{mode}", "success",
                                    icon=5409098988156629257)])
         else:
-            lines.append(f"{icon} <b>{html.escape(srv['name'])}</b> \u2014 <b>\U0001F534 OFF</b>")
+            lines.append(f"{icon} <b>{html.escape(display_name)}</b> \u2014 <b>\U0001F534 OFF</b>")
             if blurb:
                 lines.append(f"   <i>{html.escape(blurb)}</i>")
-            btns.append([style_btn(f"{icon} {srv['name']} (OFF)",
+            btns.append([style_btn(f"{icon} {display_name} (OFF)",
                                    f"srv_off|{idx}", "danger", icon="warning")])
 
     lzt_badge = (PE_CHECK + " Connected") if lzt_ok else ("\u26A0\uFE0F Key missing")
@@ -193,7 +203,7 @@ async def show_num_change(event):
         f"Send the <b>phone number</b> you want to migrate to, in international format "
         f"(e.g. <code>+919876543210</code>).\n\n"
         f"<i>We will request a temporary number from the panel and start the Telegram "
-        f"login-code flow. Add it in Admin → 🔐 OTP / SMS Key, or set TEMPORASMS_API_KEY in your host variables.</i></blockquote>"
+        f"login-code flow. If the Panel is unavailable, please contact support.</i></blockquote>"
     )
     btns = [[style_btn("🔙 Back", b"servers_menu", "danger", icon=6129812419028982717)]]
     if isinstance(event, events.CallbackQuery.Event):

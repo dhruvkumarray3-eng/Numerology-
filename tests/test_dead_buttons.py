@@ -8,9 +8,8 @@ couple of specific bugs that were found and fixed:
   * ``plugins/deposit.py`` had two buttons whose label was double-escaped,
     so they rendered the literal text ``\\u274C \\U0001D402...`` instead of
     "❌ ᴄᴀɴᴄᴇʟ".
-  * ``plugins/buy.py`` passed a payment URL to ``style_btn`` (an inline
-    callback button), so tapping "Buy Market Access" did nothing.  It now
-    uses ``style_url``.
+  * Provider-specific access links are not shown in customer-facing account
+    cards, so vendor names and checkout destinations stay private.
   * ``cancel_order|`` and ``get_qr_`` buttons had no handler at all.
 """
 import ast
@@ -151,11 +150,11 @@ def main():
 
     buy_src = open(os.path.join(ROOT, "plugins", "buy.py"),
                    encoding="utf-8").read()
-    check("market access button is a real URL button",
-          'style_url("\\U0001F4B3 Buy Market Access"' in buy_src)
-    check("buy.py imports style_url",
-          any("from utils.keyboards import" in ln and "style_url" in ln
-              for ln in buy_src.splitlines()))
+    check("provider access link is hidden from buyers",
+          "lolz.live" not in buy_src and "Buy Market Access" not in buy_src)
+    check("buy.py does not import provider URL helper",
+          not any("from utils.keyboards import" in ln and "style_url" in ln
+                  for ln in buy_src.splitlines()))
     check("cancel_order handler registered", "cb_cancel_order" in buy_src)
     check("get_qr handler registered", "cb_get_qr" in buy_src)
 

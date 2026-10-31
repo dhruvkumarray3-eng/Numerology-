@@ -559,6 +559,14 @@ def register_smm(bot):
         else:
             # SMM Order failed -> refund user
             err_msg = api_res.get('error', 'API submission failed')
+            logger.warning("SMM panel order failed for user %s: %s", uid, err_msg)
             cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (total_price, uid))
             db.commit()
-            await loading.edit(f"<blockquote>{P_NO} <b>❌ 𝐎ʀᴅᴇʀ 𝐅ᴀɪʟᴇᴅ!</b>\n\n{html.escape(str(err_msg))}\n\n𝐘ᴏᴜʀ ᴍᴏɴᴇʏ (<b>{P_INR}{total_price}</b>) ʜᴀs ʙᴇᴇɴ <b>ʀᴇғᴜɴᴅᴇᴅ</b>.</blockquote>", buttons=[[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐒𝐌𝐌", b"smm_menu_main", "primary", icon="back")]])
+            await loading.edit(
+                f"<blockquote>{P_NO} <b>❌ 𝐎ʀᴅᴇʀ 𝐅ᴀɪʟᴇᴅ!</b>\n\n"
+                "The Panel could not complete this order. Your money has been "
+                "refunded. Please try again later.\n\n"
+                f"𝐘ᴏᴜʀ ᴍᴏɴᴇʏ (<b>{P_INR}{total_price}</b>) ʜᴀs ʙᴇᴇɴ "
+                "<b>ʀᴇғᴜɴᴅᴇᴅ</b>.</blockquote>",
+                buttons=[[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐒𝐌𝐌", b"smm_menu_main", "primary", icon="back")]],
+            )

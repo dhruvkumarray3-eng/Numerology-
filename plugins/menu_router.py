@@ -185,9 +185,8 @@ def register_menu_router(bot):
             logger.error("Menu route %s failed: %s", key, exc, exc_info=True)
             try:
                 await event.respond(
-                    f"\u26a0\ufe0f <b>{key.replace('_', ' ').title()}</b> is "
-                    f"temporarily unavailable.\n<code>{type(exc).__name__}</code> "
-                    f"\u2014 please try again in a moment."
+                    "\u26a0\ufe0f This section is temporarily unavailable. "
+                    "Please try again in a moment."
                 )
             except Exception:
                 pass

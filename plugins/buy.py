@@ -29,7 +29,7 @@ from config import (
     P_NO, P_YES, P_INR, P_TIME, P_FLAG, P_OTP, P_2FA, P_PHONE, AUTO_CANCEL_SECONDS,
     OTP_REGEX, bot, logger, API_ID, API_HASH, LZT_API_KEY, USDT_TO_INR
 )
-from utils.keyboards import style_btn, style_url, matches_menu, is_menu_label, SEARCH_EMOJI_ID
+from utils.keyboards import style_btn, matches_menu, is_menu_label, SEARCH_EMOJI_ID
 from utils.livecount import register_live, unregister_live
 from utils.markup import apply_server_markup, format_dual_from_inr, format_dual_price
 from utils.states import active_orders, session_buy_state, get_user_lock
@@ -461,7 +461,10 @@ async def _no_stock_card(event, mode=None, country=None, reason=None):
 
     reason_line = ""
     if reason:
-        reason_line = f"\n\n\u26a0\ufe0f <i>{html.escape(str(reason))}</i>"
+        reason_line = (
+            "\n\n\u26a0\ufe0f <i>The Panel is temporarily unavailable. "
+            "Please try again later.</i>"
+        )
 
     msg = (
         "<blockquote expandable>\U0001F4E6 <b>Stock Update</b>\n\n"
@@ -489,12 +492,9 @@ async def _no_stock_card(event, mode=None, country=None, reason=None):
 async def _lzt_not_configured_card(event, country=None, mode=None):
     """Shown when the Panel key is missing, so the admin knows why."""
     msg = (
-        "<blockquote expandable>\U0001F511 <b>Market Key Missing</b>\n\n"
-        "\u26a0\ufe0f The <b>panel API key</b> is not configured, so live "
-        "accounts cannot be fetched.\n\n"
-        "<b>Admin fix:</b> open the admin panel \u2192 <b>Panel Settings</b> and save "
-        "a key with <code>market</code> scope, or set it as an environment "
-        "variable.</blockquote>"
+        "<blockquote expandable>\U0001F511 <b>Panel Unavailable</b>\n\n"
+        "\u26a0\ufe0f Live accounts are temporarily unavailable. "
+        "Please try again later or contact support.</blockquote>"
     )
     btns = [
         [style_btn("\U0001F504 Try Again", f"pg_c|{mode or 'bulk'}|1", "primary", icon=5409320020058584473)],
@@ -509,28 +509,11 @@ async def _lzt_not_configured_card(event, country=None, mode=None):
 
 
 async def _lzt_key_invalid_card(event, country=None, mode=None, detail=None):
-    """Shown when LZT rejects the stored token (401/403).
-
-    Without this the bot fell back to "No live accounts found", which made an
-    expired API token look like an empty market.
-    """
-    detail_line = ""
-    if detail:
-        detail_line = (
-            "\n\n<i>" + html.escape(str(detail)[:300]) + "</i>"
-        )
+    """Show a generic customer-safe message for panel authentication errors."""
     msg = (
-        "<blockquote expandable>\U0001F511 <b>Market Key Invalid</b>\n\n"
-        "\u274c The panel rejected the saved <b>API key</b>, so live accounts "
-        "cannot be fetched right now.\n\n"
-        "<b>Admin fix:</b>\n"
-        "1. Open the panel \u2192 Account \u2192 API \u2192 "
-        "<b>Get Access Token</b>\n"
-        "2. Tick the <b>market</b> scope\n"
-        "3. Copy the fresh token \u2192 Admin Panel \u2192 "
-        "<b>Panel Settings</b> \u2192 <b>Set API Key</b>\n"
-        "4. Press <b>Test / Balance</b> to confirm"
-        f"{detail_line}</blockquote>"
+        "<blockquote expandable>\U0001F511 <b>Panel Unavailable</b>\n\n"
+        "\u26a0\ufe0f Live accounts are temporarily unavailable. "
+        "Please try again later or contact support.</blockquote>"
     )
     btns = [
         [style_btn("\U0001F504 Try Again", f"pg_c|{mode or 'bulk'}|1", "primary",
@@ -547,34 +530,13 @@ async def _lzt_key_invalid_card(event, country=None, mode=None, detail=None):
 
 
 async def _lzt_access_card(event, country=None, mode=None, detail=None):
-    """Shown when the key is valid but the account cannot use Market search.
-
-    LZT requires **200 sympathies or a paid monthly subscription** for the
-    Market API.  Until now this 403 was reported as "API key invalid", which
-    sent the admin chasing a perfectly good token while every search came back
-    empty.
-    """
-    detail_line = ""
-    if detail:
-        detail_line = "\n\n<i>" + html.escape(str(detail)[:300]) + "</i>"
+    """Show a generic customer-safe message for panel access errors."""
     msg = (
-        "<blockquote expandable>\U0001F6A7 <b>Market Access Required</b>\n\n"
-        "\u2705 Your <b>API key is valid</b> \u2014 the bot connected and read "
-        "your balance fine.\n\n"
-        "\u26a0\ufe0f But the panel is refusing <b>market search</b> for this account. "
-        "It requires either:\n"
-        "\u2022 <b>200 sympathies</b> on the panel, or\n"
-        "\u2022 an active <b>paid monthly subscription</b>\n\n"
-        "<b>Fix:</b>\n"
-        "1. Open the panel \u2192 buy the Market API subscription "
-        "(or collect 200 sympathies)\n"
-        "2. Come back and press <b>Try Again</b>\n\n"
-        "<i>Search starts working the moment access is active \u2014 no code "
-        "change needed.</i>"
-        f"{detail_line}</blockquote>"
+        "<blockquote expandable>\U0001F6A7 <b>Panel Unavailable</b>\n\n"
+        "\u26a0\ufe0f Live accounts are temporarily unavailable. "
+        "Please try again later or contact support.</blockquote>"
     )
     btns = [
-        [style_url("\U0001F4B3 Buy Market Access", "https://lolz.live/payment/method?service_id=8&service_type=user_upgrade", "success", icon=5409320020058584473)],
         [style_btn("\U0001F504 Try Again", f"pg_c|{mode or 'bulk'}|1", "primary", icon=5409320020058584473)],
         [style_btn("\U0001F519 Back to Menu", "buy_menu_main", "danger", icon=6129812419028982717)],
     ]
@@ -1064,11 +1026,9 @@ async def process_purchase(event, mode, country, year, price_str):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
                 return await event.edit(
-                    f"❌ <b>Purchase failed.</b>\n\n"
-                    f"{last_err or 'No usable account session was returned.'}\n\n"
+                    "❌ <b>Panel could not complete this purchase.</b>\n\n"
                     "Your money has been refunded.\n"
-                    "<i>Tip: try again or pick another country — dead "
-                    "listings are removed from the market continuously.</i>"
+                    "<i>Please try again later or choose another country.</i>"
                 )
 
             item_id = bought_info['item_id']
@@ -1839,7 +1799,8 @@ async def _show_sessions(event, phone, note=None):
     if err:
         msg = (
             "<blockquote expandable>❌ <b>Could not load devices</b>\n\n"
-            f"{html.escape(str(err))}</blockquote>"
+            "The Panel could not load the device list. Please try again later."
+            "</blockquote>"
         )
         btns = [
             [style_btn(f"🔄 {_sty('Try Again')}", f"reset_sessions|{phone}", "primary",
@@ -2174,7 +2135,10 @@ async def cb_lzt_reset(event):
         from utils.lzt import lzt_client as _lzt
     except Exception as exc:  # pragma: no cover - defensive
         logger.error(f"Could not import lzt_client: {exc}")
-        return await event.answer(f"❌ Panel client unavailable: {exc}", alert=True)
+        return await event.answer(
+            "❌ The Panel is temporarily unavailable. Please try again later.",
+            alert=True,
+        )
 
     ok, message = await _lzt.telegram_reset_authorizations(item_id)
 
@@ -2186,7 +2150,7 @@ async def cb_lzt_reset(event):
             "<blockquote expandable>"
             f"🌐 <b>{_sty('PANEL RESET DONE')}</b>\n\n"
             f"📱 <b>{_sty('Phone')}:</b> <code>+{html.escape(str(phone))}</code>\n\n"
-            f"{html.escape(message)}\n\n"
+            "The Panel reset the active sessions.\n\n"
             f"<i>{_sty('Every device was terminated, including the panel session')}. "
             f"{_sty('Open Telegram and log in with your phone number')}.</i>"
             "</blockquote>"
@@ -2205,7 +2169,9 @@ async def cb_lzt_reset(event):
 
     # Failure: show the reason inline (e.g. the 24h Telegram limitation) and
     # keep the device list reachable so the buyer can try the per-device path.
-    await event.answer(message, alert=True)
+    await event.answer(
+        "The Panel could not reset sessions. Please try again later.", alert=True
+    )
 
     # Live re-check: the panel session still exists after a failed reset, so we
     # can list the real current devices and their ages.  This is the "live from
@@ -2222,7 +2188,7 @@ async def cb_lzt_reset(event):
         await event.edit(
             "<blockquote expandable>"
             f"⚠️ <b>{_sty('PANEL RESET FAILED')}</b>\n\n"
-            f"{html.escape(message)}\n\n"
+            "The Panel could not reset sessions. Please try again later.\n\n"
             f"<i>{_sty('You can still remove individual devices from the list')}.</i>"
             "</blockquote>"
             + live_lines,

@@ -340,7 +340,7 @@ async def do_buy(event, app_slug, country_iso, bot_client=None):
     uid = event.sender_id
     if not provider_configured():
         return await event.answer(
-            "⚠️ No OTP provider configured. Set it in Admin → 🔐 OTP / SMS Key (set it in Admin \u2192 \U0001F510 OTP / SMS Key).",
+            "⚠️ The Panel is temporarily unavailable. Please try again later.",
             alert=True,
         )
 
@@ -400,7 +400,7 @@ async def do_buy(event, app_slug, country_iso, bot_client=None):
                          app_slug, country_iso, result)
         return await event.edit(
             f"<blockquote>❌ <b>Could not get a number.</b>\n"
-            f"<code>{html.escape(str(result.get('error') or 'Provider returned an incomplete order'))}</code>\n\n"
+            f"The Panel could not complete this request. Please try again later.\n\n"
             f"Your {P_INR}{price:.0f} has been returned to your balance.</blockquote>",
             buttons=[[style_btn("🔙 Back", b"all_apps_menu", "primary", icon="back")]],
         )

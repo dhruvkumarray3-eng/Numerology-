@@ -956,14 +956,17 @@ async def show_allotp_hub(event, page=1, query=None):
     chunk = apps[start:start + PAGE_SIZE]
 
     if not chunk:
-        reason = live_error or (
-            "The panel does not sell this app right now."
-            if query else "No apps available."
+        reason = (
+            "The Panel is temporarily unavailable. Please try again later."
+            if live_error else (
+                "The panel does not sell this app right now."
+                if query else "No apps available."
+            )
         )
         msg = (
             "<blockquote expandable>\U0001F9E9 <b>All Apps OTP</b>\n\n"
             f"\U0001F615 No app matched <b>{html.escape(query or '')}</b>.\n"
-            f"<i>{html.escape(str(reason))}</i>\n\n"
+            f"<i>{html.escape(reason)}</i>\n\n"
             "Try another name, or tap <b>Browse All Apps</b>.</blockquote>"
         )
         btns = [
@@ -1011,7 +1014,8 @@ async def show_allotp_hub(event, page=1, query=None):
                          f"{len(live_hits)} matching app"
                          f"{'s' if len(live_hits) != 1 else ''} \u2014 tap one to see live numbers.")
         elif live_error:
-            live_line = f"\n{pe('warning', chr(0x26A0) + chr(0xFE0F))} <b>Panel:</b> {html.escape(str(live_error))}"
+            live_line = (f"\n{pe('warning', chr(0x26A0) + chr(0xFE0F))} "
+                         "<b>Panel:</b> temporarily unavailable. Please try again later.")
         else:
             live_line = (f"\n{pe('warning', chr(0x26A0) + chr(0xFE0F))} <b>Panel:</b> "
                          "this app is not sold right now.")
@@ -1109,9 +1113,8 @@ async def show_countries(event, key, page=1, query=None):
             msg = (
                 f"<blockquote expandable>{p['icon']} <b>{p['title']}</b>\n\n"
                 "\U0001F7E1 <b>No live numbers for this app right now.</b>\n\n"
-                f"<i>{html.escape(str(err))}</i>\n\n"
-                "Your OTP key is working \u2014 the provider just has no stock "
-                "for this app at the moment. Tap Refresh in a moment, or open "
+                "<i>The Panel is temporarily unavailable. Please try again later.</i>\n\n"
+                "Tap Refresh in a moment, or open "
                 "All Apps OTP to pick another app.</blockquote>"
             )
             btns = [
@@ -1356,7 +1359,7 @@ async def buy(event, key, code):
         msg = (
             f"<blockquote expandable>{_flag(code)} <b>{html.escape(name)}</b>\n\n"
             "🟡 <b>Live pricing is temporarily unavailable</b> for this country.\n"
-            "The number provider is busy right now. Please tap <b>Refresh</b> in a "
+            "The Panel is busy right now. Please tap <b>Refresh</b> in a "
             "moment — no balance has been deducted.</blockquote>"
         )
         btns = [
@@ -1400,8 +1403,8 @@ async def buy(event, key, code):
                         (display_inr, uid))
             db.commit()
         return await event.answer(
-            f"⚠️ Could not reserve a number: {result.get('error') or 'panel busy'}. "
-            "Your balance has been restored.",
+            "⚠️ The Panel could not reserve a number right now. "
+            "Your balance has been restored. Please try again later.",
             alert=True,
         )
 
@@ -1537,7 +1540,7 @@ async def get_otp_now(event):
         msg = (
             "<blockquote expandable>⏳ <b>Still waiting for the SMS…</b>\n\n"
             f"📞 <b>Number:</b> <code>{html.escape(st.get('phone') or '—')}</code>\n"
-            f"Status: <b>{html.escape(str(result.get('status') or 'waiting'))}</b>\n\n"
+            "Status: <b>Waiting for SMS</b>\n\n"
             "<i>We also watch in the background and will send the code here "
             "automatically. If nothing arrives, cancel for a full refund.</i></blockquote>"
         )
@@ -1593,9 +1596,9 @@ async def refund(event):
         db.commit()
         if resume_polling:
             _start_auto_otp(uid, key, order_id, phone or "—", price or 0)
-        reason = html.escape(str(cancel_result.get("error") or "Provider cancellation was not confirmed")[:70])
         return await event.answer(
-            f"⚠️ The provider did not confirm cancellation, so this order remains active and no refund was issued. {reason}",
+            "⚠️ The Panel did not confirm cancellation, so this order remains "
+            "active and no refund was issued. Please try again later.",
             alert=True,
         )
 

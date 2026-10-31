@@ -106,10 +106,13 @@ def test_error_codes():
     check("empty", T._error_code("") is None)
 
     msg = T.friendly_error("NO_BALANCE")
-    check("friendly NO_BALANCE", "wallet is empty" in (msg or ""), msg)
+    check("friendly NO_BALANCE", "Panel wallet" in (msg or ""), msg)
+    check("NO_BALANCE hides provider name", "TemporaSMS" not in (msg or ""), msg)
     check("friendly NO_ACTIVATION",
           "expired" in (T.friendly_error("NO_ACTIVATION") or ""))
-    check("friendly unknown", (T.friendly_error("WAT") or "").startswith("Panel error"))
+    unknown = T.friendly_error("WAT") or ""
+    check("friendly unknown is generic", "The Panel could not complete" in unknown, unknown)
+    check("friendly unknown hides raw code", "WAT" not in unknown, unknown)
 
 
 # --------------------------------------------------------------------------- #
@@ -330,7 +333,8 @@ def test_buy_number_errors():
                                  '"message": "no money"}')
     res = loop.run_until_complete(T.buy_number("telegram", "in"))
     check("buy NO_BALANCE not ok", not res["ok"])
-    check("buy NO_BALANCE friendly", "wallet is empty" in res["error"], res["error"])
+    check("buy NO_BALANCE friendly", "Panel wallet" in res["error"], res["error"])
+    check("buy NO_BALANCE hides provider name", "TemporaSMS" not in res["error"], res["error"])
 
     install_fake_calls(lambda q: "ACCESS_NUMBER:777:919812345678")
     res = loop.run_until_complete(T.buy_number("telegram", "in"))

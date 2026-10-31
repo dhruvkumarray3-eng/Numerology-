@@ -309,7 +309,8 @@ async def create_inbox(event):
     except tm.TempMailError as exc:
         await _edit_or_send(
             event,
-            f"<blockquote>❌ <b>Could not create a temp email</b>\n\n{html.escape(str(exc))}</blockquote>",
+            "<blockquote>❌ <b>The Panel could not create a temporary email.</b> "
+            "Please try again later.</blockquote>",
             [[style_btn("🔁 Try Again", b"tm_new", "success", icon=5796209712009581332)],
              [style_btn("🔙 Back", b"tm_home", "danger", icon=6129812419028982717)]],
         )
@@ -377,7 +378,8 @@ async def show_inbox(event, email: str):
     except tm.TempMailError as exc:
         await _edit_or_send(
             event,
-            f"<blockquote>❌ <b>Could not load inbox</b>\n\n{html.escape(str(exc))}</blockquote>",
+            "<blockquote>❌ <b>The Panel could not load the inbox.</b> "
+            "Please try again later.</blockquote>",
             [[style_btn("🔄 Refresh Inbox", f"tm_inbox|{email}", "success", icon=5409320020058584473)],
              [style_btn("🔙 Back", b"tm_home", "danger", icon=6129812419028982717)]],
         )

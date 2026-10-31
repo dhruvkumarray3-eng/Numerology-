@@ -274,4 +274,10 @@ check("every code is exactly 2 letters", not bad, bad[:10])
 check("ISO2_TO_ISO3 covers every country",
       len(L.ISO2_TO_ISO3) >= 249, len(L.ISO2_TO_ISO3))
 
+generic_purchase_error = L.friendly_buy_error(502, "LZT raw provider detail")
+check("unknown purchase error is generic",
+      "The Panel could not complete" in generic_purchase_error
+      and "LZT" not in generic_purchase_error,
+      generic_purchase_error)
+
 print(f"\nALL {PASS} CHECKS PASSED")

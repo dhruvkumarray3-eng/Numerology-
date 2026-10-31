@@ -256,8 +256,8 @@ def friendly_error(text):
     code = code.upper()
     mapping = {
         "NO_BALANCE": (
-            "The OTP panel wallet is empty. Please ask the admin to top up "
-            "the TemporaSMS balance and try again."
+            "The Panel wallet is temporarily unavailable. Please ask the admin "
+            "to check it and try again."
         ),
         "BAD_SERVICE": (
             "The panel does not sell this app on the selected route. "
@@ -275,7 +275,9 @@ def friendly_error(text):
         "WRONG_MAX_PRICE": "No number within the allowed price. Try another country.",
         "NO_ACTIVATION": "That order has expired on the panel.",
     }
-    return mapping.get(code, f"Panel error: {code}")
+    return mapping.get(
+        code, "The Panel could not complete this request. Please try again later."
+    )
 
 
 async def _call(action, operator=None, **params):
