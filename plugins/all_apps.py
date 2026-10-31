@@ -376,6 +376,12 @@ async def do_buy(event, app_slug, country_iso):
 def register_all_apps(bot):
     @bot.on(events.CallbackQuery(pattern=r"^all_apps_menu$"))
     async def cb_all_apps(e):
+        # Every product entry point must show its own "Agree & Continue"
+        # screen first.  This one used to jump straight into the app list.
+        from plugins.product_panels import _terms_accepted, show_terms, _set_pending
+        if not _terms_accepted(e.sender_id, "allapps"):
+            _set_pending(e.sender_id, {"fn": "all_apps"})
+            return await show_terms(e, "allapps")
         await show_all_apps(e)
 
     @bot.on(events.CallbackQuery(pattern=r"^aa_appsearch$"))

@@ -610,3 +610,51 @@ instead of crashing.
 invokes `menu_router._dispatch` for all **12** reply-keyboard labels with a
 deliberately broken `get_me()` — all 12 render. Full suite 49/49, button audit
 ALL CLEAN, boot log shows `✅ Menu routing self-test: 12/12 labels mapped`.
+
+### 7. v28 — "Agree & Continue" on every product button + force-subscribe on every tap
+
+**Symptom 1 (terms):** tapping **Basic Telegram Accounts** or **All Apps OTP**
+jumped straight into the catalogue — no terms screen at all. The other three
+(WhatsApp, TG Number Change, Good / Cheap TG) did show it.
+
+**Root cause 1:** the terms gate lives in `plugins/product_panels.py` and is
+keyed off `PANELS`. Two entry points were never wired into it:
+
+* `plugins/manual_accounts.py` → `mtg_home` called `show_home(e, 1)` directly.
+* `plugins/all_apps.py` → `all_apps_menu` called `show_all_apps(e)` directly.
+
+**Fix 1:** new `EXTRA_TC` table with dedicated pages for `mtg` and `allapps`
+(title, body, guide, icon). `_tc_page()` / `is_terms_key()` make `show_terms`,
+`show_guide`, `cb_open` and `cb_agree` accept them, and `_run_pending()` gained
+`fn="mtg"` / `fn="all_apps"` so **Agree & Continue** lands on the right screen.
+`TC_VERSION` bumped **2 → 3**, so every user sees the gate once after updating
+(even if they had accepted under v2).
+
+**Symptom 2 (force-subscribe):** a user could join once, run `/start`, then
+leave the channel and keep using every button for ever. The join check only
+ran inside `/start` and the `verify_join` button.
+
+**Root cause 2:** no global guard existed. On top of that,
+`plugins/deposit.py` registered `dep_choose_BEP20` with a **module-level**
+`@bot.on`, so it was installed before every other plugin — including any guard
+— making that one button the single way to skip the check.
+
+**Fix 2:** new `plugins/fsub_guard.py`, registered at step **4a0** in `main.py`
+(before the menu router and before `register_all_handlers`). It inspects every
+private incoming message and every callback, re-runs
+`check_channel_joined()` and, if the user left, renders the join screen and
+raises `StopPropagation`. Details:
+
+* `/start` and `verify_join` are skipped so the join flow can never deadlock.
+* Admins, `FSub: OFF` and "no channels configured" pass instantly.
+* A **20 s** success cache avoids a `GetParticipantRequest` per keystroke;
+  **failures are never cached**, so leaving is caught on the very next tap.
+* Any Telegram error → allow (never lock a user out).
+* The BEP-20 handler is now attached from `register_deposit()`.
+
+**Verify:** `tests/test_terms_and_fsub.py` (76 checks) — every terms page
+renders with an **Agree & Continue** and **Cancel** button, every listed entry
+point is gated, the guard is registered before all plugins, and the
+allow/deny/cache/error paths are exercised. Full suite **50/50**, button audit
+**ALL CLEAN**, boot log shows `🛡️ Force-subscribe guard installed`,
+`✅ Menu routing self-test: 12/12`, `📦 BUILD: 2026-10-31-terms-fsub-v28`.

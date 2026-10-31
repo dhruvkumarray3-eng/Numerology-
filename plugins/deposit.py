@@ -185,6 +185,10 @@ def get_admin_custom_keypad(dep_id):
     ]
 
 def register_deposit(bot):
+    # BEP-20 deposit button.  Attached here (not at import time) so the
+    # force-subscribe guard, which is registered first, always runs before it.
+    bot.on(events.CallbackQuery(pattern=r"^dep_choose_BEP20$"))(cb_choose_bep20)
+
     @bot.on(events.NewMessage(pattern=r"(?i)^(💳 𝐃ᴇᴘᴏsɪᴛ|💳 Deposit)$"))
     async def msg_deposit(e):
         await deposit_menu(e)
@@ -596,9 +600,15 @@ def register_deposit(bot):
 # BEP-20 (USDT - BSC) PAYMENT HANDLER & UI (ADDED AT BOTTOM)
 # =====================================================================
 
-@bot.on(events.CallbackQuery(pattern=r"^dep_choose_BEP20$"))
 async def cb_choose_bep20(e):
-    """USDT (BEP-20) deposit - ask for the amount first, then send address + QR."""
+    """USDT (BEP-20) deposit - ask for the amount first, then send address + QR.
+
+    NOTE: this used to be decorated with ``@bot.on`` at *module* level, so it
+    was registered the instant the module was imported - before every other
+    plugin, including the force-subscribe guard.  That made this single button
+    the one way to skip the join check.  It is now attached from
+    ``register_deposit()`` so handler order stays predictable.
+    """
     uid = e.sender_id
     deposit_input[uid] = {"step": "wait_amt", "method": "BEP20"}
 
