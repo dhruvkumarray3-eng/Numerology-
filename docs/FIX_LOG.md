@@ -7,6 +7,52 @@ Har entry me: **Symptom → Root cause → Fix → Lesson (shiksha)**.
 
 ---
 
+## 0. "Agree & Continue" terms screen never appeared on product buttons
+
+**Symptom**
+
+Owner recording ke mutabik, **WhatsApp Panel**, **TG Number Change**,
+**All Apps OTP**, aur **Good Quality / Cheap TG** buttons dabate hi seedha
+country list / app list / account catalogue khul jata tha. Har product ka
+apna Terms & Conditions ("Agree & Continue") screen aana chahiye tha, par
+woh skip ho raha tha.
+
+**Root cause**
+
+`plugins/product_panels.py` ka `_terms_accepted()` teen layers check karta
+tha: in-process memory, per-panel `settings` row, aur **global
+`users.terms_accepted`** flag. `/start` par user generic terms accept kar
+leta tha → `users.terms_accepted = 1` set ho jata tha → uske baad **har**
+panel ka gate `True` return kar deta tha. Isliye per-panel terms screen kabhi
+render hi nahi hota tha. `_accept_terms()` bhi `(uid, "*")` wildcard set
+karta tha, jo ek panel accept karne par baaki sab ko bhi accepted maan leta
+tha.
+
+**Fix**
+
+- `_terms_accepted()` ab **sirf per-panel** check karta hai (memory +
+  `pp_tc_<uid>_<key>`). Global `users.terms_accepted` fallback hata diya.
+- `_accept_terms()` se `(uid, "*")` wildcard hata diya — har product apna
+  acceptance record rakhta hai.
+- Naya `PANELS["accounts"]` + `show_accounts_terms()` — Good Quality TG /
+  Cheap TG / Buy WP / filters / years ke liye apna terms screen.
+- Pending-action dispatcher (`_set_pending` / `_pop_pending` /
+  `_run_pending`): user ne jo button dabaya tha, "Agree & Continue" ke baad
+  wahi screen khulti hai (country list / filters / years).
+- Gates add kiye: `buy.py` (`cb_pg_c`, `cb_pg_filters`, `cb_by_years_menu`)
+  aur `servers.py` (`srv_open|bulk|nonspam|spam`).
+- Tests: `tests/test_terms_once.py` ko per-panel semantics ke liye update
+  kiya, aur naya `tests/test_terms_gate_entrypoints.py` (20 checks) add kiya.
+
+**Lesson (shiksha)**
+
+> Ek "global accepted" flag ko per-product gate ke liye fallback mat banao.
+> Global acceptance ka matlab hai "bot use kar sakte ho", per-product
+> acceptance ka matlab hai "is service ki shartein maani". Dono alag rakho,
+> warna product ka terms screen kabhi nahi dikhega.
+
+---
+
 ## 1. `MediaCaptionTooLongError` — Terms page join ke baad nahi aata tha
 
 **Symptom**

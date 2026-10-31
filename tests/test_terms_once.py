@@ -1,15 +1,15 @@
-"""Terms gate must never nag the user twice.
+"""Terms gate must ask once per panel, then never nag again.
 
-Bug: the "Agree & Continue" screen kept coming back in the WhatsApp / TG
-Number Change / All Apps OTP / Server-2 panels because acceptance was stored
-only in one per-panel ``settings`` row.  Any DB hiccup (read-only file, lock,
-ephemeral disk) silently lost it and the user was asked again forever.
+Behaviour locked in here (owner requirement):
 
-Fix locked in here:
-1. Accepting stores an in-process flag, so the same process never re-asks.
-2. Accepting also sets ``users.terms_accepted``, so it applies to every panel.
-3. Accepting is idempotent and always reports success once the flag is set.
-4. A broken DB read must not raise.
+1. Every product entry point (WhatsApp, TG Number Change, All Apps OTP,
+   Good Quality / Cheap TG ...) shows its own "Agree & Continue" screen the
+   first time it is opened -- even if the generic /start terms were accepted.
+2. Accepting a panel is remembered per panel: the same panel never asks twice
+   (in-process memory + a persisted ``pp_tc_<uid>_<key>`` settings row).
+3. Accepting one panel does NOT silently accept a different panel.
+4. Accepting is idempotent and always reports success once the flag is set.
+5. A broken DB read must not raise.
 
 Run: API_ID=1 API_HASH=x BOT_TOKEN=1:x python3 tests/test_terms_once.py
 """
@@ -44,20 +44,25 @@ db.commit()
 check("fresh user is asked", PP._terms_accepted(UID, "whatsapp") is False)
 check("accept returns True", PP._accept_terms(UID, "whatsapp") is True)
 check("not asked again (same panel)", PP._terms_accepted(UID, "whatsapp") is True)
-check("not asked in other panels either",
-      PP._terms_accepted(UID, "numchange") and PP._terms_accepted(UID, "allotp")
-      and PP._terms_accepted(UID, "nonspam"))
+
+# Each panel is independent: accepting WhatsApp must NOT skip Number Change /
+# All Apps OTP / the account catalogue.
+check("other panels still ask (numchange)", PP._terms_accepted(UID, "numchange") is False)
+check("other panels still ask (allotp)", PP._terms_accepted(UID, "allotp") is False)
+check("other panels still ask (accounts)", PP._terms_accepted(UID, "accounts") is False)
 
 row = cur.execute("SELECT terms_accepted FROM users WHERE user_id=?", (UID,)).fetchone()
 check("users.terms_accepted persisted", bool(row and row[0]))
 
-# Simulate a process restart: memory gone, DB must still answer.
+# Simulate a process restart: memory gone, DB must still answer for the panel
+# that was actually accepted.
 PP._TC_MEMORY.clear()
 check("survives restart (DB flag)", PP._terms_accepted(UID, "whatsapp") is True)
+check("still asks other panel after restart", PP._terms_accepted(UID, "numchange") is False)
 
 # Simulate a completely broken DB: must not raise, must not lose memory.
 PP._TC_MEMORY.clear()
-PP._TC_MEMORY.add((UID, "*"))
+PP._TC_MEMORY.add((UID, "whatsapp"))
 real_cur = PP.cur
 
 
