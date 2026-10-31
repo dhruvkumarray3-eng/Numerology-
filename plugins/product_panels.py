@@ -537,9 +537,9 @@ _TC_MEMORY = set()
 # the "Agree & Continue" screen is guaranteed to appear once after an update.
 #
 # v3: Basic Telegram Accounts and All Apps OTP gained their own terms pages.
-#     Bumping the version re-shows the gate once for EVERY panel, so a user who
-#     had already accepted under v2 still sees the new screens.
-TC_VERSION = 3
+# v4: Re-show every product gate so existing users also receive the complete
+#     Agree & Continue screen after the gate wiring was fixed and deployed.
+TC_VERSION = 4
 
 
 def _tc_value():
