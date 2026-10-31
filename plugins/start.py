@@ -27,9 +27,9 @@ from utils.i18n import t
 # IMPORTANT: the carrier must NOT be deleted.  Telegram binds a reply keyboard
 # to the message that installed it - deleting that message removes the
 # keyboard again, which is exactly what made the menu flash in and then vanish.
-# The carrier is therefore kept, but made as small as possible (a single
-# keyboard emoji) and sent only once per user, so it never piles up.
-_MENU_CARRIER_TEXT = "\u2328\ufe0f"
+# The carrier is therefore kept, but uses an invisible separator instead of a
+# visible emoji and is sent only once per user, so it never piles up.
+_MENU_CARRIER_TEXT = "\u2063"
 
 # Users whose reply keyboard is already installed during this process run.
 # The keyboard lives in the chat state, so re-sending it on every /start would

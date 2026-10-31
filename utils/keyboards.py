@@ -355,7 +355,7 @@ _MENU_LABEL_KEYS = {
 }
 
 
-# Bump this whenever the bottom keyboard layout or its glyphs change.
+# Bump this whenever the bottom keyboard layout, glyphs, or carrier presentation changes.
 # Reply keyboards are a *client-side* state: Telegram keeps the old one on the
 # user's screen until the bot sends a new one.  Without a version check a user
 # who installed the keyboard once would keep tapping the *old* labels forever
@@ -363,7 +363,7 @@ _MENU_LABEL_KEYS = {
 # keyboard still sent "\u2119\u0280\u1d0f\u0493\u026a\u029f\u1d07" with U+2119, which the fold map
 # did not know).  `install_persistent_menu` now re-sends the keyboard whenever
 # the stored version is older than this value.
-MENU_VERSION = 3
+MENU_VERSION = 4
 
 
 def menu_label_key(value):

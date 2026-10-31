@@ -119,12 +119,13 @@ check("send_main_menu calls install_persistent_menu()",
 check("install is skipped for callback re-renders",
       "if not isinstance(event, events.CallbackQuery.Event):" in start_src)
 
-# The install must be silent (no "menu ready" sentence), but the carrier
-# message itself must NOT be deleted: Telegram drops a reply keyboard as soon
-# as the message that installed it is deleted, which made the menu flash in
-# and then vanish.
-check("install uses a tiny carrier text",
-      '_MENU_CARRIER_TEXT = "\\u2328\\ufe0f"' in start_src)
+# The install must be silent (no "menu ready" sentence), and the carrier must
+# not add a visible keyboard emoji to the chat. Telegram drops a reply keyboard
+# as soon as the message that installed it is deleted.
+check("install uses an invisible non-emoji carrier",
+      '_MENU_CARRIER_TEXT = "\\u2063"' in start_src)
+check("install does not send the keyboard emoji as carrier",
+      '\\u2328\\ufe0f' not in start_src)
 check("install does NOT delete the carrier message",
       "carrier.delete()" not in start_src)
 check("no visible 'menu ready' notice is sent",
